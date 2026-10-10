@@ -1,0 +1,213 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/*
+ * shadcn/ui 的 Base UI 组件依赖以下变体：
+ * - dark：把 dark: 绑定到根元素的 .dark 类，而不是系统偏好，
+ *   否则用户手动固定主题时，令牌与组件内的 dark: 样式会不一致。
+ * - data-*：Base UI 用 data-state / data-orientation 等属性表达状态，
+ *   而组件里写的是 data-open、data-horizontal 这类简写。
+ */
+@custom-variant dark (&:is(.dark *));
+
+@custom-variant data-open {
+  &:where([data-state='open']),
+  &:where([data-open]:not([data-open='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-closed {
+  &:where([data-state='closed']),
+  &:where([data-closed]:not([data-closed='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-checked {
+  &:where([data-state='checked']),
+  &:where([data-checked]:not([data-checked='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-unchecked {
+  &:where([data-state='unchecked']),
+  &:where([data-unchecked]:not([data-unchecked='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-selected {
+  &:where([data-selected='true']) {
+    @slot;
+  }
+}
+
+@custom-variant data-disabled {
+  &:where([data-disabled='true']),
+  &:where([data-disabled]:not([data-disabled='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-active {
+  &:where([data-state='active']),
+  &:where([data-active]:not([data-active='false'])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation='horizontal']) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation='vertical']) {
+    @slot;
+  }
+}
+
+/*
+ * 语义设计令牌。
+ * 浅色为暖白，深色为石墨灰；强调色在运行时由背景动态取色覆盖，
+ * 这里的值是取色失败或未启用动态色时的静态回退。
+ */
+:root {
+  --background: oklch(0.985 0.004 85);
+  --foreground: oklch(0.24 0.008 62);
+  --card: oklch(0.995 0.003 85);
+  --card-foreground: oklch(0.24 0.008 62);
+  --popover: oklch(0.995 0.003 85);
+  --popover-foreground: oklch(0.24 0.008 62);
+  --primary: oklch(0.32 0.018 62);
+  --primary-foreground: oklch(0.985 0.004 85);
+  --secondary: oklch(0.95 0.006 85);
+  --secondary-foreground: oklch(0.3 0.01 62);
+  --muted: oklch(0.95 0.006 85);
+  --muted-foreground: oklch(0.52 0.012 62);
+  --accent: oklch(0.94 0.008 85);
+  --accent-foreground: oklch(0.28 0.01 62);
+  --destructive: oklch(0.55 0.19 25);
+  --destructive-foreground: oklch(0.99 0.005 85);
+  --border: oklch(0.9 0.006 85);
+  --input: oklch(0.9 0.006 85);
+  --ring: oklch(0.32 0.018 62);
+
+  /* 壁纸之上的半透明表面：主页浮层与设置抽屉使用 */
+  --glass: oklch(1 0 0 / 0.62);
+  --glass-strong: oklch(0.995 0.003 85 / 0.9);
+  --glass-border: oklch(1 0 0 / 0.5);
+  --glass-foreground: oklch(0.2 0.008 62);
+  --glass-foreground-muted: oklch(0.4 0.012 62);
+
+  /* 壁纸遮罩：仅照片背景使用，强度由外观设置覆盖 */
+  --wallpaper-mask: transparent;
+  --wallpaper-mask-foreground: oklch(0.99 0.004 85);
+
+  /*
+   * 背景由 applyAppearance 在根元素上覆盖 --wallpaper / --wallpaper-color /
+   * --wallpaper-mask；这里给出未设置外观前的默认值，避免首屏空白。
+   */
+  --wallpaper-default: linear-gradient(180deg, oklch(0.985 0.006 85) 0%, oklch(0.94 0.014 78) 100%);
+  --wallpaper: var(--wallpaper-default);
+  --wallpaper-color: transparent;
+
+  --radius: 0.75rem;
+  color-scheme: light;
+}
+
+.dark {
+  --background: oklch(0.19 0.006 62);
+  --foreground: oklch(0.95 0.004 85);
+  --card: oklch(0.22 0.007 62);
+  --card-foreground: oklch(0.95 0.004 85);
+  --popover: oklch(0.22 0.007 62);
+  --popover-foreground: oklch(0.95 0.004 85);
+  --primary: oklch(0.88 0.012 62);
+  --primary-foreground: oklch(0.2 0.008 62);
+  --secondary: oklch(0.27 0.008 62);
+  --secondary-foreground: oklch(0.93 0.004 85);
+  --muted: oklch(0.27 0.008 62);
+  --muted-foreground: oklch(0.72 0.008 62);
+  --accent: oklch(0.3 0.009 62);
+  --accent-foreground: oklch(0.95 0.004 85);
+  --destructive: oklch(0.62 0.17 25);
+  --destructive-foreground: oklch(0.16 0.006 62);
+  --border: oklch(0.32 0.008 62);
+  --input: oklch(0.32 0.008 62);
+  --ring: oklch(0.88 0.012 62);
+
+  --glass: oklch(0.2 0.007 62 / 0.55);
+  --glass-strong: oklch(0.22 0.007 62 / 0.92);
+  --glass-border: oklch(1 0 0 / 0.12);
+  --glass-foreground: oklch(0.96 0.004 85);
+  --glass-foreground-muted: oklch(0.78 0.008 62);
+
+  --wallpaper-mask: transparent;
+  --wallpaper-mask-foreground: oklch(0.98 0.004 85);
+
+  --wallpaper-default: linear-gradient(180deg, oklch(0.21 0.008 62) 0%, oklch(0.16 0.01 58) 100%);
+  --wallpaper: var(--wallpaper-default);
+  --wallpaper-color: transparent;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  --color-glass-foreground: var(--glass-foreground);
+  --color-glass-foreground-muted: var(--glass-foreground-muted);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

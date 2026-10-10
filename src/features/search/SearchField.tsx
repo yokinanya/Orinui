@@ -1,0 +1,67 @@
+import { SearchIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
+import { buildSearchUrl, defaultEngine } from '@/domain/search-engines';
+import { openInCurrentTab } from '@/platform/navigation';
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+}
+
+/**
+ * 主页搜索入口。
+ *
+ * 视觉规格：宽而克制的半透明磨砂输入框，聚焦时强化边界。
+ * 初始不自动聚焦，点击或按 `/` 聚焦；搜索建议默认关闭，因此本阶段不发起任何网络请求。
+ */
+export function SearchField() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const submit = () => {
+    const trimmed = query.trim();
+    if (trimmed === '') return;
+    openInCurrentTab(buildSearchUrl(defaultEngine(), trimmed));
+  };
+
+  return (
+    <form
+      role="search"
+      className="w-full"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <InputGroup className="h-12 rounded-2xl border-glass-border bg-glass backdrop-blur-md has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/40">
+        <InputGroupAddon className="pl-4">
+          <SearchIcon className="text-glass-foreground-muted" />
+        </InputGroupAddon>
+        <InputGroupInput
+          ref={inputRef}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索"
+          aria-label="搜索"
+          className="h-12 text-base text-glass-foreground placeholder:text-glass-foreground-muted md:text-base"
+        />
+      </InputGroup>
+    </form>
+  );
+}
