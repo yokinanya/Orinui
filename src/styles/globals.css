@@ -76,6 +76,9 @@
  * 这里的值是取色失败或未启用动态色时的静态回退。
  */
 :root {
+  --home-content-enter-duration: 180ms;
+  --home-content-enter-offset: 5px;
+  --home-content-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
   --background: oklch(0.985 0.004 85);
   --foreground: oklch(0.24 0.008 62);
   --card: oklch(0.995 0.003 85);
@@ -106,6 +109,12 @@
   /* 壁纸遮罩：仅照片背景使用，强度由外观设置覆盖 */
   --wallpaper-mask: transparent;
   --wallpaper-mask-foreground: oklch(0.99 0.004 85);
+  --home-readable-surface: transparent;
+  --home-readable-hover: transparent;
+  --home-readable-foreground: var(--glass-foreground);
+  --home-readable-muted: var(--glass-foreground-muted);
+  --home-readable-border: transparent;
+  --home-readable-focus: var(--ring);
 
   /*
    * 背景由 applyAppearance 在根元素上覆盖 --wallpaper / --wallpaper-color /
@@ -148,6 +157,12 @@
 
   --wallpaper-mask: transparent;
   --wallpaper-mask-foreground: oklch(0.98 0.004 85);
+  --home-readable-surface: transparent;
+  --home-readable-hover: transparent;
+  --home-readable-foreground: var(--glass-foreground);
+  --home-readable-muted: var(--glass-foreground-muted);
+  --home-readable-border: transparent;
+  --home-readable-focus: var(--ring);
 
   --wallpaper-default: linear-gradient(180deg, oklch(0.21 0.008 62) 0%, oklch(0.16 0.01 58) 100%);
   --wallpaper: var(--wallpaper-default);
@@ -210,4 +225,115 @@ body {
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes home-content-enter {
+  from { opacity: 0; transform: translateY(var(--home-content-enter-offset)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes home-content-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.motion-home-enter {
+  animation: home-content-enter var(--home-content-enter-duration) var(--home-content-enter-easing) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-home-enter { animation-name: home-content-fade; }
+}
+
+[data-home-readable='true'] .home-readable-chip,
+[data-home-readable='true'] .home-readable-surface,
+[data-home-readable='true'] .home-readable-control,
+[data-home-readable='true'] .home-readable-group {
+  background-color: var(--home-readable-surface);
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-chip {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+}
+
+[data-home-readable='true'] .home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .group:hover .home-readable-chip.home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-ink {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-ink::placeholder {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-surface,
+[data-home-readable='true'] .home-readable-control {
+  border-color: var(--home-readable-border);
+}
+
+[data-home-readable='true'] .group:hover .home-readable-surface {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-control:hover {
+  background-color: var(--home-readable-hover);
+}
+
+[data-home-readable='true'] .home-readable-group {
+  border-bottom: 2px solid var(--home-readable-role-color);
+}
+
+[data-home-readable='true'] .home-readable-group:hover {
+  background-color: var(--home-readable-surface);
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-group[data-color-role='primary'] {
+  --home-readable-role-color: var(--primary);
+}
+
+[data-home-readable='true'] .home-readable-group[data-color-role='secondary'] {
+  --home-readable-role-color: var(--secondary-foreground);
+}
+
+[data-home-readable='true'] .home-readable-group[data-color-role='tertiary'] {
+  --home-readable-role-color: var(--accent-foreground);
+}
+
+[data-home-readable='true'] .home-readable-group[aria-current='true'] {
+  box-shadow: inset 0 0 0 1px var(--home-readable-border);
+}
+
+[data-home-readable='true'] .home-readable-group-shell {
+  border-color: var(--home-readable-border);
+  background-color: var(--home-readable-surface);
+}
+
+[data-home-readable='true'] .home-readable-group-shell .home-readable-group {
+  background-color: transparent;
+}
+
+[data-home-readable='true'] .home-readable-focus:focus-visible {
+  outline: 2px solid var(--home-readable-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--home-readable-surface);
+  --tw-ring-color: transparent;
+}
+
+[data-home-readable='true'] .home-readable-surface:focus-within {
+  outline: 2px solid var(--home-readable-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--home-readable-surface);
+  border-color: var(--home-readable-focus);
+  --tw-ring-color: transparent;
 }

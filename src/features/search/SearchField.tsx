@@ -2,8 +2,10 @@ import { SearchIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { buildSearchUrl, defaultEngine } from '@/domain/search-engines';
+import { buildSearchUrl, resolveEngine } from '@/domain/search-engines';
 import { openInCurrentTab } from '@/platform/navigation';
+import { useData } from '@/app/data-context';
+import { notifyError } from '@/lib/notify';
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -18,6 +20,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * 初始不自动聚焦，点击或按 `/` 聚焦；搜索建议默认关闭，因此本阶段不发起任何网络请求。
  */
 export function SearchField() {
+  const { settings } = useData();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
 
@@ -37,7 +40,10 @@ export function SearchField() {
   const submit = () => {
     const trimmed = query.trim();
     if (trimmed === '') return;
-    openInCurrentTab(buildSearchUrl(defaultEngine(), trimmed));
+    const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines);
+    if (!engine) throw new Error('默认搜索引擎不存在');
+    try { openInCurrentTab(buildSearchUrl(engine, trimmed)); }
+    catch (error) { notifyError(error); }
   };
 
   return (
@@ -49,9 +55,9 @@ export function SearchField() {
         submit();
       }}
     >
-      <InputGroup className="h-12 rounded-2xl border-glass-border bg-glass backdrop-blur-md has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/40">
+      <InputGroup className="home-readable-surface h-12 rounded-2xl border-glass-border bg-glass backdrop-blur-md has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/40">
         <InputGroupAddon className="pl-4">
-          <SearchIcon className="text-glass-foreground-muted" />
+          <SearchIcon className="home-readable-muted text-glass-foreground-muted" />
         </InputGroupAddon>
         <InputGroupInput
           ref={inputRef}
@@ -59,7 +65,7 @@ export function SearchField() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索"
           aria-label="搜索"
-          className="h-12 text-base text-glass-foreground placeholder:text-glass-foreground-muted md:text-base"
+          className="home-readable-ink h-12 text-base text-glass-foreground placeholder:text-glass-foreground-muted md:text-base"
         />
       </InputGroup>
     </form>

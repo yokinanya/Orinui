@@ -5,6 +5,7 @@ import { LIMITS } from '@/domain/limits';
 import { normalizeGroupName } from '@/domain/text';
 import type { Database } from '@/storage/db';
 import { byOrder, moveTo, nextOrder, renumber, swap, targetIndex } from '@/storage/order';
+import { pruneUnreferencedAssets } from '@/storage/assets';
 
 export const DEFAULT_GROUP_NAME = '常用';
 
@@ -79,6 +80,18 @@ export async function renameGroup(db: Database, id: string, name: string): Promi
   });
 }
 
+export async function updateGroupColor(db: Database, id: string, colorRole: GroupColorRole | null): Promise<Group> {
+  if (colorRole !== null && !['primary', 'secondary', 'tertiary'].includes(colorRole)) fail('分组颜色角色不正确');
+  return db.transaction('rw', db.groups, async () => {
+    const current = await db.groups.get(id);
+    if (!current) fail('分组不存在');
+    if (current.isDefault && colorRole !== 'primary') fail('默认分组使用主色');
+    const updated = { ...current, colorRole };
+    await db.groups.put(updated);
+    return updated;
+  });
+}
+
 /**
  * 删除分组。
  *
@@ -86,7 +99,7 @@ export async function renameGroup(db: Database, id: string, name: string): Promi
  * 由调用方负责二次确认。返回被删除的网站数量用于提示。
  */
 export async function deleteGroup(db: Database, id: string): Promise<{ removedShortcuts: number }> {
-  return db.transaction('rw', db.groups, db.shortcuts, async () => {
+  return db.transaction('rw', db.groups, db.shortcuts, db.assets, db.settings, async () => {
     const group = await db.groups.get(id);
     if (!group) fail('分组不存在');
     if (group.isDefault) fail('默认分组不能删除');
@@ -95,6 +108,7 @@ export async function deleteGroup(db: Database, id: string): Promise<{ removedSh
     await db.shortcuts.bulkDelete(shortcuts.map((shortcut) => shortcut.id));
     await db.groups.delete(id);
     await db.groups.bulkPut(renumber(await db.groups.toArray()));
+    await pruneUnreferencedAssets(db);
 
     return { removedShortcuts: shortcuts.length };
   });

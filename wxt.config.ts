@@ -12,6 +12,7 @@ export default defineConfig({
     name: 'Orinui',
     description: '设计精致、轻量、本地优先的新标签页',
     version: '0.0.0',
+    optional_host_permissions: ['https://*/*', 'http://localhost/*'],
     icons: {
       16: 'icon/16.png',
       32: 'icon/32.png',

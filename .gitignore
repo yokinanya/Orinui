@@ -2,6 +2,8 @@
 node_modules
 .output
 .wxt
+test-results
+playwright-report
 stats.html
 stats-*.json
 web-ext.config.ts

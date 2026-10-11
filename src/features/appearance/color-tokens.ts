@@ -12,6 +12,32 @@ const GLASS_ALPHA = { light: 0.62, dark: 0.55 } as const;
 const GLASS_STRONG_ALPHA = { light: 0.9, dark: 0.92 } as const;
 const GLASS_BORDER_ALPHA = { light: 0.5, dark: 0.12 } as const;
 
+const HOME_READABILITY = {
+  light: {
+    '--home-readable-surface': 'rgba(250, 248, 245, 0.98)',
+    '--home-readable-hover': 'rgba(236, 232, 226, 0.98)',
+    '--home-readable-foreground': '#302c27',
+    '--home-readable-muted': '#514b45',
+    '--home-readable-border': '#625950',
+    '--home-readable-focus': '#302c27',
+  },
+  dark: {
+    '--home-readable-surface': 'rgba(12, 10, 8, 0.98)',
+    '--home-readable-hover': 'rgba(38, 35, 31, 0.98)',
+    '--home-readable-foreground': '#f4f1ec',
+    '--home-readable-muted': '#c4c0b9',
+    '--home-readable-border': '#c4c0b9',
+    '--home-readable-focus': '#f4f1ec',
+  },
+} as const;
+
+export const HOME_READABILITY_TOKEN_NAMES: readonly string[] = Object.keys(HOME_READABILITY.light);
+
+/** Stable theme-paired surfaces keep wallpaper contrast independent from dynamic accents. */
+export function homeReadabilityTokens(isDark: boolean): ColorTokenMap {
+  return { ...(isDark ? HOME_READABILITY.dark : HOME_READABILITY.light) };
+}
+
 function rgba(hex: string, alpha: number): string {
   const value = (index: number) => Number.parseInt(hex.slice(1 + index * 2, 3 + index * 2), 16);
   return `rgba(${value(0)}, ${value(1)}, ${value(2)}, ${alpha})`;
@@ -36,7 +62,7 @@ function accentTokens(scheme: Scheme): ColorTokenMap {
   };
 }
 
-/** 壁纸之上的半透明表面与被其覆盖的文字，按背景明暗选择，保证可读性。 */
+/** 半透明表面跟随主题；任意背景上的正文由独立的局部可读性层保护。 */
 function wallpaperTokens(scheme: Scheme, isDark: boolean): ColorTokenMap {
   const surface = hexFromArgb(scheme.surface);
 
@@ -58,10 +84,8 @@ function wallpaperTokens(scheme: Scheme, isDark: boolean): ColorTokenMap {
 export type SchemePolarity = 'light' | 'dark';
 
 export interface SeedTokenInput {
-  /** 用户选择的深浅模式（已合并“跟随系统”），决定强调色 */
+  /** 用户选择的深浅模式（已合并“跟随系统”），决定强调色与半透明表面 */
   theme: SchemePolarity;
-  /** 壁纸之上的文字应该用浅色还是深色，决定半透明表面与其上的文字 */
-  overWallpaper: SchemePolarity;
 }
 
 export function colorTokensFromSeed(seedHex: string, input: SeedTokenInput): ColorTokenMap {
@@ -70,15 +94,16 @@ export function colorTokensFromSeed(seedHex: string, input: SeedTokenInput): Col
   }
 
   const theme = themeFromSourceColor(argbFromHex(seedHex));
-  const wallpaperScheme = input.overWallpaper === 'dark' ? theme.schemes.dark : theme.schemes.light;
+  const isDark = input.theme === 'dark';
+  const scheme = isDark ? theme.schemes.dark : theme.schemes.light;
 
   return {
-    ...accentTokens(input.theme === 'dark' ? theme.schemes.dark : theme.schemes.light),
-    ...wallpaperTokens(wallpaperScheme, input.overWallpaper === 'dark'),
+    ...accentTokens(scheme),
+    ...wallpaperTokens(scheme, isDark),
   };
 }
 
 /** 关闭动态配色时需要移除的覆盖令牌名。 */
 export const DYNAMIC_COLOR_TOKENS: readonly string[] = Object.keys(
-  colorTokensFromSeed('#8a7f72', { theme: 'light', overWallpaper: 'light' }),
+  colorTokensFromSeed('#8a7f72', { theme: 'light' }),
 );

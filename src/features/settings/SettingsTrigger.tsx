@@ -15,7 +15,7 @@ export function SettingsTrigger() {
     <div className="fixed right-4 bottom-4 z-40 md:right-6 md:bottom-6">
       <SettingsSheet
         trigger={
-          <Button variant="ghost" size="icon" aria-label="设置" className="rounded-full">
+          <Button variant="ghost" size="icon" aria-label="设置" className="home-readable-control home-readable-focus rounded-full">
             <Settings />
           </Button>
         }

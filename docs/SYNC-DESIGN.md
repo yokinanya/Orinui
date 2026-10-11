@@ -1,0 +1,85 @@
+# 跨设备同步设计
+
+决策日期：2026-10-11；实施进度更新于 2026-10-12。同步范围、提供方与安全策略已定；基础层与手动协调器已实现，提供方和连接界面尚未接入。
+
+当前数据库为版本 3，保留四张领域表并新增三张同步表。已有公共对象端口、手动协调及本机运行记录；没有 OAuth 配置、提供方适配器或连接界面。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调顺序/边界见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)。实施进度见 [TASKS.md](./TASKS.md)，真实检查结果见 [VERIFICATION.md](./VERIFICATION.md)。
+
+## 目标与范围
+
+- 跨设备同步分组、网站、设置、照片和图标。
+- Dexie 仍是各设备的本地工作数据源；新标签页先读本地数据，网络同步异步运行，不阻塞页面渲染。
+- 同步是可选功能。用户明确启用并配置提供方后，扩展在本地修改后及扩展打开时同步；同时提供手动同步入口。不启用定时轮询。
+- 不创建 Orinui 账号或自营同步后端。用户使用自己的 Google Drive 或 WebDAV 服务账号。
+- 不使用 Chrome `storage.sync` 保存正文或通知标记。图片和数据都由所选外部提供方承载。
+- 一个同步库一次选择一个提供方；不双写。更换提供方需要用户发起迁移。
+
+## 提供方决策
+
+支持两个提供方，默认推荐 Google Drive `appDataFolder`：
+
+1. **Google Drive appDataFolder**：使用 Chrome Identity OAuth 和 `drive.appdata` scope。文件仅由 Orinui 应用访问，Drive 界面中隐藏。启用授权必须由设置页的清晰按钮发起；不得在扩展首次启动时弹授权。Drive 账号是用户自己的第三方账号，不是 Orinui 账号。用户在 Drive 侧删除应用数据后，云端同步副本可能被删除，本地数据与 JSON 备份不受影响。
+2. **WebDAV**：供 NAS、Nextcloud 等自托管服务使用。只接受 HTTPS；用户输入服务器 URL 与账号/应用密码，不把凭据写入 URL。仅请求用户配置的精确源权限。凭据只存于当前 Chrome 配置文件的本地扩展存储，不进入 Dexie 同步快照或 JSON 备份。RFC 4918 不要求 WebDAV 服务器支持锁，因此协议不依赖 LOCK。
+
+两个适配器实现相同的对象存取接口：列出设备快照、读取快照、写入本设备快照、读写媒体对象和删除不再引用的对象。每台设备只写自己的快照路径，设备间不争写同一份清单；同一配置文件内的同步任务串行执行。
+
+Chrome `storage.sync` 的配额约为总计 100 KiB、单项 8 KiB，且无法承载本项目图片；同步正文统一放在外部提供方。[Chrome Storage API](https://developer.chrome.com/docs/extensions/reference/api/storage)
+
+## 本地数据结构
+
+现有 `groups`、`shortcuts`、`settings`、`assets` 保留。已有 Group、Shortcut 和 ImageAsset UUID 不整体重编号；图片 Blob 继续留在本机 Dexie。
+
+已在 `src/storage/db.ts` 增加三张 Dexie 表；升级不自动启用同步：
+
+- `sync_state`：vaultId、deviceId、时钟/代次、默认组、本机基线及运行/成功记录；提供方连接配置尚待接入。OAuth token 不复制到这张表。
+- `sync_records`：实体类型、实体 ID、字段路径、逻辑版本、修改设备，以及删除墓碑。同步元数据不混入用户可见领域字段。
+- `sync_keys`：只保存非可导出的 Web Crypto `CryptoKey`，供本机后续加解密；恢复密钥正文不持久化。
+
+字段级版本用于避免无关字段互相覆盖：例如一台设备改网站标题、另一台改网址时，两项修改都保留。每次本地变更使用 Lamport 逻辑时钟；接收远端时钟后，本机下次写入先递增到大于已观察值。相同字段并发修改时，先比较 logicalClock 数值，再按 deviceId 字典序确定胜者。删除墓碑对同 ID 的修改优先；永久删除的 UUID 不复用，用户重新添加会获得新 ID。本地删除先保留 5 秒待删除记录，到期才生成墓碑；窗口内撤销不传播永久删除，规则见 SYNC-PROTOCOL.md。
+
+Settings 按设置分区/自定义引擎 ID 版本化。分组和快捷方式的位置仍使用现有整数 `order`；合并后按位置、版本、设备 ID 和实体 ID 稳定排序，再重新编号为连续整数。删除分组会同时为组内快捷方式写入墓碑。导入或跨设备合并出现多个默认分组时，保留同步库中默认组身份；本机已有的额外默认组转为普通分组并保留其名称和网站。
+
+## 云端对象和合并
+
+- 每台设备在 `devices/<deviceId>/snapshot.enc` 写一份完整的加密数据快照，含字段版本、墓碑和媒体引用。其它设备读取所有快照，合并后只写自己的快照。
+- 图片单独存为 `assets/<assetId>.enc`。Asset UUID 是随机标识，不用图片哈希作为公开文件名。
+- 先上传新增媒体，再发布引用它们的快照。失败必须显示错误；接收设备先解密并校验全部引用，再在一个 Dexie 事务中应用快照与图片。
+- 远端图片只在所有已登记设备快照都不再引用它时清理。墓碑保留在快照中，防止长期离线设备重新连接后复活旧记录；同步库重置会显式清空整份远端数据。
+- 首次连接已有同步库时合并而不是覆盖本地数据。空白初始化状态不产生重复默认组；本地有内容时保留其实体，并按上述冲突规则合并。
+
+## 加密与密钥恢复
+
+云端正文强制端到端加密，不提供明文同步模式。使用 Web Crypto AES-256-GCM 加密快照和媒体；每次加密使用新的随机 IV，并把格式版本和对象身份作为认证附加数据。云端提供方不会取得密钥。对象数量、大小、访问时间和同步频率仍可能被提供方观察到。
+
+首次设置时生成 256-bit 随机恢复密钥，以 Base64url 展示一次；用户在启用同步前需要保存它。密钥导入设备后转成不可导出的 CryptoKey，保存在该设备 IndexedDB。新设备通过同一恢复密钥解锁。恢复密钥不放入云端、Chrome Sync、普通扩展设置或 JSON 备份。
+
+恢复密钥遗失且所有已解锁设备都不可用时，云端内容无法恢复；现存设备上的本地数据与用户导出的 JSON 备份仍可用。恢复密钥遗失但仍有可解锁设备时，可从该设备重新生成恢复密钥并重新加密 vault。加密保护提供方一侧的数据，不防护已解锁设备、恶意扩展代码或本机恶意软件。
+
+WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配置文件中；它不随设备快照或 JSON 备份同步。连接 WebDAV 必须使用 HTTPS。
+
+## 同步与失败行为
+
+- Chrome Identity 的交互式授权从解释用途的设置按钮发起，不在启动时弹窗。[Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/api/identity)
+- 同步仅在用户启用后访问外部服务。设置页提供手动同步；启用后的本地变更和扩展打开会触发异步同步，不等待其完成再渲染主页。
+- 网络中断、授权取消、权限拒绝、校验/解密错误或提供方失败时，保留本机已有数据和未同步编辑，明确显示失败或待同步。远端数据未通过完整校验时不得部分应用；不得跳过媒体、覆盖较新快照或伪报成功。
+- 远端格式包含独立 schemaVersion。未知未来版本拒绝应用并说明原因；不降级或静默重写。
+
+## 基础协议与剩余实施
+
+字段版本、耦合寄存器、严格格式、墓碑/撤销、首次合并、来源 URL 和本地导入/重置规则已经落实，详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
+
+公共对象接口、条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。仍需真实提供方对象寻址/原子保证、授权/连接界面、自动触发/待删除到期调度、设备集合、远端媒体回收与密钥轮换；应用尚未连接外部同步服务。
+
+## 验收状态
+
+- 已有基础层自动检查覆盖：不同字段并发修改、同字段决胜、删除/撤销、跨组移动、排序、首次合并与事务回滚。
+- 已有加密检查覆盖恢复密钥导入、不可导出密钥持久化、错误密钥、密文/对象身份篡改、未知版本及媒体校验；完整密钥轮换尚未实现。
+- 待提供方集成：分别验证完整上传、同时修改、重复操作、断网和授权失败；不得用假成功路径代替真实对象操作。
+- 待真实扩展和服务端：Google OAuth/appDataFolder、HTTPS WebDAV、第二 Chrome 配置文件的图片还原和权限撤销。普通网页预览不替代这些检查。
+
+### 依据
+
+- [Chrome Storage API 配额](https://developer.chrome.com/docs/extensions/reference/api/storage)
+- [Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/api/identity)
+- [Google Drive appDataFolder](https://developers.google.com/workspace/drive/api/guides/appdata)
+- [WebDAV RFC 4918：锁支持可选](https://datatracker.ietf.org/doc/html/rfc4918)
+- [Web Crypto AES-GCM](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams)

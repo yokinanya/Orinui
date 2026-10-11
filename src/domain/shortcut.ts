@@ -1,11 +1,14 @@
 /**
  * 图标引用。
  *
- * 数据契约 §5.4 的四类来源中，首版数据层先支持文字与本地资源；
- * 内置图形与直链下载在接入对应功能时补充。
+ * 支持文字首字母、随包图形和本地图片；图片可由上传或用户主动直链下载保存。
  */
+export const BUILT_IN_ICON_IDS = ['compass', 'book', 'briefcase', 'code', 'heart', 'sparkles'] as const;
+export type BuiltInIconId = (typeof BUILT_IN_ICON_IDS)[number];
+
 export type ShortcutIcon =
   | { kind: 'letter' }
+  | { kind: 'built-in'; iconId: BuiltInIconId }
   | { kind: 'asset'; assetId: string };
 
 export interface Shortcut {

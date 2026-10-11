@@ -1,119 +1,25 @@
-import { useEffect, useState } from 'react';
-
-import { useData } from '@/app/data-context';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import type { Shortcut } from '@/domain/shortcut';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ShortcutFormFields } from '@/features/shortcuts/ShortcutFormFields';
+import { useShortcutDraft, type ShortcutFormProps } from '@/features/shortcuts/use-shortcut-draft';
 
-interface ShortcutFormDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  groupId: string;
-  /** 传入表示编辑已有网站，不传表示新增。 */
-  shortcut?: Shortcut | undefined;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * 新增或编辑网站。
- *
- * 字段编辑在草稿态进行，点“保存”才校验并写入；失败时把领域层给出的原因
- * 显示在对应字段上，不关闭对话框也不保留半成品数据。
- */
-export function ShortcutFormDialog({
-  open,
-  onOpenChange,
-  groupId,
-  shortcut,
-}: ShortcutFormDialogProps) {
-  const { createShortcut, updateShortcut } = useData();
-  const [title, setTitle] = useState(shortcut?.title ?? '');
-  const [url, setUrl] = useState(shortcut?.url ?? '');
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(shortcut?.title ?? '');
-    setUrl(shortcut?.url ?? '');
-    setError(null);
-  }, [open, shortcut]);
-
-  const submit = async () => {
-    setError(null);
-    setSaving(true);
-    try {
-      if (shortcut) {
-        await updateShortcut(shortcut.id, { title, url });
-      } else {
-        await createShortcut({ groupId, title, url });
-      }
-      onOpenChange(false);
-    } catch (cause) {
-      setError(messageOf(cause));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+/** 图片保留在草稿中，保存时与网站记录一起事务化写入。 */
+export function ShortcutFormDialog(props: ShortcutFormProps) {
+  const { open, onOpenChange, shortcut } = props;
+  const draft = useShortcutDraft(props);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!draft.saving) onOpenChange(next); }}>
       <DialogContent>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
+        <form className="max-h-[calc(100dvh-3rem)] overflow-y-auto"
+          onSubmit={(event) => { event.preventDefault(); if (!draft.saving && !draft.imageBusy) void draft.submit(); }}>
           <DialogHeader>
             <DialogTitle>{shortcut ? '编辑网站' : '添加网站'}</DialogTitle>
-            <DialogDescription>名称用于显示，网址缺少协议时会自动补 https。</DialogDescription>
+            <DialogDescription>网址缺少协议时会补 https。上传图片在保存时写入；清除已有图片来源立即生效，取消编辑不会恢复来源。</DialogDescription>
           </DialogHeader>
-
-          <FieldGroup className="py-4">
-            <Field data-invalid={error !== null || undefined}>
-              <FieldLabel htmlFor="shortcut-title">名称</FieldLabel>
-              <Input
-                id="shortcut-title"
-                value={title}
-                autoComplete="off"
-                aria-invalid={error !== null || undefined}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </Field>
-            <Field data-invalid={error !== null || undefined}>
-              <FieldLabel htmlFor="shortcut-url">网址</FieldLabel>
-              <Input
-                id="shortcut-url"
-                value={url}
-                autoComplete="off"
-                placeholder="example.com"
-                aria-invalid={error !== null || undefined}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-              {error !== null && <FieldError>{error}</FieldError>}
-            </Field>
-          </FieldGroup>
-
+          <ShortcutFormFields draft={draft} />
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? '保存中…' : '保存'}
-            </Button>
+            <Button type="button" variant="ghost" disabled={draft.saving} onClick={() => onOpenChange(false)}>取消</Button>
+            <Button type="submit" disabled={draft.saving || draft.imageBusy}>{draft.saving ? '保存中…' : '保存'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

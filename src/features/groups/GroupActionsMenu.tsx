@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useData } from '@/app/data-context';
@@ -8,11 +8,16 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Group } from '@/domain/group';
+import { GROUP_COLOR_ROLES } from '@/domain/group';
 import { notifyError } from '@/lib/notify';
+import { cn } from '@/lib/utils';
 
 interface GroupMenuProps {
   group: Group;
@@ -29,7 +34,7 @@ interface GroupMenuProps {
  * 系统默认分组可改名与移动，但不可删除。
  */
 function GroupMenuItems({ group, index, total, onRename, onDelete }: GroupMenuProps) {
-  const { moveGroup } = useData();
+  const { moveGroup, updateGroupColor } = useData();
 
   const move = (direction: 'up' | 'down') => {
     void moveGroup(group.id, direction).catch(notifyError);
@@ -50,6 +55,19 @@ function GroupMenuItems({ group, index, total, onRename, onDelete }: GroupMenuPr
         <ArrowRightIcon />
         右移
       </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>标签颜色</ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuItem disabled={group.isDefault} onClick={() => void updateGroupColor(group.id, null).catch(notifyError)}>
+            {group.colorRole === null && <CheckIcon />} 自动分配
+          </ContextMenuItem>
+          {GROUP_COLOR_ROLES.map((role) => <ContextMenuItem key={role}
+            disabled={group.isDefault && role !== 'primary'}
+            onClick={() => void updateGroupColor(group.id, role).catch(notifyError)}>
+            {group.colorRole === role && <CheckIcon />}{role === 'primary' ? '主色' : role === 'secondary' ? '次色' : '第三色'}
+          </ContextMenuItem>)}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" disabled={group.isDefault} onClick={onDelete}>
         <Trash2Icon />
@@ -89,7 +107,7 @@ export function GroupActionsButton({ group, className, ...menu }: GroupActionsBu
             type="button"
             variant="ghost"
             size="icon-xs"
-            className={className}
+            className={cn(className, 'home-readable-control home-readable-focus')}
             aria-label={`${group.name} 分组的操作`}
           />
         }

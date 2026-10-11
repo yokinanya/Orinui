@@ -1,5 +1,5 @@
 import { PipetteIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,21 +35,41 @@ interface ColorPickerProps {
  * 拖动期间颜色变化很密，这里用节流合并写入，避免每一次 pointermove 都落一次数据库。
  */
 export function ColorPicker({ id, value, onChange, label }: ColorPickerProps) {
+  const picker = useColorPickerState(value, onChange);
+
+  return (
+    <ColorPickerPanel
+      id={id}
+      label={label}
+      value={value}
+      {...picker}
+    />
+  );
+}
+
+interface ColorPickerState {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  hsv: Hsv;
+  hexText: string;
+  hexInvalid: boolean;
+  supportsEyedropper: boolean;
+  apply: (next: Hsv) => void;
+  flush: () => void;
+  changeHex: (event: ChangeEvent<HTMLInputElement>) => void;
+  blurHex: () => void;
+  keyDownHex: (event: KeyboardEvent<HTMLInputElement>) => void;
+  pickFromScreen: () => void;
+}
+
+function useColorPickerState(value: string, onChange: (color: string) => void): ColorPickerState {
   const [open, setOpen] = useState(false);
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState<string | null>(null);
 
   const { emit, flush } = useThrottledEmit(onChange);
   const supportsEyedropper = useMemo(canPickColorFromScreen, []);
-
-  // 收起时跟随外部值；展开时不跟随，否则十六进制往返会在 s=0 或 v=0 时丢掉色相
-  useEffect(() => {
-    if (!open) setHsv(hexToHsv(value));
-  }, [open, value]);
-
-  useEffect(() => {
-    if (!open) setHexDraft(null);
-  }, [open]);
+  useColorPickerEffects({ open, value, setHsv, setHexDraft });
 
   const apply = (next: Hsv) => {
     setHsv(next);
@@ -59,20 +79,133 @@ export function ColorPicker({ id, value, onChange, label }: ColorPickerProps) {
   const hexText = hexDraft ?? hsvToHex(hsv);
   const hexInvalid = hexDraft !== null && parseHex(hexDraft) === null;
 
-  const pickFromScreen = () => {
-    void (async () => {
-      try {
-        const picked = await pickColorFromScreen();
-        if (picked === null) return;
-
-        apply(hexToHsv(picked));
-        flush();
-      } catch (error) {
-        notifyError(error);
-      }
-    })();
+  const changeHex = (event: ChangeEvent<HTMLInputElement>) => {
+    const text = event.target.value;
+    setHexDraft(text);
+    const rgb = parseHex(text);
+    if (rgb) apply(rgbToHsv(rgb));
   };
 
+  const keyDownHex = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    flush();
+    setHexDraft(null);
+  };
+
+  const pickFromScreen = () => {
+    void pickColorFromScreen().then((picked) => {
+      if (picked === null) return;
+      apply(hexToHsv(picked));
+      flush();
+    }).catch(notifyError);
+  };
+
+  return {
+    open,
+    setOpen,
+    hsv,
+    hexText,
+    hexInvalid,
+    supportsEyedropper,
+    apply,
+    flush,
+    changeHex,
+    blurHex: () => setHexDraft(null),
+    keyDownHex,
+    pickFromScreen,
+  };
+}
+
+function useColorPickerEffects({
+  open,
+  value,
+  setHsv,
+  setHexDraft,
+}: {
+  open: boolean;
+  value: string;
+  setHsv: (value: Hsv) => void;
+  setHexDraft: (value: string | null) => void;
+}) {
+  // 收起时跟随外部值；展开时不跟随，否则往返输入会在灰色或黑色时丢掉色相。
+  useEffect(() => {
+    if (!open) setHsv(hexToHsv(value));
+  }, [open, value, setHsv]);
+  useEffect(() => {
+    if (!open) setHexDraft(null);
+  }, [open, setHexDraft]);
+}
+
+type ColorPickerPanelProps = Omit<ColorPickerProps, 'onChange'> & ColorPickerState;
+
+type ColorPickerEditorProps = Pick<
+  ColorPickerState,
+  'hsv' | 'hexText' | 'hexInvalid' | 'supportsEyedropper' | 'apply' | 'flush' |
+  'changeHex' | 'blurHex' | 'keyDownHex' | 'pickFromScreen'
+>;
+
+function ColorPickerEditor({
+  hsv,
+  hexText,
+  hexInvalid,
+  supportsEyedropper,
+  apply,
+  flush,
+  changeHex,
+  blurHex,
+  keyDownHex,
+  pickFromScreen,
+}: ColorPickerEditorProps) {
+  return (
+    <>
+      <SaturationValueArea hsv={hsv} onPreview={apply} onCommit={flush} />
+      <HueBar hue={hsv.h} onPreview={(nextHue) => apply({ ...hsv, h: nextHue })} onCommit={flush} />
+      <div className="flex items-center gap-2">
+        <Input
+          value={hexText}
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="十六进制颜色"
+          aria-invalid={hexInvalid || undefined}
+          className="h-8 font-mono"
+          onChange={changeHex}
+          onBlur={blurHex}
+          onKeyDown={keyDownHex}
+        />
+        {supportsEyedropper && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="用吸管从屏幕取色"
+            onClick={pickFromScreen}
+          >
+            <PipetteIcon />
+          </Button>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ColorPickerPanel({
+  id,
+  label,
+  value,
+  open,
+  setOpen,
+  hsv,
+  hexText,
+  hexInvalid,
+  supportsEyedropper,
+  apply,
+  flush,
+  changeHex,
+  blurHex,
+  keyDownHex,
+  pickFromScreen,
+}: ColorPickerPanelProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -86,45 +219,20 @@ export function ColorPicker({ id, value, onChange, label }: ColorPickerProps) {
           />
         }
       />
-      <PopoverContent align="end" className="w-64 gap-3 p-3">
+      <PopoverContent align="end" className="w-[min(16rem,calc(75vw_-_3rem))] gap-3 p-3">
         <PopoverTitle className="sr-only">{label}</PopoverTitle>
-        <SaturationValueArea hsv={hsv} onPreview={apply} onCommit={flush} />
-        <HueBar hue={hsv.h} onPreview={(nextHue) => apply({ ...hsv, h: nextHue })} onCommit={flush} />
-        <div className="flex items-center gap-2">
-          <Input
-            value={hexText}
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="十六进制颜色"
-            aria-invalid={hexInvalid || undefined}
-            className="h-8 font-mono"
-            onChange={(event) => {
-              const text = event.target.value;
-              setHexDraft(text);
-
-              const rgb = parseHex(text);
-              if (rgb) apply(rgbToHsv(rgb));
-            }}
-            onBlur={() => setHexDraft(null)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return;
-              event.preventDefault();
-              flush();
-              setHexDraft(null);
-            }}
-          />
-          {supportsEyedropper && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              aria-label="用吸管从屏幕取色"
-              onClick={pickFromScreen}
-            >
-              <PipetteIcon />
-            </Button>
-          )}
-        </div>
+        <ColorPickerEditor
+          hsv={hsv}
+          hexText={hexText}
+          hexInvalid={hexInvalid}
+          supportsEyedropper={supportsEyedropper}
+          apply={apply}
+          flush={flush}
+          changeHex={changeHex}
+          blurHex={blurHex}
+          keyDownHex={keyDownHex}
+          pickFromScreen={pickFromScreen}
+        />
       </PopoverContent>
     </Popover>
   );

@@ -1,6 +1,11 @@
 import { resolveSeed, type AppearanceSettings } from '@/domain/appearance';
-import { wallpaperPolarity, wallpaperStyle } from '@/features/appearance/background-style';
-import { colorTokensFromSeed, DYNAMIC_COLOR_TOKENS } from '@/features/appearance/color-tokens';
+import { requiresHomeReadabilitySurface, wallpaperStyle } from '@/features/appearance/background-style';
+import {
+  colorTokensFromSeed,
+  DYNAMIC_COLOR_TOKENS,
+  HOME_READABILITY_TOKEN_NAMES,
+  homeReadabilityTokens,
+} from '@/features/appearance/color-tokens';
 
 export function isDarkActive(theme: AppearanceSettings['theme'], systemPrefersDark: boolean): boolean {
   if (theme === 'dark') return true;
@@ -42,6 +47,7 @@ export function applyAppearance({
   root.style.setProperty('--wallpaper', wallpaper.wallpaper);
   root.style.setProperty('--wallpaper-color', wallpaper.wallpaperColor);
   root.style.setProperty('--wallpaper-mask', wallpaper.wallpaperMask);
+  applyHomeReadability(root, appearance, isDark);
 
   const seed = appearance.dynamicColor.enabled ? resolveSeed(appearance, photoSeed) : null;
 
@@ -52,13 +58,26 @@ export function applyAppearance({
     return;
   }
 
-  // 壁纸之上的文字按背景亮度决定；无法判断时（照片、默认背景）回退到主题。
-  const overWallpaper = wallpaperPolarity(appearance.background) ?? (isDark ? 'dark' : 'light');
-  const tokens = colorTokensFromSeed(seed, {
-    theme: isDark ? 'dark' : 'light',
-    overWallpaper,
-  });
+  // 动态色只跟随主题生成；任意壁纸上的正文由独立的局部可读性表面保护。
+  const tokens = colorTokensFromSeed(seed, { theme: isDark ? 'dark' : 'light' });
   for (const [token, value] of Object.entries(tokens)) {
+    root.style.setProperty(token, value);
+  }
+}
+
+function applyHomeReadability(
+  root: HTMLElement,
+  appearance: AppearanceSettings,
+  isDark: boolean,
+): void {
+  if (!requiresHomeReadabilitySurface(appearance.background)) {
+    root.removeAttribute('data-home-readable');
+    for (const token of HOME_READABILITY_TOKEN_NAMES) root.style.removeProperty(token);
+    return;
+  }
+
+  root.setAttribute('data-home-readable', 'true');
+  for (const [token, value] of Object.entries(homeReadabilityTokens(isDark))) {
     root.style.setProperty(token, value);
   }
 }

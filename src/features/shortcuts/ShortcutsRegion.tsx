@@ -1,13 +1,12 @@
-import { PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useData } from '@/app/data-context';
-import { Button } from '@/components/ui/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import type { Shortcut } from '@/domain/shortcut';
 import { GroupTabs } from '@/features/groups/GroupTabs';
 import { ShortcutFormDialog } from '@/features/shortcuts/ShortcutFormDialog';
-import { ShortcutGrid } from '@/features/shortcuts/ShortcutGrid';
+import { ShortcutGroupContent } from '@/features/shortcuts/ShortcutGroupContent';
+import { useGroupContentMotion } from '@/features/shortcuts/use-group-content-motion';
+import { browserContentMotion } from '@/platform/content-motion';
 
 /**
  * 快捷方式区域：分组标签 + 网站网格，并承载主页的编辑模式。
@@ -16,7 +15,13 @@ import { ShortcutGrid } from '@/features/shortcuts/ShortcutGrid';
  * 分组标签行末尾的「编辑」按钮切换到可拖动排序、带「＋ 添加网站」格子的编辑模式。
  */
 export function ShortcutsRegion() {
-  const { shortcuts, activeGroupId } = useData();
+  const { shortcuts, activeGroupId, loadedShortcutsGroupId } = useData();
+  const { contentRef, isWaiting } = useGroupContentMotion({
+    activeGroupId,
+    loadedGroupId: loadedShortcutsGroupId,
+    motion: browserContentMotion,
+    shortcutCount: shortcuts.length,
+  });
   const [editing, setEditing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [target, setTarget] = useState<Shortcut | null>(null);
@@ -40,27 +45,8 @@ export function ShortcutsRegion() {
     <section aria-label="快捷方式" className="flex w-full flex-col items-center gap-6">
       <GroupTabs editing={editing} onEditingChange={setEditing} />
 
-      {shortcuts.length === 0 && !editing ? (
-        <Empty className="border-glass-border bg-glass/40 backdrop-blur-sm">
-          <EmptyHeader>
-            <EmptyTitle className="text-glass-foreground">还没有网站</EmptyTitle>
-            <EmptyDescription className="text-glass-foreground-muted">
-              添加常用网站后会按分组显示在这里。
-            </EmptyDescription>
-          </EmptyHeader>
-          <Button
-            type="button"
-            disabled={!activeGroupId}
-            onClick={openCreate}
-            className="bg-glass text-glass-foreground hover:bg-glass-strong"
-          >
-            <PlusIcon data-icon="inline-start" />
-            添加第一个网站
-          </Button>
-        </Empty>
-      ) : (
-        <ShortcutGrid shortcuts={shortcuts} editing={editing} onEdit={openEdit} onAdd={openCreate} />
-      )}
+      <ShortcutGroupContent activeGroupId={activeGroupId} contentRef={contentRef} editing={editing}
+        isWaiting={isWaiting} onAdd={openCreate} onEdit={openEdit} shortcuts={shortcuts} />
 
       {activeGroupId && (
         <ShortcutFormDialog

@@ -1,161 +1,139 @@
-# 架构说明
+# 当前工程架构
 
-> 记录工程层面的既定选择与理由。产品与视觉规则见 [VISUAL-SPEC.md](./VISUAL-SPEC.md) 与 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
+本文描述已实现的代码。未来同步设计单独见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)；功能进度见 [TASKS.md](./TASKS.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 工具链
 
-| 选择 | 内容 | 理由 |
+| 职责 | 当前实现 |
+|---|---|
+| 扩展与构建 | WXT + Vite，Chrome Manifest V3；源码根为 src |
+| 界面 | React + TypeScript |
+| 样式 | Tailwind CSS v4，统一语义令牌 |
+| 组件 | shadcn/ui，Base UI / base-luma；组件源码保存在仓库 |
+| 图标 | lucide-react；随包图形使用固定 ID |
+| 排序 | dnd-kit core、sortable、utilities |
+| 动态色 | Material color utilities，在本机生成令牌 |
+| 动效 | CSS transition 与 tw-animate-css |
+| 状态 | React Context/hooks；未引入 Zustand |
+| 数据 | Dexie / IndexedDB |
+| 检查 | TypeScript、Vitest、fake-indexeddb、Playwright |
+
+不引入 Material Web 组件；动态色库只负责颜色计算。系统字体栈不依赖远程字体。
+
+## 模块职责
+
+| 目录 | 职责与边界 |
+|---|---|
+| `src/entrypoints/newtab` | HTML 与 React 挂载 |
+| `src/app` | 页面、背景、主题和数据桥；注入仓储操作 |
+| `src/domain` | 类型、校验、限制与纯规则，不依赖 React 或浏览器 API |
+| `src/storage` | Dexie 表、仓储、排序和事务；通过参数接收数据库 |
+| `src/sync` | 公共对象端口和手动同步用例；注入存储/锁/加密/算法，不包含具体网络提供方 |
+| `src/features` | 功能界面，通过 useData 读取数据和调用操作，不直接访问 Dexie |
+| `src/platform` | 唯一直接调用扩展 API、fetch、图片解码/画布及文件下载的边界 |
+| `src/hooks` | 跨功能复用钩子，包括本地 Blob 对象 URL 生命周期 |
+| `src/components/ui` | shadcn 组件，保留上游风格 |
+| `src/styles` | 颜色、字号层次、圆角、动效与全局样式 |
+| `src/lib` | 通用工具，不包含领域规则 |
+| `public` | 随包静态资源 |
+
+WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目录。
+
+## 平台接口
+
+| 模块 | 当前职责 |
+|---|---|
+| `extension.ts` | 从 runtime manifest 读取名称/版本；需要真实扩展环境 |
+| `navigation.ts` | 搜索和网站在当前标签页打开 |
+| `eyedropper.ts` | 能力检查、调用吸管；取消返回 null，能力缺失或失败明确报错 |
+| `images.ts` | 本地图片解码、尺寸检查、缩放/编码和照片取色 |
+| `svg.ts` | 静态 SVG 几何/属性白名单与拒绝规则 |
+| `remote-images.ts` | 用户操作中申请具体来源权限，流式下载、体积检查和重定向阻止 |
+| `backup-file.ts` | JSON/Blob 编解码及本地文件读写 |
+| `backup-download.ts` | 导出文件的浏览器下载与对象 URL 生命周期 |
+
+已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。当前没有 Identity、Drive、WebDAV 或自动同步调度模块。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
+
+## 本地数据与事务
+
+当前 Dexie schema 为版本 3：
+
+| 表 | 主键与索引 | 作用 |
 |---|---|---|
-| 构建 | WXT + Vite | 处理 Manifest V3、入口与打包，目标浏览器切换成本低 |
-| 界面 | React + TypeScript | 与组件库生态一致，类型检查守住数据契约 |
-| 样式 | Tailwind CSS v4 | 与设计令牌配合，避免散落的样式文件 |
-| 组件 | shadcn/ui，`base-luma` | 组件以源码形式进入仓库，可局部调整；luma 的圆润与留白贴合视觉规格 |
-| 图标 | lucide-react | 组件库默认图标集，体积可控 |
-| 拖动排序 | `@dnd-kit/core` + `@dnd-kit/sortable` | 官方维护、无 jQuery 依赖；同时提供指针与键盘传感器，拖动不是唯一排序路径 |
-| 字体 | 系统字体栈 | 不远程加载字体，减少首屏开销并保护隐私 |
-| 包管理 | pnpm | 依赖体积与安装速度更优，锁文件可复现 |
+| groups | id；order、isDefault | 分组与唯一默认组 |
+| shortcuts | id；groupId、order | 网站及组内连续位置 |
+| settings | 固定主键 app | 外观、搜索、布局、时钟设置 |
+| assets | id；kind | 图片 Blob、尺寸、MIME 与可选来源 URL |
+| sync_state | 固定主键 app | 库/设备身份、时钟/代次、默认组、接收标记及可选本机基线/运行/成功记录 |
+| sync_records | id；kind、entityId | 字段寄存器、墓碑和短暂撤销图片缓存 |
+| sync_keys | vaultId | 本机不可导出的 CryptoKey |
 
-不使用 `@material/web`：Web 端已进入维护状态，且新标签页需要的是令牌体系而非 Material 组件外形。
+- 多表/多次写入使用单一读写事务；失败整体回滚。
+- 领域校验在写入前执行；默认组不可删除，缺少默认组时报错，不静默补替。
+- 排序维护集中在 order.ts。拖放使用 assignOrder 按传入数组顺序编号；renumber 先按现有 order 排序，不能用它替代拖放结果。
+- 未发生移动时返回 null，避免无意义写入。
+- 版本 1 → 2 迁移补齐外观字段并新增 assets，不重建现有网站和分组。
+- 版本 2 → 3 只新增同步表；没有配置同步库时不捕获业务记录。DBCore 中间件把本机版本与领域写入原子提交，接收事务暂停捕获防回声。
+- JSON 备份当前为版本 1，独立于 Dexie schema；没有旧 JSON 版本迁移器。
 
-## 目录职责
+完整规则与限额见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
 
-| 目录 | 职责 | 约定 |
-|---|---|---|
-| `src/entrypoints/newtab` | 新标签页入口 | 只负责挂载与全局样式引入 |
-| `src/app` | 页面组合、背景层、主题、数据桥 | 只有 DataProvider 允许同时接触数据层与界面 |
-| `src/domain` | 领域类型与纯规则 | 无副作用、可单测，不依赖 React |
-| `src/features/*` | 按功能划分的界面与交互 | 每个功能自成一个目录，通过 `useData()` 访问数据 |
-| `src/platform` | 扩展 API、权限与导航的薄封装 | 唯一允许直接调用浏览器 API 的位置 |
-| `src/components/ui` | shadcn/ui 生成组件 | 保留上游风格，改动越少越易升级 |
-| `src/lib` | 通用工具（`cn`、提示条封装） | 不含业务规则 |
-| `src/styles` | 设计令牌与全局样式 | 颜色、圆角、字体与 shadcn 所需变体只在这里定义 |
-| `public` | 随包静态资源 | 扩展图标等无需构建处理的文件 |
+## 界面数据桥
 
-WXT 的源码根目录设为 `src`，因此入口位于 `src/entrypoints`，`@/` 指向 `src`，`public/` 仍在仓库根目录。
+DataProvider 注入数据库，由 use-data-state 加载状态、data-commands 绑定仓储操作。
 
-## 设计令牌
+启动先 ensureInitialized，读取设置及分组，选择默认组。网站按当前分组加载。写入成功后刷新受影响的本地状态；表单错误在字段处显示，其他失败通过提示条显示，初始化失败进入明确错误状态。
 
-`src/styles/globals.css` 定义两套语义变量：
+主题模式已经持久化。theme.ts 监听系统偏好，apply-appearance.ts 按保存的 system/light/dark 设置应用主题，并统一写入或移除背景与动态令牌。
 
-- 基础角色：`background`、`foreground`、`card`、`popover`、`primary`、`secondary`、`muted`、`accent`、`destructive`、`border`、`input`、`ring`。
-- 壁纸之上的专用角色：`glass`、`glass-strong`、`glass-border`、`glass-foreground`、`glass-foreground-muted`，以及 `wallpaper` 与 `wallpaper-mask`。
+主页阅读层是独立的主题令牌：自定义背景启用局部中性表面，默认背景保留透明构图。动态种子只影响强调/玻璃语义色，不再推断整屏文字极性；照片遮罩与用户背景不改写。时钟/日期、名称、分组及小按钮复用样式，源码不进行逐元素背景采样。
 
-浅色为暖白、深色为石墨灰。动态取色接入后，运行时会覆盖强调色相关的变量，静态值作为取色失败时的回退，因此组件始终只引用语义令牌。
+## 图片、资源与备份
 
-## 主题
+- 编辑图片图标使用草稿，取消不写入；保存网站与图片、保存照片与背景设置均事务化。
+- 替换独占图片时在事务中释放旧资源再检查容量；失败恢复原引用及 Blob。共享图片仍有引用时保留。
+- 网站删除会返回当前会话的撤销快照，包括所需图片；撤销重新检查分组/容量并事务化恢复。
+- use-local-image 读取本地 Blob，管理对象 URL、异步取消和读取/取色错误。
+- SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；接受内容栅格化为静态 PNG。
+- 直链下载只在用户主动操作中联网，使用 omit credentials/no-referrer，拒绝重定向，按域名请求可选权限。
+- Manifest 声明可选 HTTPS 与精确 localhost HTTP 来源，不安装时授予全部站点访问。私有 DNS 最终地址判定存在平台限制。
+- 备份由 platform 编解码、domain 严格校验、storage 事务化替换；导入不重新下载来源 URL。
 
-`src/app/theme.ts` 按系统偏好切换根元素的 `dark` 类并监听变化。手动固定浅色/深色属于外观设置，接入持久化后在此扩展。
+## 外观与交互实现注意事项
 
-## 平台边界
+动态色只覆盖强调色和半透明表面，正文/错误色保留基础语义；自定义背景文字由独立主题阅读层保证对比，不再按整屏亮度推断前景。纯色直接取其颜色、渐变取中点，照片种子在本机计算；没有种子色时不覆盖动态令牌，图片读取/取色错误明确呈现。
 
-`src/platform` 目前包含：
+颜色面板内部 HSV 保留浮点，保存为规范化 hex。测试覆盖采样色和全部灰阶；不将历史穷举或规范目标当成本次验收。高频选色写入通过 use-throttled-emit 合并，并在结束时提交尾值。
 
-- `extension.ts`：读取扩展名称与版本，仅在设置抽屉打开时调用。
-- `navigation.ts`：在当前标签页打开地址（搜索与快捷方式共用）。
-- `eyedropper.ts`：屏幕吸管（EyeDropper API）。能力探测与“用户取消”分开：取消返回 `null`，能力缺失直接报错由界面决定是否显示入口。
+主页对象管理共用菜单内容，右键菜单和编辑模式的「⋯」按钮调用同一套操作。网站排序用 rectSortingStrategy，分组用 horizontalListSortingStrategy 并限制纵向移动。
 
-只为已实现的功能建立封装，不预置未使用的 API 适配层。
+键盘拖放用空格拿起/放下、Escape 取消，Enter 保留给对象自身动作；菜单提供不依赖拖动的排序路径。编辑模式状态由 ShortcutsRegion 持有。删除分组先查询数量再确认。
 
-## 数据层
+设置抽屉内边距位于滚动容器自身，避免 Switch 扩大的点击热区造成横向溢出。当前有抽屉/弹窗过渡；主页进入和分组内容切换通过 CSS/WAAPI 实现。数据桥用 loadedShortcutsGroupId 确认数组归属，丢弃过期请求；不重挂编辑区域，减少动态效果时只淡化。
 
-`src/storage` 建立在 Dexie 之上，表结构见 `db.ts`：
+## shadcn 与样式约定
 
-| 表 | 主键与索引 | 说明 |
-|---|---|---|
-| `groups` | `id`，索引 `order`、`isDefault` | 默认分组通过 `isDefault` 标记，同一时刻只有一个 |
-| `shortcuts` | `id`，索引 `groupId`、`order` | 组内位置从 0 连续编号 |
-| `settings` | `id`（固定为 `app`） | 单行保存全部分区，结构随版本迁移 |
-| `assets` | `id`，索引 `kind` | 本地图片二进制，图片总量上限 50 MiB（版本 2 新增） |
+components.json 手工维护，未通过 shadcn init 初始化。生成组件需要全局样式补齐：
 
-约定：
+- 引入 tw-animate-css。
+- 使用基于根 dark 类的自定义 dark 变体。
+- 保留 data-open/closed/checked/unchecked/selected/disabled/active/horizontal/vertical 变体。Base UI 使用 data-orientation，不能依赖原生 HTML orientation 属性。
+- sheet.tsx 的右侧边框已移除，避免深色主题 currentColor 发丝线；其它上游代码尽量少改。
 
-- 所有会改动多张表或多次写入的操作都包在 `db.transaction('rw', ...)` 中，失败即整体回滚。
-- 校验在写入前完成；订单维护集中在 `order.ts`，位置始终保持连续，避免空洞与重复。
-- `order.ts` 的 `assignOrder` 按数组下标编号，`renumber` 先按 `order` 排序再编号：拖动排序必须用前者——若先排序会按旧位置把刚做的移动还原回去。
-- `moveTo` 在标识不存在或位置未变时返回 `null`，仓储据此跳过写入，不产生无意义的更新。
-- 默认分组不可删除；分组数据缺少默认分组时直接报错，不静默顶替（详见 `ensureDefaultGroup`）。
-- 仓储函数以数据库实例作为第一个参数，测试可以为每个用例创建独立数据库。
+使用 shadcn CLI 添加或更新组件后，核对 cn 是否误导入为同名包，应指向 `@/lib/utils`；移除误装的 cn 依赖，并检查本地 sheet 改动是否被覆盖。
 
-## 测试
+网站网格采用固定格子宽度的换行布局，使不足一行的网站居中；容器上限对应六列。布局插槽设置只支持显示与上下移动，与网站/分组的拖动编辑是不同操作。
 
-使用 Vitest，Node 环境下通过 `fake-indexeddb` 提供内存 IndexedDB。
+## 测试和未验证边界
 
-- `tests/domain`：纯规则测试（网址、文本、布局、搜索模板、设置校验）。
-- `tests/storage`：事务行为、排序、上限、默认分组不变量、撤销与持久化。
-- `tests/features`：与界面共用的纯逻辑（动态配色令牌、颜色换算）。
-- `tests/platform`：平台封装的边界行为（吸管能力探测、取消与失败分类）。
-- 每个用例使用独立数据库名，互不干扰。
+Vitest 通过 fake-indexeddb 测试领域规则、持久化、事务回滚、资源和备份。每个数据库测试使用独立名称。scripts/run-tests.mjs 对整个单元测试进程设置 60 秒超时。
 
-`tests/storage/migration.test.ts` 覆盖版本 1 → 2 的迁移：保留已有主题、补齐新增外观字段、保留分组与网站数据。
+Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它不是已加载的 Chrome 扩展。真实权限、EyeDropper 实际屏幕和 runtime manifest 等待扩展验收。
 
-## 界面与数据层的连接
+当前构建有大代码块警告，首屏性能尚未验收；UI 有限背景组合已修复并复验，不表示全部照片达标。具体结果与包体积集中维护在 VERIFICATION.md。
 
-`src/app/DataProvider.tsx` 是唯一同时了解数据层与界面的模块：
+## 同步实现边界
 
-- 启动时调用 `ensureInitialized`，加载分组与设置，并选中默认分组。
-- 切换分组时按需加载该组网站，不在内存里维护全部分组的内容。
-- 写入方法直接复用 `src/storage` 的仓储函数，并在成功后刷新受影响的本地状态。
-- 写入失败会向上抛出：表单把它显示在对应字段，其他操作交给提示条；只有初始化失败才让整页进入错误状态。
+提供方、媒体范围、端到端加密和高层合并方向已经选定，但当前应用仍无外部同步连接。已实现基础层和手动协调器；基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md。
 
-组件不直接调用 Dexie，只通过 `useData()` 使用数据与操作。
-
-## 外观与动态配色
-
-- `src/domain/appearance.ts` 定义主题、背景（默认/照片/纯色/渐变）与动态配色的数据模型和校验。
-- `src/features/appearance/color-tokens.ts` 用 Material 官方算法（`@material/material-color-utilities`）从种子色生成令牌覆盖，只覆盖强调色与壁纸之上的半透明表面，不动大面积表面与错误色。
-- 强调色跟随用户选择的深浅模式；壁纸之上的文字与半透明表面按**背景亮度**决定（`wallpaperPolarity`）。这是必要的：主题与背景可能互相冲突，若只按主题取色，浅色背景配深色主题会让主页文字看不清。
-- 无法判断亮度时（照片、默认背景）回退到主题；照片背景由遮罩强度保护对比度。
-- 冲突时界面给出文字提示，但不改写用户选择的颜色。
-- `src/app/apply-appearance.ts` 是唯一把外观写到根元素的地方：切换 `dark` 类、设置 `--wallpaper*`，并按需写入或移除动态令牌。
-- `src/features/appearance/ColorPicker.tsx` 是外观面板里唯一的颜色选择入口：圆形色板是弹层触发器，弹层内是饱和度/明度面板 + 色相条 + 十六进制输入 + 屏幕吸管。不使用原生 `input[type=color]`，因为它的弹窗由浏览器绘制、无法跟随应用样式；色板带显式尺寸，避免被 `Field` 的 `*:w-full` 拉伸成整行宽。
-- `src/features/appearance/color-math.ts` 负责 hex 与 HSV 的换算。**HSV 保持浮点、不取整**：取整会让 `hex → HSV → hex` 产生最多 3/255 的通道漂移，用户只拖动色相也会让整个颜色偏移；取整只发生在显示与最终 hex 输出。全部 1677 万种颜色的往返一致性已穷举验证，测试覆盖采样空间与全部灰阶。
-- `SaturationValueArea` 与 `HueBar` 共用 `use-drag-area.ts` 的指针拖动逻辑，并各自实现方向键操作。色相条没有套用通用滑块：色相条的轨道本身就是彩虹（通用滑块的输入色轨道与填充区间在这里没有意义），而且通用滑块只允许把可访问名称给到内部滑块，项目没有透出该参数。
-- 拖动取色期间颜色变化很密，`src/hooks/use-throttled-emit.ts` 把它合并成低频写入，同时保留尾随提交与拖动结束时的立即落定，避免每一次 pointermove 都写一次数据库。
-
-## 主页管理交互
-
-网站与分组的操作入口在主页，不放在设置抽屉里：
-
-- `src/features/shortcuts/ShortcutActionsMenu.tsx` 与 `src/features/groups/GroupActionsMenu.tsx` 各只写一份菜单内容，右键菜单与编辑模式下的「⋯」按钮共用它。这是可行的：Base UI 的 `ContextMenu.Item`／`Sub`／`Popup` 与 `Menu` 的对应部分是同一个组件（`context-menu/index.parts` 直接转发 `menu/*`），`ContextMenuRootContext` 也是可选读取，所以同一份内容在两种菜单根下都成立。
-- 拖动排序用 `@dnd-kit`：网站网格用 `rectSortingStrategy`，分组标签用 `horizontalListSortingStrategy` 并配一个把纵向位移归零的内联 modifier，不额外引入 `@dnd-kit/modifiers`。
-- 传感器统一为「指针距离 8px 才激活」+「键盘传感器」，所以点击仍然有效、拖动不是唯一排序路径。键盘传感器的按键映射改为「空格拿起／放下、Escape 取消」，把 `Enter` 留给对象自身的动作（分组标签用 Enter 切换分组），否则编辑模式下无法用键盘换组。
-- 拖动热区：网站格子挂在格子内层，避免把「⋯」按钮嵌进 `role="button"` 的拖动元素里；分组标签的拖动属性直接挂在标签按钮上，因为标签本身既是拖动项也是切换入口——拆成外层容器加内层按钮会让同一个标签出现两个 Tab 停靠点。
-- 分组标签行用 `closestCorners`（一维列表相交即切换目标），网站网格用 `closestCenter`。
-- 编辑模式状态由 `ShortcutsRegion` 持有并向下传递（分组标签行与网格都需要），不引入额外的全局状态。
-- 分组重命名与删除确认放在 `GroupDialogs.tsx`，删除确认在打开时查询组内网站数量。
-- 设置抽屉面板的内边距放在滚动容器自身：Switch 用 `after:-inset-x-3` 扩大点击热区，若滚动容器比内容窄，这段装饰性热区会溢出内容盒并触发横向滚动。
-
-## 样式注意事项
-
-`components.json` 为手工维护，因此 shadcn 的初始化步骤没有执行过，`src/styles/globals.css` 需要手工补齐 shadcn 组件依赖的两项内容：
-
-1. `@import 'tw-animate-css'`：提供 `animate-in`、`fade-in-0`、`zoom-in-95`、`slide-in-from-*` 等过渡工具类，抽屉、弹窗、菜单与提示依赖它们。
-2. 自定义变体：`@custom-variant dark (&:is(.dark *))`，以及 `data-open`、`data-closed`、`data-checked`、`data-unchecked`、`data-selected`、`data-disabled`、`data-active`、`data-horizontal`、`data-vertical` 九个变体。**缺少它们会造成实际故障**：Base UI 用 `data-orientation` 表达方向，标签页因此退化成横向排列；`dark:` 也会错误地跟随系统偏好而不是根元素的类。
-
-新增自定义工具类或变体前，先确认 shadcn 官方样式文件是否已定义同名项，避免重复或冲突。
-
-`src/components/ui/sheet.tsx` 移除了 `data-[side=right]:border-l`：`border-l` 不带颜色时取 `currentColor`，深色主题下会变成一条近白色发丝线，比抽屉本身还抢眼。抽屉与页面之间已有遮罩与阴影，不需要这道线。这是对生成组件的少量本地改动，其余 side 的边框保持上游原样（项目只使用 `side="right"`）。
-
-## shadcn CLI 使用注意
-
-WXT 不在 shadcn 支持的框架列表内，因此 `shadcn init` 无法自动执行，`components.json` 为手工维护。使用 CLI 添加组件后需要检查：
-
-1. 生成的导入是否被错误写成 `from "cn"`，应改为 `from "@/lib/utils"`。
-2. 是否误装名为 `cn` 的 npm 依赖，需要移除。
-3. 若 CLI 覆盖了本地改动过的组件文件，重新检查导入路径。
-
-## 已记录的偏差
-
-- 内置背景原本计划随包提供授权自然摄影，目前素材未引入，首页使用语义令牌中的中性渐变；引入授权素材后沿用同一令牌即可替换。
-- 计划中的目录结构写为根目录 `entrypoints/`，实际采用 WXT 约定的 `src/entrypoints/`。
-- 数据模型按阶段收窄：`ShortcutIcon` 目前只有 `letter` 与 `asset` 两种，内置图形与直链下载在对应功能落地时补充。设置分区已从早期的「主题/时钟/布局/搜索」收敛为抽屉里的「外观/布局/关于」，表结构随外观阶段升到版本 2（新增外观字段与图片资源表），迁移有测试覆盖。
-- 分组语义色角色（`Group.colorRole`）已进入数据模型，但界面仍未使用：标签与选中态统一用主题强调色。动态配色已落地，若要按角色着色，需要先确认「分组色是按种子色生成的色板分配，还是用户可指定」。
-- 网站网格没有采用等分 CSS 网格，而是固定格子宽度的换行布局：网站数量不足一行时整行保持居中，避免等分网格把前几个网站挤到最左侧；容器宽度上限 41rem 对应 6 列硬上限。
-- 未使用的 shadcn 组件会在确认无用后删除，需要时再按 CLI 流程添加；`input` 与 `textarea` 因被 `input-group` 依赖而保留。
-- 主页管理方式经过一次推翻：视觉规格原先写「主页不额外放编辑按钮，设置面板内进入编辑快捷方式模式」，现已改为右键菜单随时可用 + 标签行末尾「编辑」按钮切换编辑模式，设置抽屉只保留外观、布局与关于。
-
-## 待观察项
-
-- 首页生产包（未压缩）约 721 kB JS、93 kB CSS，主要来自 React、Base UI 组件与 `@dnd-kit`。首屏延迟与拆包（例如设置抽屉按需加载）将在发布验证阶段测量后决定，不提前宣称达标。
-- 关于面板在纯网页预览（非扩展环境）下会因 `chrome.runtime` 不可用而报错；这是平台边界被正确暴露的表现，不作为回退逻辑处理。
-- 屏幕吸管需要在真实 Chrome 扩展环境（`chrome-extension://` 页面）人工点一次，确认能力探测为真且取到的颜色正确；自动化测试只用桩覆盖了能力探测、取消与失败分类。
+domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/条件发布，后续新编辑保留更高代次并返回 pending。运行身份与基线独立于发布成功，集成测试不代表云端验收。

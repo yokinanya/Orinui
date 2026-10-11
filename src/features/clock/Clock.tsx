@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useData } from '@/app/data-context';
 
 /**
  * 按分钟边界刷新，而不是每秒重渲染：时钟不显示秒，无需更高频率。
@@ -25,10 +26,12 @@ function useMinuteTick(): Date {
   return now;
 }
 
-const timeFormat = new Intl.DateTimeFormat(undefined, {
-  hour: '2-digit',
-  minute: '2-digit',
-});
+function formatTime(now: Date, format: 'system' | '12h' | '24h'): string {
+  const hourCycle = format === '12h' ? 'h12' : format === '24h' ? 'h23' : undefined;
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit', minute: '2-digit', ...(hourCycle ? { hourCycle } : {}),
+  }).format(now);
+}
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   month: 'long',
@@ -39,20 +42,21 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
 /**
  * 时钟与日期。
  *
- * 数据契约 §10：默认跟随系统区域设置。手动固定 12/24 小时制属于外观设置，后续接入。
+ * 默认跟随系统区域设置，也可固定 12/24 小时制。
  */
 export function Clock() {
   const now = useMinuteTick();
+  const { settings } = useData();
 
   return (
     <div className="flex flex-col items-center gap-1">
       <time
         dateTime={now.toISOString()}
-        className="text-6xl font-light tracking-tight text-glass-foreground tabular-nums md:text-7xl"
+        className="home-readable-chip text-6xl font-light tracking-tight text-glass-foreground tabular-nums md:text-7xl"
       >
-        {timeFormat.format(now)}
+        {formatTime(now, settings.clock.format)}
       </time>
-      <p className="text-sm text-glass-foreground-muted md:text-base">{dateFormat.format(now)}</p>
+      <p className="home-readable-chip home-readable-muted text-sm text-glass-foreground-muted md:text-base">{dateFormat.format(now)}</p>
     </div>
   );
 }

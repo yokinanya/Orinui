@@ -13,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { AboutCard } from '@/features/settings/AboutCard';
 import { AppearancePanel } from '@/features/settings/AppearancePanel';
 import { LayoutPanel } from '@/features/settings/LayoutPanel';
+import { DataManagementPanel } from '@/features/settings/DataManagementPanel';
+import { SearchSettingsPanel } from '@/features/settings/SearchSettingsPanel';
 
 interface SettingsSheetProps {
   trigger: ReactElement;
@@ -31,7 +33,7 @@ const panelClass = 'min-h-0 overflow-y-auto px-6 pt-2';
  * 设置抽屉。
  *
  * 网站与分组的增删改排序都在主页完成（右键菜单 + 编辑模式），
- * 这里只保留外观、布局与关于；数据导入导出在后续阶段加入。
+ * 按外观、布局、搜索、数据和关于分区管理配置。
  */
 export function SettingsSheet({ trigger }: SettingsSheetProps) {
   return (
@@ -43,15 +45,17 @@ export function SettingsSheet({ trigger }: SettingsSheetProps) {
       <SheetContent side="right" className="sm:max-w-md">
         <SheetHeader>
           <SheetTitle>设置</SheetTitle>
-          <SheetDescription>调整外观与布局。网站和分组请在主页上直接编辑。</SheetDescription>
+          <SheetDescription>调整外观、布局、搜索和本地数据。网站和分组请在主页上直接编辑。</SheetDescription>
         </SheetHeader>
 
         <Tabs defaultValue="appearance" className="min-h-0 flex-1 pb-6">
           <div className="px-6">
             <TabsList className="w-full">
-              <TabsTrigger value="appearance">外观</TabsTrigger>
-              <TabsTrigger value="layout">布局</TabsTrigger>
-              <TabsTrigger value="about">关于</TabsTrigger>
+              <TabsTrigger value="appearance" className="px-1.5 text-xs">外观</TabsTrigger>
+              <TabsTrigger value="layout" className="px-1.5 text-xs">布局</TabsTrigger>
+              <TabsTrigger value="search" className="px-1.5 text-xs">搜索</TabsTrigger>
+              <TabsTrigger value="data" className="px-1.5 text-xs">数据</TabsTrigger>
+              <TabsTrigger value="about" className="px-1.5 text-xs">关于</TabsTrigger>
             </TabsList>
           </div>
           <TabsContent value="appearance" className={panelClass}>
@@ -62,6 +66,12 @@ export function SettingsSheet({ trigger }: SettingsSheetProps) {
           </TabsContent>
           <TabsContent value="about" className={panelClass}>
             <AboutCard />
+          </TabsContent>
+          <TabsContent value="search" className={panelClass}>
+            <SearchSettingsPanel />
+          </TabsContent>
+          <TabsContent value="data" className={panelClass}>
+            <DataManagementPanel />
           </TabsContent>
         </Tabs>
       </SheetContent>

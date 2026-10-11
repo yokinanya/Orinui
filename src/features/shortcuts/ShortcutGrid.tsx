@@ -43,7 +43,7 @@ function SortableShortcut({ shortcut, editing, onEdit }: SortableShortcutProps) 
     >
       <ShortcutContextMenu shortcut={shortcut} onEdit={onEdit}>
         {/* 拖动属性挂在格子内层：li 保持列表语义，操作按钮作为兄弟节点不会嵌套在按钮里 */}
-        <div {...(editing ? { ...attributes, ...listeners } : {})}>
+        <div className="home-readable-focus outline-none" {...(editing ? { ...attributes, ...listeners } : {})}>
           <ShortcutTile shortcut={shortcut} editing={editing} />
         </div>
       </ShortcutContextMenu>

@@ -5,6 +5,8 @@ import type { Group } from '@/domain/group';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { ImageAsset } from '@/domain/asset';
+import type { SyncRecordRow, SyncStateRow, SyncKeyRow } from '@/storage/sync/types';
+import { createSyncCaptureMiddleware } from '@/storage/sync/middleware';
 
 /** 设置只保存一行，id 固定；结构随版本升级迁移。 */
 export type SettingsRow = AppSettings & { id: 'app' };
@@ -22,9 +24,15 @@ export class OrinuiDatabase extends Dexie {
   shortcuts!: EntityTable<Shortcut, 'id'>;
   settings!: EntityTable<SettingsRow, 'id'>;
   assets!: EntityTable<ImageAsset, 'id'>;
+  sync_state!: EntityTable<SyncStateRow, 'id'>;
+  sync_records!: EntityTable<SyncRecordRow, 'id'>;
+  sync_keys!: EntityTable<SyncKeyRow, 'id'>;
+  readonly now: () => number;
 
-  constructor(name: string) {
+  constructor(name: string, options: { readonly now?: () => number } = {}) {
     super(name);
+    this.now = options.now ?? Date.now;
+    this.use(createSyncCaptureMiddleware(this.now));
 
     this.version(1).stores({
       groups: 'id, order, isDefault',
@@ -50,12 +58,22 @@ export class OrinuiDatabase extends Dexie {
           };
         });
       });
+
+    this.version(3).stores({
+      groups: 'id, order, isDefault',
+      shortcuts: 'id, groupId, order',
+      settings: 'id',
+      assets: 'id, kind',
+      sync_state: 'id',
+      sync_records: 'id, kind, entityId',
+      sync_keys: 'id',
+    });
   }
 }
 
 /** 测试可为每个用例创建独立数据库，避免相互干扰。 */
-export function createDatabase(name: string): OrinuiDatabase {
-  return new OrinuiDatabase(name);
+export function createDatabase(name: string, options?: { readonly now?: () => number }): OrinuiDatabase {
+  return new OrinuiDatabase(name, options);
 }
 
 export const db = createDatabase('orinui');

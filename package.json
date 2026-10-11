@@ -9,7 +9,8 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "compile": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node scripts/run-tests.mjs",
+    "test:browser": "pnpm build && playwright test",
     "test:watch": "vitest",
     "postinstall": "wxt prepare"
   },
@@ -28,6 +29,7 @@
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^26.6.4",
     "@types/react": "^19.2.14",

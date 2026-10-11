@@ -6,12 +6,39 @@ import { FieldDescription } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { SLOT_IDS, type SlotId } from '@/domain/layout';
 import { notifyError } from '@/lib/notify';
+import { DEFAULT_LAYOUT } from '@/domain/layout';
+import { ClockSettingsPanel } from '@/features/settings/ClockSettingsPanel';
 
 const SLOT_LABELS: Record<SlotId, string> = {
   clock: '时钟',
   search: '搜索',
   shortcuts: '快捷方式',
 };
+
+interface LayoutRowProps {
+  readonly slot: SlotId;
+  readonly index: number;
+  readonly count: number;
+  readonly visible: boolean;
+  readonly onMove: (index: number, direction: 'up' | 'down') => void;
+  readonly onVisibilityChange: (slot: SlotId, visible: boolean) => void;
+}
+
+function LayoutRow({ slot, index, count, visible, onMove, onVisibilityChange }: LayoutRowProps) {
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-xl px-2 py-2 hover:bg-muted/60">
+      <span className="truncate text-sm">{SLOT_LABELS[slot]}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={`上移${SLOT_LABELS[slot]}`}
+          disabled={index === 0} onClick={() => onMove(index, 'up')}><ArrowUpIcon /></Button>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={`下移${SLOT_LABELS[slot]}`}
+          disabled={index === count - 1} onClick={() => onMove(index, 'down')}><ArrowDownIcon /></Button>
+        <Switch aria-label={`显示${SLOT_LABELS[slot]}`} checked={visible}
+          onCheckedChange={(checked) => onVisibilityChange(slot, checked === true)} />
+      </div>
+    </li>
+  );
+}
 
 /**
  * 布局设置。
@@ -44,46 +71,19 @@ export function LayoutPanel() {
 
   return (
     <div className="flex flex-col gap-3">
+      <ClockSettingsPanel />
       <ul className="flex flex-col gap-1">
         {order.map((slot, index) => (
-          <li
-            key={slot}
-            className="flex items-center justify-between gap-2 rounded-xl px-2 py-2 hover:bg-muted/60"
-          >
-            <span className="truncate text-sm">{SLOT_LABELS[slot]}</span>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`上移${SLOT_LABELS[slot]}`}
-                disabled={index === 0}
-                onClick={() => move(index, 'up')}
-              >
-                <ArrowUpIcon />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`下移${SLOT_LABELS[slot]}`}
-                disabled={index === order.length - 1}
-                onClick={() => move(index, 'down')}
-              >
-                <ArrowDownIcon />
-              </Button>
-              <Switch
-                aria-label={`显示${SLOT_LABELS[slot]}`}
-                checked={!hidden.includes(slot)}
-                onCheckedChange={(checked) => toggleVisible(slot, checked === true)}
-              />
-            </div>
-          </li>
+          <LayoutRow key={slot} slot={slot} index={index} count={order.length}
+            visible={!hidden.includes(slot)} onMove={move} onVisibilityChange={toggleVisible} />
         ))}
       </ul>
       <FieldDescription>
         可调整 {SLOT_IDS.length} 个固定区域的顺序与显示状态；设置入口始终保留，不会隐藏。
       </FieldDescription>
+      <Button type="button" variant="outline" onClick={() => void updateLayout(DEFAULT_LAYOUT).catch(notifyError)}>
+        恢复默认布局
+      </Button>
     </div>
   );
 }
