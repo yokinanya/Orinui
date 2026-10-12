@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { NEUTRAL_SEED } from '@/domain/appearance';
@@ -33,7 +33,6 @@ export function DynamicColorPanel() {
           <Switch id="dynamic-color" checked={color.enabled}
             onCheckedChange={(enabled) => update({ dynamicColor: { ...color, enabled } })} />
         </div>
-        <FieldDescription>在设备本地从当前背景提取强调色，图片不会上传。</FieldDescription>
       </Field>
       {color.enabled && <Field>
         <FieldLabel>取色方式</FieldLabel>

@@ -1,4 +1,4 @@
-import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { ClockFormat } from '@/domain/settings';
 import { useData } from '@/app/data-context';
@@ -19,7 +19,6 @@ export function ClockSettingsPanel() {
       }}>
         {OPTIONS.map((option) => <ToggleGroupItem className="min-w-0 flex-1 px-0.5 whitespace-normal" key={option.value} value={option.value}>{option.label}</ToggleGroupItem>)}
       </ToggleGroup>
-      <FieldDescription>跟随系统时钟的语言和区域格式。</FieldDescription>
     </Field>
   );
 }

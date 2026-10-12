@@ -12,7 +12,7 @@ export function AppearancePanel() {
       <Separator />
       <Field>
         <FieldLabel>图标目录参考</FieldLabel>
-        <FieldDescription>在目录中选择图标并复制图片直链，再到网站编辑表单中下载到本机。</FieldDescription>
+        <FieldDescription>复制图标直链，再到网站编辑中下载。</FieldDescription>
         <a href="https://dashboardicons.com/icons" target="_blank" rel="noreferrer"
           className="inline-flex w-fit items-center gap-1 text-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
           Dashboard Icons <ExternalLinkIcon aria-hidden="true" className="size-4" />

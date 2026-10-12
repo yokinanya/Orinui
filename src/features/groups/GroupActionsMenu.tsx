@@ -1,8 +1,7 @@
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useData } from '@/app/data-context';
-import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -13,11 +12,9 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Group } from '@/domain/group';
 import { GROUP_COLOR_ROLES } from '@/domain/group';
 import { notifyError } from '@/lib/notify';
-import { cn } from '@/lib/utils';
 
 interface GroupMenuProps {
   group: Group;
@@ -30,7 +27,7 @@ interface GroupMenuProps {
 /**
  * 分组操作项。
  *
- * 与网站菜单同构：右键菜单与编辑模式下的「⋯」按钮共用同一份内容。
+ * 标签右键与菜单键共用同一份操作内容。
  * 系统默认分组可改名与移动，但不可删除。
  */
 function GroupMenuItems({ group, index, total, onRename, onDelete }: GroupMenuProps) {
@@ -90,33 +87,5 @@ export function GroupContextMenu({ children, ...menu }: GroupContextMenuProps) {
         <GroupMenuItems {...menu} />
       </ContextMenuContent>
     </ContextMenu>
-  );
-}
-
-interface GroupActionsButtonProps extends GroupMenuProps {
-  className?: string;
-}
-
-/** 编辑模式下暴露的键盘入口：不需要右键即可打开同一份操作菜单。 */
-export function GroupActionsButton({ group, className, ...menu }: GroupActionsButtonProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className={cn(className, 'home-readable-control home-readable-focus')}
-            aria-label={`${group.name} 分组的操作`}
-          />
-        }
-      >
-        <MoreHorizontalIcon />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <GroupMenuItems group={group} {...menu} />
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

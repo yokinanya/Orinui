@@ -71,8 +71,8 @@ function GroupTabList({ groups, activeGroupId, editing, onSelect, sensors, onDra
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} modifiers={[restrictToHorizontalAxis]} onDragEnd={onDragEnd}>
       <SortableContext items={groups.map((group) => group.id)} strategy={horizontalListSortingStrategy}>
-        <div className="min-w-0 overflow-x-auto">
-          <ul className="mx-auto flex w-max items-center gap-1 px-1 md:gap-2">
+        <div className="group-tabs-scroll min-w-0 overflow-x-auto">
+          <ul className="home-readable-group-list mx-auto flex w-max items-center gap-1 px-1 md:gap-2">
             {groups.map((group, index) => (
               <SortableGroupTab key={group.id} group={group} index={index} total={groups.length}
                 active={group.id === activeGroupId} editing={editing} onSelect={onSelect} />

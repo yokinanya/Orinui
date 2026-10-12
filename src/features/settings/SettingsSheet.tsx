@@ -45,7 +45,7 @@ export function SettingsSheet({ trigger }: SettingsSheetProps) {
       <SheetContent side="right" className="sm:max-w-md">
         <SheetHeader>
           <SheetTitle>设置</SheetTitle>
-          <SheetDescription>调整外观、布局、搜索和本地数据。网站和分组请在主页上直接编辑。</SheetDescription>
+          <SheetDescription>网站和分组在主页编辑。</SheetDescription>
         </SheetHeader>
 
         <Tabs defaultValue="appearance" className="min-h-0 flex-1 pb-6">

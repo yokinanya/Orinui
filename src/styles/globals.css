@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import './home-readability.css';
 
 /*
  * shadcn/ui 的 Base UI 组件依赖以下变体：
@@ -243,97 +244,4 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .motion-home-enter { animation-name: home-content-fade; }
-}
-
-[data-home-readable='true'] .home-readable-chip,
-[data-home-readable='true'] .home-readable-surface,
-[data-home-readable='true'] .home-readable-control,
-[data-home-readable='true'] .home-readable-group {
-  background-color: var(--home-readable-surface);
-  color: var(--home-readable-foreground);
-}
-
-[data-home-readable='true'] .home-readable-chip {
-  display: inline-block;
-  max-width: 100%;
-  border-radius: 9999px;
-  padding: 0.2rem 0.55rem;
-}
-
-[data-home-readable='true'] .home-readable-muted {
-  color: var(--home-readable-muted);
-}
-
-[data-home-readable='true'] .group:hover .home-readable-chip.home-readable-muted {
-  color: var(--home-readable-muted);
-}
-
-[data-home-readable='true'] .home-readable-ink {
-  color: var(--home-readable-foreground);
-}
-
-[data-home-readable='true'] .home-readable-ink::placeholder {
-  color: var(--home-readable-muted);
-}
-
-[data-home-readable='true'] .home-readable-surface,
-[data-home-readable='true'] .home-readable-control {
-  border-color: var(--home-readable-border);
-}
-
-[data-home-readable='true'] .group:hover .home-readable-surface {
-  color: var(--home-readable-foreground);
-}
-
-[data-home-readable='true'] .home-readable-control:hover {
-  background-color: var(--home-readable-hover);
-}
-
-[data-home-readable='true'] .home-readable-group {
-  border-bottom: 2px solid var(--home-readable-role-color);
-}
-
-[data-home-readable='true'] .home-readable-group:hover {
-  background-color: var(--home-readable-surface);
-  color: var(--home-readable-foreground);
-}
-
-[data-home-readable='true'] .home-readable-group[data-color-role='primary'] {
-  --home-readable-role-color: var(--primary);
-}
-
-[data-home-readable='true'] .home-readable-group[data-color-role='secondary'] {
-  --home-readable-role-color: var(--secondary-foreground);
-}
-
-[data-home-readable='true'] .home-readable-group[data-color-role='tertiary'] {
-  --home-readable-role-color: var(--accent-foreground);
-}
-
-[data-home-readable='true'] .home-readable-group[aria-current='true'] {
-  box-shadow: inset 0 0 0 1px var(--home-readable-border);
-}
-
-[data-home-readable='true'] .home-readable-group-shell {
-  border-color: var(--home-readable-border);
-  background-color: var(--home-readable-surface);
-}
-
-[data-home-readable='true'] .home-readable-group-shell .home-readable-group {
-  background-color: transparent;
-}
-
-[data-home-readable='true'] .home-readable-focus:focus-visible {
-  outline: 2px solid var(--home-readable-focus);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--home-readable-surface);
-  --tw-ring-color: transparent;
-}
-
-[data-home-readable='true'] .home-readable-surface:focus-within {
-  outline: 2px solid var(--home-readable-focus);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--home-readable-surface);
-  border-color: var(--home-readable-focus);
-  --tw-ring-color: transparent;
 }

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ShortcutFormFields } from '@/features/shortcuts/ShortcutFormFields';
 import { useShortcutDraft, type ShortcutFormProps } from '@/features/shortcuts/use-shortcut-draft';
 
@@ -9,15 +9,16 @@ export function ShortcutFormDialog(props: ShortcutFormProps) {
   const draft = useShortcutDraft(props);
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!draft.saving) onOpenChange(next); }}>
-      <DialogContent>
-        <form className="max-h-[calc(100dvh-3rem)] overflow-y-auto"
+      <DialogContent className="gap-0 p-0 sm:max-w-xl landscape:md:max-w-3xl">
+        <form className="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col"
           onSubmit={(event) => { event.preventDefault(); if (!draft.saving && !draft.imageBusy) void draft.submit(); }}>
-          <DialogHeader>
+          <DialogHeader className="shrink-0 px-6 pt-6">
             <DialogTitle>{shortcut ? '编辑网站' : '添加网站'}</DialogTitle>
-            <DialogDescription>网址缺少协议时会补 https。上传图片在保存时写入；清除已有图片来源立即生效，取消编辑不会恢复来源。</DialogDescription>
           </DialogHeader>
-          <ShortcutFormFields draft={draft} />
-          <DialogFooter>
+          <div className="min-h-0 overflow-y-auto px-6 py-5">
+            <ShortcutFormFields draft={draft} />
+          </div>
+          <DialogFooter className="shrink-0 px-6 pb-6">
             <Button type="button" variant="ghost" disabled={draft.saving} onClick={() => onOpenChange(false)}>取消</Button>
             <Button type="submit" disabled={draft.saving || draft.imageBusy}>{draft.saving ? '保存中…' : '保存'}</Button>
           </DialogFooter>

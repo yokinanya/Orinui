@@ -15,6 +15,7 @@ const GLASS_BORDER_ALPHA = { light: 0.5, dark: 0.12 } as const;
 const HOME_READABILITY = {
   light: {
     '--home-readable-surface': 'rgba(250, 248, 245, 0.98)',
+    '--home-readable-search-surface': 'rgba(250, 248, 245, 0.98)',
     '--home-readable-hover': 'rgba(236, 232, 226, 0.98)',
     '--home-readable-foreground': '#302c27',
     '--home-readable-muted': '#514b45',
@@ -23,6 +24,7 @@ const HOME_READABILITY = {
   },
   dark: {
     '--home-readable-surface': 'rgba(12, 10, 8, 0.98)',
+    '--home-readable-search-surface': 'rgba(12, 10, 8, 0.98)',
     '--home-readable-hover': 'rgba(38, 35, 31, 0.98)',
     '--home-readable-foreground': '#f4f1ec',
     '--home-readable-muted': '#c4c0b9',
@@ -34,7 +36,19 @@ const HOME_READABILITY = {
 export const HOME_READABILITY_TOKEN_NAMES: readonly string[] = Object.keys(HOME_READABILITY.light);
 
 /** Stable theme-paired surfaces keep wallpaper contrast independent from dynamic accents. */
-export function homeReadabilityTokens(isDark: boolean): ColorTokenMap {
+export function homeReadabilityTokens(isDark: boolean, isPhoto = false): ColorTokenMap {
+  if (isPhoto) {
+    return {
+      '--home-readable-surface': 'rgba(14, 16, 20, 0.48)',
+      '--home-readable-search-surface': 'rgba(14, 16, 20, 0.58)',
+      '--home-readable-hover': 'rgba(14, 16, 20, 0.6)',
+      '--home-readable-foreground': '#ffffff',
+      '--home-readable-muted': '#ffffff',
+      '--home-readable-border': 'rgba(255, 255, 255, 0.24)',
+      '--home-readable-focus': '#ffffff',
+    };
+  }
+
   return { ...(isDark ? HOME_READABILITY.dark : HOME_READABILITY.light) };
 }
 

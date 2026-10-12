@@ -1,4 +1,4 @@
-import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
+import { Field, FieldLabel } from '@/components/ui/field';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import type { SearchEngine } from '@/domain/search-engines';
@@ -16,7 +16,6 @@ export function EngineSelection({ engines, selected, onSelect }: {
       }}>
         {[...BUILT_IN_ENGINES, ...engines].map((engine) => <ToggleGroupItem key={engine.id} value={engine.id}>{engine.name}</ToggleGroupItem>)}
       </ToggleGroup>
-      <FieldDescription>搜索时使用当前选择的引擎。</FieldDescription>
     </Field>
   );
 }

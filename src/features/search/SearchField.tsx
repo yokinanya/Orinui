@@ -55,7 +55,8 @@ export function SearchField() {
         submit();
       }}
     >
-      <InputGroup className="home-readable-surface h-12 rounded-2xl border-glass-border bg-glass backdrop-blur-md has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/40">
+      <InputGroup className="home-readable-surface h-12 rounded-2xl border-transparent backdrop-blur-md"
+        style={{ backgroundColor: 'var(--home-readable-search-surface, var(--glass))' }}>
         <InputGroupAddon className="pl-4">
           <SearchIcon className="home-readable-muted text-glass-foreground-muted" />
         </InputGroupAddon>

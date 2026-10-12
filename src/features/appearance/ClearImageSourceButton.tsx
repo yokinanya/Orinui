@@ -33,9 +33,9 @@ export function ClearImageSourceButton({ assetId, sourceUrl, onCleared, disabled
 
   return (
     <Field>
-      <FieldDescription>清除立即保存，只移除来源地址，保留图片。</FieldDescription>
+      <FieldDescription>立即保存，图片保留。</FieldDescription>
       <Button type="button" variant="outline" disabled={busy || disabled} onClick={() => void clear()}>
-        {busy ? '正在清除来源…' : '仅清除图片来源地址'}
+        {busy ? '正在清除…' : '清除来源'}
       </Button>
       {error && <FieldError role="alert">{error}</FieldError>}
     </Field>

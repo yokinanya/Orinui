@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { UploadIcon } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import type { ImageAssetKind } from '@/domain/asset';
@@ -10,9 +12,55 @@ import type { NewImageAsset } from '@/storage/assets';
 interface ImageUploadProps {
   readonly id: string;
   readonly kind: ImageAssetKind;
+  readonly compact?: boolean;
   readonly disabled?: boolean;
   readonly onReady: (image: NewImageAsset) => Promise<void> | void;
   readonly onBusyChange?: (busy: boolean) => void;
+}
+
+type UploadImage = (file: File) => void;
+
+interface UploadButtonProps {
+  readonly compact: boolean;
+  readonly busy: boolean;
+  readonly disabled?: boolean;
+  readonly onClick: () => void;
+}
+
+function handleImageChange(event: ChangeEvent<HTMLInputElement>, upload: UploadImage) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) upload(file);
+}
+
+function UploadLabel({ compact, id, label }: { readonly compact: boolean; readonly id: string; readonly label: string }) {
+  return compact ? null : <FieldLabel htmlFor={id}>{label}</FieldLabel>;
+}
+
+function CompactUploadButton({ compact, busy, disabled, onClick }: UploadButtonProps) {
+  if (!compact) return null;
+  return (
+    <Button type="button" variant="outline" disabled={busy || disabled} onClick={onClick}>
+      <UploadIcon data-icon="inline-start" />{busy ? '正在处理…' : '上传图标'}
+    </Button>
+  );
+}
+
+function UploadDescription({ compact, busy }: { readonly compact: boolean; readonly busy: boolean }) {
+  if (compact) return null;
+  return <FieldDescription>{busy ? '正在处理…' : 'PNG、JPEG、WebP、静态 SVG · 最大 10 MiB'}</FieldDescription>;
+}
+
+function UploadError({ message }: { readonly message: string | null }) {
+  return message ? <FieldError role="alert">{message}</FieldError> : null;
+}
+
+function fileInputClass(compact: boolean) {
+  return compact ? 'sr-only' : undefined;
+}
+
+function fileInputTabIndex(compact: boolean) {
+  return compact ? -1 : undefined;
 }
 
 function useImageUpload({ kind, onReady, onBusyChange }: ImageUploadProps) {
@@ -40,20 +88,21 @@ function useImageUpload({ kind, onReady, onBusyChange }: ImageUploadProps) {
 }
 
 export function ImageUpload(props: ImageUploadProps) {
-  const { id, kind, disabled } = props;
+  const { id, kind, disabled, compact = false } = props;
   const { busy, error, upload } = useImageUpload(props);
+  const input = useRef<HTMLInputElement>(null);
+  const label = kind === 'background' ? '上传照片' : '上传图标';
   return (
-    <Field data-invalid={error !== null || undefined} data-disabled={busy || disabled || undefined}>
-      <FieldLabel htmlFor={id}>{kind === 'background' ? '上传照片' : '上传图标'}</FieldLabel>
-      <Input id={id} type="file" accept={IMAGE_ACCEPT} disabled={busy || disabled}
-        aria-invalid={error !== null || undefined}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = '';
-          if (file) void upload(file);
-        }} />
-      <FieldDescription>{busy ? '正在本机处理图片…' : 'JPEG、PNG、WebP 或静态 SVG，原文件最大 10 MiB。图片只保存在本机。'}</FieldDescription>
-      {error && <FieldError role="alert">{error}</FieldError>}
+    <Field data-invalid={error !== null} data-disabled={busy || disabled}>
+      <UploadLabel compact={compact} id={id} label={label} />
+      <Input ref={input} id={id} type="file" accept={IMAGE_ACCEPT} disabled={busy || disabled}
+        aria-label={label} className={fileInputClass(compact)}
+        tabIndex={fileInputTabIndex(compact)}
+        aria-invalid={error !== null}
+        onChange={(event) => handleImageChange(event, (file) => void upload(file))} />
+      <CompactUploadButton compact={compact} busy={busy} disabled={disabled} onClick={() => input.current?.click()} />
+      <UploadDescription compact={compact} busy={busy} />
+      <UploadError message={error} />
     </Field>
   );
 }

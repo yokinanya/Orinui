@@ -26,8 +26,8 @@ async function rasterFile(page: Page, name: string) {
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
 
-async function setFixtureSources(page: Page) {
-  return page.evaluate(({ photoSource, iconSource }) => new Promise<{ photoId: string; iconId: string; shortcutId: string }>((resolve, reject) => {
+async function setFixtureSources(page: Page, iconShortcutSource: string | null = ICON_SOURCE) {
+  return page.evaluate(({ photoSource, iconSource, shortcutSource }) => new Promise<{ photoId: string; iconId: string; shortcutId: string }>((resolve, reject) => {
     const opening = indexedDB.open('orinui');
     opening.onerror = () => reject(opening.error ?? new Error('无法打开测试数据库'));
     opening.onsuccess = () => {
@@ -67,12 +67,12 @@ async function setFixtureSources(page: Page) {
             reject(new Error('缺少引用测试图标的网站'));
             return;
           }
-          shortcutStore.put({ ...shortcut, iconSourceUrl: iconSource });
+          shortcutStore.put({ ...shortcut, iconSourceUrl: shortcutSource });
           result = { photoId: photo.id, iconId: icon.id, shortcutId: shortcut.id };
         };
       };
     };
-  }), { photoSource: PHOTO_SOURCE, iconSource: ICON_SOURCE });
+  }), { photoSource: PHOTO_SOURCE, iconSource: ICON_SOURCE, shortcutSource: iconShortcutSource });
 }
 
 async function clearFixtureSource(page: Page, assetId: string) {
@@ -167,15 +167,16 @@ async function createImageShortcut(page: Page) {
 
 async function clearPhotoSource(page: Page, ids: { photoId: string; iconId: string; shortcutId: string }) {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  const photoClear = page.getByRole('button', { name: '仅清除图片来源地址', exact: true });
+  const photoClear = page.getByRole('button', { name: '清除来源', exact: true });
   await expect(photoClear).toBeVisible();
   await holdAssetSourceWriteLock(page, ids.photoId);
-  const photoClearResult = page.getByRole('button', { name: '正在清除来源…', exact: true });
+  const photoClearResult = page.getByRole('button', { name: '正在清除…', exact: true });
   const photoClick = photoClear.click();
   await expect(photoClearResult).toBeDisabled();
   await page.evaluate(() => window.__releaseAssetSourceLock?.());
   await photoClick;
   await expect(photoClear).toHaveCount(0);
+  await expect(page.locator('#photo-url')).toHaveValue('');
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   const state = await readFixtureState(page, ids) as { photo: { sourceUrl: string | null }; icon: { sourceUrl: string | null } };
   expect(state.photo.sourceUrl).toBeNull();
@@ -186,11 +187,13 @@ async function clearPhotoSource(page: Page, ids: { photoId: string; iconId: stri
 async function clearShortcutIconSource(page: Page, link: Locator) {
   await link.click({ button: 'right' });
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
-  const iconClear = page.getByRole('button', { name: '仅清除图片来源地址', exact: true });
+  const iconClear = page.getByRole('button', { name: '清除来源', exact: true });
   await expect(iconClear).toBeVisible();
   await page.getByLabel('名称', { exact: true }).fill('取消时保留原名称');
   await iconClear.click();
   await expect(iconClear).toHaveCount(0);
+  await expect(page.locator('#shortcut-image-url')).toHaveValue('');
+  await expect(page.getByLabel('名称', { exact: true })).toHaveValue('取消时保留原名称');
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(link).toBeVisible();
   await expect(link).toContainText('本地图标网站');
@@ -198,6 +201,44 @@ async function clearShortcutIconSource(page: Page, link: Locator) {
 }
 
 test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
+
+test('已保存的图片直链在重新打开时回填，包括资源保留来源的网站旧记录', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
+  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await page.keyboard.press('Escape');
+  const link = await createImageShortcut(page);
+  await setFixtureSources(page, null);
+  await page.reload();
+
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await expect(page.locator('#photo-url')).toHaveValue(PHOTO_SOURCE);
+  await page.keyboard.press('Escape');
+
+  await link.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
+  await expect(page.locator('#shortcut-image-url')).toHaveValue(ICON_SOURCE);
+});
+
+test('图片来源异步读取完成时不会覆盖用户已输入的地址', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
+  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await createImageShortcut(page);
+  const ids = await setFixtureSources(page);
+  await page.reload();
+
+  await holdAssetSourceWriteLock(page, ids.photoId);
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  const input = page.locator('#photo-url');
+  await expect(input).toHaveValue('');
+  await input.fill('https://typed.example.test/photo.png');
+  await page.evaluate(() => window.__releaseAssetSourceLock?.());
+
+  await expect(page.getByRole('button', { name: '清除来源', exact: true })).toBeVisible();
+  await expect(input).toHaveValue('https://typed.example.test/photo.png');
+});
 
 test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留并写入JSON备份', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
@@ -270,10 +311,10 @@ test('来源已被外部清除时显示错误且仍可重试', async ({ page }) 
   }, PHOTO_SOURCE);
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await expect(page.getByRole('button', { name: '仅清除图片来源地址', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '清除来源', exact: true })).toBeVisible();
   await clearFixtureSource(page, ids);
 
-  const clear = page.getByRole('button', { name: '仅清除图片来源地址', exact: true });
+  const clear = page.getByRole('button', { name: '清除来源', exact: true });
   await clear.click();
   await expect(page.getByRole('alert')).toContainText('图片没有可清除的来源地址');
   await expect(clear).toBeEnabled();

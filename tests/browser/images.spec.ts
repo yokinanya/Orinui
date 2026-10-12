@@ -136,8 +136,10 @@ test('主页全部隐藏后可从主页一键恢复', async ({ page }) => {
   for (const slot of ['时钟', '搜索', '快捷方式']) {
     await page.getByRole('switch', { name: `显示${slot}` }).click();
   }
-  await expect(page.getByRole('alert')).toContainText('主页内容已隐藏');
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '恢复主页内容' })).toBeVisible();
+  await expect(page.locator('time')).toHaveCount(0);
+  await expect(page.getByRole('search')).toHaveCount(0);
   await page.getByRole('button', { name: '恢复主页内容' }).click();
   await expect(page.locator('time')).toBeVisible();
   await expect(page.getByRole('search')).toBeVisible();
@@ -199,6 +201,7 @@ test('新建网站可选择内置图形并保存在本地', async ({ page }) => 
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   await page.getByLabel('名称', { exact: true }).fill('图形站点');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
+  await page.getByRole('button', { name: '选择内置图标' }).click();
   await page.getByRole('button', { name: '使用爱心图标' }).click();
   await page.getByRole('button', { name: '保存', exact: true }).click();
   const link = page.getByRole('link', { name: '图形站点' });
@@ -216,11 +219,11 @@ test('分组颜色菜单写入对应语义角色', async ({ page }) => {
   await group.click({ button: 'right' });
   await page.getByRole('menuitem', { name: '标签颜色' }).click();
   await page.getByRole('menuitem', { name: '第三色' }).click();
-  await expect(group).toHaveClass(/text-accent-foreground/);
+  await expect(group).toHaveAttribute('data-color-role', 'tertiary');
   await page.reload();
   const restoredGroup = page.getByRole('button', { name: '工作', exact: true });
   await restoredGroup.click();
-  await expect(restoredGroup).toHaveClass(/text-accent-foreground/);
+  await expect(restoredGroup).toHaveAttribute('data-color-role', 'tertiary');
 });
 
 test('带照片的 JSON 备份可恢复本地图片与外观设置', async ({ page }) => {

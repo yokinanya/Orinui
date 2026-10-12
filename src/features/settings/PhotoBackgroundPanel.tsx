@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useData } from '@/app/data-context';
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ImageUpload } from '@/features/appearance/ImageUpload';
 import { notifyError } from '@/lib/notify';
@@ -11,15 +12,19 @@ const MASK_PERCENT_MAX = 100;
 
 export function PhotoBackgroundPanel() {
   const { settings, setPhotoBackground, updateAppearance } = useData();
+  const [clearedSourceAssetId, setClearedSourceAssetId] = useState<string | null>(null);
   const background = settings.appearance.background;
-  const image = useLocalImage(background.kind === 'photo' ? background.assetId : null);
+  const assetId = background.kind === 'photo' ? background.assetId : null;
+  const image = useLocalImage(assetId);
+  const sourceUrl = assetId === clearedSourceAssetId ? null : image.sourceUrl;
   return (
     <FieldGroup>
       <ImageUpload id="photo-upload" kind="background" onReady={setPhotoBackground} />
-      <RemoteImageDownload id="photo-url" kind="background" onReady={setPhotoBackground} />
+      <RemoteImageDownload id="photo-url" kind="background" initialSourceUrl={sourceUrl} onReady={setPhotoBackground} />
       {background.kind === 'photo' && (
         <>
-          <ClearImageSourceButton key={background.assetId} assetId={background.assetId} sourceUrl={image.sourceUrl} />
+          <ClearImageSourceButton key={background.assetId} assetId={background.assetId} sourceUrl={sourceUrl}
+            onCleared={() => setClearedSourceAssetId(background.assetId)} />
           <Field>
             <FieldLabel htmlFor="photo-mask">照片遮罩强度（%）</FieldLabel>
             <Input id="photo-mask" type="number" min={0} max={MASK_PERCENT_MAX}
@@ -29,7 +34,6 @@ export function PhotoBackgroundPanel() {
                 const percent = event.target.valueAsNumber;
                 void updateAppearance({ background: { ...background, maskStrength: percent / MASK_PERCENT_MAX } }).catch(notifyError);
               }} />
-            <FieldDescription>提高强度可增强文字可读性。浅色主题使用浅色遮罩，深色主题使用深色遮罩。</FieldDescription>
           </Field>
         </>
       )}

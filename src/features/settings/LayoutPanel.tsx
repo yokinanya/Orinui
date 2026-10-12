@@ -2,11 +2,9 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 
 import { useData } from '@/app/data-context';
 import { Button } from '@/components/ui/button';
-import { FieldDescription } from '@/components/ui/field';
 import { Switch } from '@/components/ui/switch';
-import { SLOT_IDS, type SlotId } from '@/domain/layout';
+import { DEFAULT_LAYOUT, type SlotId } from '@/domain/layout';
 import { notifyError } from '@/lib/notify';
-import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { ClockSettingsPanel } from '@/features/settings/ClockSettingsPanel';
 
 const SLOT_LABELS: Record<SlotId, string> = {
@@ -78,9 +76,6 @@ export function LayoutPanel() {
             visible={!hidden.includes(slot)} onMove={move} onVisibilityChange={toggleVisible} />
         ))}
       </ul>
-      <FieldDescription>
-        可调整 {SLOT_IDS.length} 个固定区域的顺序与显示状态；设置入口始终保留，不会隐藏。
-      </FieldDescription>
       <Button type="button" variant="outline" onClick={() => void updateLayout(DEFAULT_LAYOUT).catch(notifyError)}>
         恢复默认布局
       </Button>

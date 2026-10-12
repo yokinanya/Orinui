@@ -119,6 +119,14 @@ describe('home readability tokens', () => {
       homeReadabilityTokens(true)['--home-readable-foreground'],
     );
   });
+
+  it('照片背景用白色无底文字与轻透控件表面，不改变默认/纯色主题令牌', () => {
+    const photo = homeReadabilityTokens(false, true);
+    expect(photo['--home-readable-foreground']).toBe('#ffffff');
+    expect(photo['--home-readable-surface']).toBe('rgba(14, 16, 20, 0.48)');
+    expect(photo['--home-readable-search-surface']).toBe('rgba(14, 16, 20, 0.58)');
+    expect(homeReadabilityTokens(false)).toEqual(homeReadabilityTokens(false, false));
+  });
 });
 
 describe('requiresHomeReadabilitySurface', () => {

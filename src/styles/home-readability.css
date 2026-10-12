@@ -1,0 +1,164 @@
+[data-home-readable='true'] .home-readable-chip,
+[data-home-readable='true'] .home-readable-surface,
+[data-home-readable='true'] .home-readable-control {
+  background-color: var(--home-readable-surface);
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-chip {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+}
+
+/* 照片上的文字直接融入画面；轻柔阴影负责字形边缘，小控件保留轻透玻璃感。 */
+[data-home-photo] .home-readable-chip {
+  background-color: transparent;
+  border-radius: 0;
+  padding: 0;
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);
+  -webkit-text-stroke: 1px rgb(0 0 0 / 90%);
+  paint-order: stroke fill;
+}
+
+[data-home-photo] .home-readable-surface,
+[data-home-photo] .home-readable-control {
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+
+[data-home-photo] .home-readable-ink,
+[data-home-photo] .home-readable-muted {
+  color: #fff;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 72%);
+}
+
+[data-home-readable='true'] .home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .group:hover .home-readable-chip.home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-ink {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-ink::placeholder {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-surface,
+[data-home-readable='true'] .home-readable-control {
+  border-color: var(--home-readable-border);
+}
+
+[data-home-readable='true'] .group:hover .home-readable-surface {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-control:hover {
+  background-color: var(--home-readable-hover);
+}
+
+.home-readable-group {
+  position: relative;
+  background-color: transparent;
+  color: var(--glass-foreground-muted);
+}
+
+.home-readable-group[aria-current='true'],
+.home-readable-group:not([aria-current='true']):hover {
+  color: var(--home-readable-role-color);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group-list {
+  background-color: var(--home-readable-surface);
+}
+
+[data-home-photo] .home-readable-group {
+  color: #fff !important;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);
+  -webkit-text-stroke: 1px rgb(0 0 0 / 90%);
+  paint-order: stroke fill;
+}
+
+.home-readable-group[data-color-role='primary'] {
+  --home-readable-role-color: var(--primary);
+}
+
+.home-readable-group[data-color-role='secondary'] {
+  --home-readable-role-color: var(--secondary-foreground);
+}
+
+.home-readable-group[data-color-role='tertiary'] {
+  --home-readable-role-color: var(--accent-foreground);
+}
+
+.home-readable-group[aria-current='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.1rem;
+  left: 0;
+  width: 1rem;
+  height: 2px;
+  margin-inline: auto;
+  border-radius: 9999px;
+  background-color: var(--home-readable-role-color);
+  content: '';
+}
+
+[data-home-readable='true'] .home-readable-group {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-group:hover {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-group:not([aria-current='true']) {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-group[aria-current='true'] {
+  box-shadow: none;
+}
+
+[data-home-readable='true'] .home-readable-focus:focus-visible {
+  outline: 2px solid var(--home-readable-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--home-readable-surface);
+  --tw-ring-color: transparent;
+}
+
+.group-tabs-scroll {
+  scrollbar-width: none;
+}
+
+.group-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+[data-home-readable='true'] .home-readable-surface:focus-within {
+  border-color: var(--home-readable-border);
+  --tw-ring-color: transparent;
+}
+
+form[role='search'] [data-slot='input-group']:focus-within {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+  background-image: linear-gradient(var(--home-readable-focus), var(--home-readable-focus));
+  background-repeat: no-repeat;
+  background-position: left bottom;
+  background-size: 100% 2px;
+}
+
+form[role='search'] [data-slot='input-group']:focus-within [data-slot='input-group-control'] {
+  outline: none;
+  box-shadow: none;
+  --tw-ring-color: transparent;
+}

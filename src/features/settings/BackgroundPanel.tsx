@@ -54,7 +54,7 @@ export function BackgroundPanel() {
         }}>
           {BACKGROUND_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value}>{option.label}</ToggleGroupItem>)}
         </ToggleGroup>
-        <FieldDescription>{background.kind === 'photo' ? '正在使用本地照片。选择其他背景将移除当前照片。' : '可以选择纯色、渐变，或在下面上传照片。'}</FieldDescription>
+        {background.kind === 'photo' && <FieldDescription>切换背景会移除当前照片。</FieldDescription>}
       </Field>
       <PhotoBackgroundPanel />
       {background.kind === 'solid' && <ColorField id="background-color" label="背景颜色" value={background.color} onChange={(color) => setBackground({ kind: 'solid', color })} />}
