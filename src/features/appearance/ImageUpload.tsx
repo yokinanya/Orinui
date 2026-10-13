@@ -39,9 +39,11 @@ function UploadLabel({ compact, id, label }: { readonly compact: boolean; readon
 
 function CompactUploadButton({ compact, busy, disabled, onClick }: UploadButtonProps) {
   if (!compact) return null;
+  const label = busy ? '正在处理…' : '上传图标';
   return (
-    <Button type="button" variant="outline" disabled={busy || disabled} onClick={onClick}>
-      <UploadIcon data-icon="inline-start" />{busy ? '正在处理…' : '上传图标'}
+    <Button type="button" variant="ghost" size="icon" aria-label={label} title={label} className="min-w-9"
+      disabled={busy || disabled} onClick={onClick}>
+      <UploadIcon aria-hidden="true" />
     </Button>
   );
 }
@@ -51,12 +53,14 @@ function UploadDescription({ compact, busy }: { readonly compact: boolean; reado
   return <FieldDescription>{busy ? '正在处理…' : 'PNG、JPEG、WebP、静态 SVG · 最大 10 MiB'}</FieldDescription>;
 }
 
-function UploadError({ message }: { readonly message: string | null }) {
-  return message ? <FieldError role="alert">{message}</FieldError> : null;
+function UploadError({ message, compact }: { readonly message: string | null; readonly compact: boolean }) {
+  if (!message) return null;
+  const className = compact ? 'basis-full min-w-0 whitespace-normal break-words' : undefined;
+  return <FieldError role="alert" className={className}>{message}</FieldError>;
 }
 
 function fileInputClass(compact: boolean) {
-  return compact ? 'sr-only' : undefined;
+  return compact ? 'hidden' : undefined;
 }
 
 function fileInputTabIndex(compact: boolean) {
@@ -93,16 +97,17 @@ export function ImageUpload(props: ImageUploadProps) {
   const input = useRef<HTMLInputElement>(null);
   const label = kind === 'background' ? '上传照片' : '上传图标';
   return (
-    <Field data-invalid={error !== null} data-disabled={busy || disabled}>
+    <Field orientation={compact ? 'horizontal' : 'vertical'} className={compact ? 'contents' : undefined}
+      data-invalid={error !== null} data-disabled={busy || disabled}>
       <UploadLabel compact={compact} id={id} label={label} />
       <Input ref={input} id={id} type="file" accept={IMAGE_ACCEPT} disabled={busy || disabled}
-        aria-label={label} className={fileInputClass(compact)}
+        aria-label={compact ? '选择图标文件' : label} className={fileInputClass(compact)}
         tabIndex={fileInputTabIndex(compact)}
         aria-invalid={error !== null}
         onChange={(event) => handleImageChange(event, (file) => void upload(file))} />
       <CompactUploadButton compact={compact} busy={busy} disabled={disabled} onClick={() => input.current?.click()} />
       <UploadDescription compact={compact} busy={busy} />
-      <UploadError message={error} />
+      <UploadError message={error} compact={compact} />
     </Field>
   );
 }

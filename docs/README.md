@@ -16,6 +16,7 @@
 | [SYNC-DESIGN.md](./SYNC-DESIGN.md) | 已定同步方向、当前实现边界和外部存储验收要求 |
 | [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 已实现的同步 v1 字段、墓碑、加密字节格式与本地事务协议 |
 | [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md) | 公共对象端口、手动协调顺序、并发/失败状态及当前验证边界 |
+| [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) | HTTPS WebDAV 对象格式、连接流程、安全边界和受控真实扩展审计范围 |
 | [AGENTS.md](../AGENTS.md) | 开发代理的项目规则和必读入口 |
 
 ## 阅读顺序
@@ -24,7 +25,7 @@
 2. 读 TASKS.md 和 VERIFICATION.md，确认未完成项及最近验证范围。
 3. 修改界面前读 VISUAL-SPEC.md；修改领域/持久化/备份前读 DATA-CONTRACT.md。
 4. 修改工程和模块边界前读 ARCHITECTURE.md。
-5. 实施同步前读 DECISIONS.md、SYNC-DESIGN.md，并读 SYNC-PROTOCOL.md 确认基础协议与尚未接入的提供方行为。
+5. 实施同步前读 DECISIONS.md、SYNC-DESIGN.md、SYNC-PROTOCOL.md 和 SYNC-COORDINATOR.md；修改 WebDAV 时再读 SYNC-WEBDAV.md，区分实现、受控审计和真实服务验收。
 
 ## 状态约定
 

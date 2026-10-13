@@ -10,7 +10,7 @@ export type ImageAssetKind = 'background' | 'icon';
 export interface ImageAsset {
   id: string;
   kind: ImageAssetKind;
-  mime: 'image/png' | 'image/jpeg' | 'image/webp';
+  mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml';
   width: number;
   height: number;
   blob: Blob;

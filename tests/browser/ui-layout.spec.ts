@@ -84,14 +84,17 @@ async function dragGroupWithKeyboard(
   tab: import('@playwright/test').Locator,
   direction: 'ArrowLeft' | 'ArrowRight',
 ) {
-  const item = tab.locator('xpath=ancestor::li[1]');
-  const initialTransform = await item.evaluate((node) => getComputedStyle(node).transform);
   await tab.focus();
   await page.keyboard.press('Space');
   await expect(tab).toHaveAttribute('aria-pressed', 'true');
+  const liveRegion = page.locator('[aria-live="assertive"]').first();
+  const currentAnnouncement = await liveRegion.textContent();
+  const activeId = currentAnnouncement?.match(/(?:Picked up draggable item |Draggable item )(.+?)(?:\.| was moved over)/)?.[1];
+  if (!activeId) throw new Error('键盘拖动未公布已拿起的分组');
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   for (let step = 0; step < KEYBOARD_DRAG_STEPS; step += 1) await page.keyboard.press(direction);
-  await expect.poll(() => item.evaluate((node) => getComputedStyle(node).transform))
-    .not.toBe(initialTransform);
+  await expect.poll(() => liveRegion.textContent())
+    .not.toBe(`Draggable item ${activeId} was moved over droppable area ${activeId}.`);
   await page.keyboard.press('Space');
   await expect(tab).not.toHaveAttribute('aria-pressed', 'true');
 }
@@ -154,6 +157,7 @@ test('分组标签保持无外框与三点，溢出时隐藏滚动条且菜单�
     scrollWidth: (element as HTMLElement).scrollWidth,
   }));
   expect(wideDimensions.scrollWidth).toBeLessThanOrEqual(wideDimensions.clientWidth);
+  await waitForGroupLayout(page);
   await dragGroupWithKeyboard(page, defaultTab, 'ArrowRight');
   await expect(tabs.getByRole('button').nth(1)).toHaveText('阅读');
   await expect(tabs.getByRole('button').nth(2)).toHaveText('常用');

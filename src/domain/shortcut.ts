@@ -6,10 +6,14 @@
 export const BUILT_IN_ICON_IDS = ['compass', 'book', 'briefcase', 'code', 'heart', 'sparkles'] as const;
 export type BuiltInIconId = (typeof BUILT_IN_ICON_IDS)[number];
 
+export interface ShortcutIconOccupancy {
+  readonly occupancy?: number;
+}
+
 export type ShortcutIcon =
-  | { kind: 'letter' }
-  | { kind: 'built-in'; iconId: BuiltInIconId }
-  | { kind: 'asset'; assetId: string };
+  | ({ kind: 'letter' } & ShortcutIconOccupancy)
+  | ({ kind: 'built-in'; iconId: BuiltInIconId } & ShortcutIconOccupancy)
+  | ({ kind: 'asset'; assetId: string; color?: string } & ShortcutIconOccupancy);
 
 export interface Shortcut {
   id: string;

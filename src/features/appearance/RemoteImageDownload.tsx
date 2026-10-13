@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { DownloadIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowUpRightIcon, DownloadIcon, LoaderCircleIcon } from 'lucide-react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import type { ImageAssetKind } from '@/domain/asset';
 import { RedirectConfirmationRequiredError } from '@/domain/remote-image-errors';
 import { downloadRemoteImage } from '@/platform/remote-images';
@@ -65,18 +64,24 @@ export function RemoteImageDownload(props: RemoteImageDownloadProps) {
   const { id, disabled } = props;
   const { source, changeSource, error, redirect, busy, download, confirmRedirect } = useDownloadState(props);
   const unavailable = Boolean(busy || disabled);
+  const actionLabel = downloadButtonLabel(busy, redirect);
+  const ActionIcon = busy ? LoaderCircleIcon : redirect ? ArrowUpRightIcon : DownloadIcon;
   return (
     <Field data-invalid={error !== null} data-disabled={unavailable}>
-      <FieldLabel htmlFor={id}>图片 HTTPS 直链</FieldLabel>
-      <Input id={id} type="url" value={source} autoComplete="off" disabled={unavailable}
-        aria-invalid={error !== null} onChange={(event) => changeSource(event.target.value)} />
-      <FieldDescription>图片和链接保存在本机及备份。</FieldDescription>
+      <FieldLabel htmlFor={id}>自定义图片URL</FieldLabel>
+      <InputGroup data-disabled={unavailable} data-invalid={error !== null}>
+        <InputGroupInput id={id} type="url" value={source} autoComplete="off" disabled={unavailable}
+          aria-invalid={error !== null} onChange={(event) => changeSource(event.target.value)} />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton size="icon-sm" aria-label={actionLabel} title={actionLabel}
+            disabled={unavailable || source.trim() === ''}
+            onClick={() => { if (redirect) confirmRedirect(); else void download(source); }}>
+            <ActionIcon aria-hidden="true" className={busy ? 'animate-spin' : undefined} />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
       {error && <FieldError role="alert">{error}</FieldError>}
       {redirect && <RedirectNotice redirect={redirect} />}
-      <Button type="button" variant="outline" disabled={unavailable || source.trim() === ''}
-        onClick={() => { if (redirect) confirmRedirect(); else void download(source); }}>
-        <DownloadIcon data-icon="inline-start" />{downloadButtonLabel(busy, redirect)}
-      </Button>
     </Field>
   );
 }

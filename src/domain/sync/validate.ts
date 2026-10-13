@@ -1,59 +1,24 @@
 import { validateAppearance } from '@/domain/appearance';
 import { fail } from '@/domain/errors';
-import { imageOutputSize } from '@/domain/image';
 import { validateLayout } from '@/domain/layout';
 import { LIMITS } from '@/domain/limits';
-import { validateRemoteImageUrl } from '@/domain/remote-image-url';
 import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
-import { BUILT_IN_ICON_IDS, type ShortcutIcon } from '@/domain/shortcut';
+import type { ShortcutIcon } from '@/domain/shortcut';
+import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { validateSettings } from '@/domain/settings';
 import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
+import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
+import { parseSyncAsset } from '@/domain/sync/validate-assets';
 import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncGroup, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshotV1, type SyncTombstone } from '@/domain/sync/types';
 
 const MAX_ASSET_BYTES = 50 * 1024 * 1024;
 const MAX_ASSET_COUNT = LIMITS.shortcuts + 1;
-const MAX_ICON_EDGE_PIXELS = 1024;
-const MAX_BACKGROUND_EDGE_PIXELS = 2560;
-const SHA256_HEX_LENGTH = 64;
-const SHA256_PATTERN = new RegExp(`^[0-9a-f]{${SHA256_HEX_LENGTH}}$`);
-
-type RecordValue = Record<string, unknown>;
 interface SnapshotEnvelope extends RecordValue {
   readonly groups: unknown[];
   readonly shortcuts: unknown[];
   readonly assets: unknown[];
   readonly tombstones: unknown[];
-}
-
-function asRecord(value: unknown, label: string): RecordValue {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(`${label}格式不正确`);
-  return value as RecordValue;
-}
-
-function exactKeys(raw: RecordValue, keys: readonly string[], label: string): void {
-  if (Object.keys(raw).length !== keys.length || !keys.every((key) => Object.hasOwn(raw, key))) fail(`${label}字段不正确`);
-}
-
-function identifier(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.trim() === '') fail(`${label}不能为空`);
-  if (value.trim() !== value || /[\u0000-\u001f\u007f-\u009f]/.test(value)) fail(`${label}不能包含首尾空白或控制字符`);
-  return value;
-}
-
-function integer(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) fail(`${label}必须是非负安全整数`);
-  return value as number;
-}
-
-function validateRegister<T>(value: unknown, label: string, parse: (value: unknown) => T): SyncRegister<T> {
-  const raw = asRecord(value, label);
-  exactKeys(raw, ['value', 'clock', 'deviceId'], label);
-  return { value: parse(raw.value), clock: integer(raw.clock, `${label}时钟`), deviceId: identifier(raw.deviceId, `${label}设备标识`) };
-}
-
-function parseString(value: unknown, label: string): string {
-  return identifier(value, label);
 }
 
 function normalized(value: unknown, normalize: (input: string) => string, label: string): string {
@@ -75,18 +40,6 @@ function parseGroup(value: unknown): SyncGroup {
     position: validateRegister(raw.position, '分组位置', (item) => integer(item, '分组位置')) };
 }
 
-function parseIcon(value: unknown): ShortcutIcon {
-  const raw = asRecord(value, '网站图标');
-  if (raw.kind === 'letter') { exactKeys(raw, ['kind'], '文字图标'); return { kind: 'letter' }; }
-  if (raw.kind === 'built-in') {
-    exactKeys(raw, ['kind', 'iconId'], '内置图标');
-    if (typeof raw.iconId !== 'string' || !BUILT_IN_ICON_IDS.includes(raw.iconId as typeof BUILT_IN_ICON_IDS[number])) fail('内置图标标识不正确');
-    return { kind: 'built-in', iconId: raw.iconId as typeof BUILT_IN_ICON_IDS[number] };
-  }
-  if (raw.kind === 'asset') { exactKeys(raw, ['kind', 'assetId'], '图片图标'); return { kind: 'asset', assetId: identifier(raw.assetId, '图标资源标识') }; }
-  fail('网站图标类型不正确');
-}
-
 function parsePlacement(value: unknown): SyncShortcut['placement']['value'] {
   const raw = asRecord(value, '网站位置');
   exactKeys(raw, ['groupId', 'order'], '网站位置');
@@ -100,55 +53,7 @@ function parseShortcut(value: unknown): SyncShortcut {
     title: validateRegister(raw.title, '网站标题', (item) => normalized(item, normalizeShortcutTitle, '网站标题')),
     url: validateRegister(raw.url, '网站地址', (item) => normalized(item, normalizeShortcutUrl, '网站地址')),
     placement: validateRegister(raw.placement, '网站位置', parsePlacement),
-    icon: validateRegister(raw.icon, '网站图标', parseIcon) };
-}
-
-function parseSourceUrl(value: unknown): string | null {
-  if (value === null) return null;
-  if (typeof value !== 'string') fail('图片来源地址不正确');
-  const validated = validateRemoteImageUrl(value);
-  if (validated.url.href !== value) fail('图片来源地址格式不规范');
-  return value;
-}
-
-function parseAssetKind(value: unknown): SyncAsset['kind'] {
-  if (value !== 'background' && value !== 'icon') fail('图片资源类型不正确');
-  return value;
-}
-
-function parseAssetMime(value: unknown): SyncAsset['mime'] {
-  if (value !== 'image/png' && value !== 'image/jpeg' && value !== 'image/webp') fail('图片资源格式不正确');
-  return value;
-}
-
-function validateAssetImage({ kind, mime, width, height }: {
-  readonly kind: SyncAsset['kind']; readonly mime: SyncAsset['mime'];
-  readonly width: unknown; readonly height: unknown;
-}): { width: number; height: number } {
-  if (typeof width !== 'number' || typeof height !== 'number') fail('图片尺寸不正确');
-  if (kind === 'icon' && mime !== 'image/png') fail('网站图标必须是 PNG');
-  imageOutputSize({ width, height, kind });
-  const edgeLimit = kind === 'icon' ? MAX_ICON_EDGE_PIXELS : MAX_BACKGROUND_EDGE_PIXELS;
-  if (Math.max(width, height) > edgeLimit) fail('图片最长边超出限制');
-  return { width, height };
-}
-
-function parseAssetHash(value: unknown): string {
-  if (typeof value !== 'string' || !SHA256_PATTERN.test(value)) fail('图片 SHA-256 不正确');
-  return value;
-}
-
-function parseAsset(value: unknown): SyncAsset {
-  const raw = asRecord(value, '同步图片资源');
-  exactKeys(raw, ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl'], '同步图片资源');
-  const kind = parseAssetKind(raw.kind);
-  const mime = parseAssetMime(raw.mime);
-  const { width, height } = validateAssetImage({ kind, mime, width: raw.width, height: raw.height });
-  const sha256 = parseAssetHash(raw.sha256);
-  const byteLength = integer(raw.byteLength, '图片大小');
-  if (byteLength === 0) fail('图片大小必须大于零');
-  return { id: identifier(raw.id, '图片标识'), kind, mime, width, height, byteLength, sha256,
-    sourceUrl: validateRegister(raw.sourceUrl, '图片来源', parseSourceUrl) };
+    icon: validateRegister(raw.icon, '网站图标', parseShortcutIcon) };
 }
 
 function parseEngine(value: unknown): SearchEngine {
@@ -252,6 +157,7 @@ function collectShortcutAssetRefs({ snapshot, groupIds, assets }: {
     if (shortcut.icon.value.kind !== 'asset') continue;
     const assetId = shortcut.icon.value.assetId;
     requireAsset({ assets, id: assetId, kind: 'icon', label: '网站图标' });
+    if (shortcut.icon.value.color && assets.get(assetId)?.mime !== 'image/svg+xml') fail('SVG 图标颜色只能用于 SVG 资源');
     refs.add(assetId);
   }
   return refs;
@@ -308,7 +214,7 @@ function parseSnapshotFields(raw: SnapshotEnvelope): SyncSnapshotV1 {
     groups: raw.groups.map(parseGroup).sort((left, right) => compareText(left.id, right.id)),
     shortcuts: raw.shortcuts.map(parseShortcut).sort((left, right) => compareText(left.id, right.id)),
     settings: parseSettings(raw.settings),
-    assets: raw.assets.map(parseAsset).sort((left, right) => compareText(left.id, right.id)),
+    assets: raw.assets.map(parseSyncAsset).sort((left, right) => compareText(left.id, right.id)),
     tombstones: raw.tombstones.map(parseTombstone).sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id)),
   };
 }

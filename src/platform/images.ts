@@ -2,8 +2,8 @@ import { hexFromArgb, sourceColorFromImage } from '@material/material-color-util
 
 import type { ImageAssetKind } from '@/domain/asset';
 import { fail } from '@/domain/errors';
-import { imageOutputSize, validateImageFile, SVG_EDGE_LIMIT } from '@/domain/image';
-import { validateSvg } from '@/platform/svg';
+import { imageOutputSize, validateImageFile } from '@/domain/image';
+import { prepareSvgImage } from '@/platform/svg-image';
 import type { NewImageAsset } from '@/storage/assets';
 
 const IMAGE_QUALITY = 0.9;
@@ -37,22 +37,6 @@ export async function loadLocalImage(blob: Blob): Promise<HTMLImageElement> {
   }
 }
 
-async function svgBitmap(blob: Blob): Promise<HTMLImageElement> {
-  const root = validateSvg(await blob.text());
-  const box = root.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
-  const rawWidth = root.getAttribute('width');
-  const rawHeight = root.getAttribute('height');
-  const width = rawWidth === null ? box?.[2] : Number(rawWidth.replace(/px$/, ''));
-  const height = rawHeight === null ? box?.[3] : Number(rawHeight.replace(/px$/, ''));
-  if (!width || !height || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    fail('SVG 需要有效的尺寸或 viewBox，请改用 PNG/WebP');
-  }
-  const ratio = Math.min(1, SVG_EDGE_LIMIT / Math.max(width, height));
-  root.setAttribute('width', String(Math.max(1, Math.round(width * ratio))));
-  root.setAttribute('height', String(Math.max(1, Math.round(height * ratio))));
-  return loadLocalImage(new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }));
-}
-
 function encode(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -62,6 +46,11 @@ function encode(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
   });
 }
 
+async function imageOutputMime(blob: Blob, kind: ImageAssetKind): Promise<'image/png' | 'image/jpeg' | 'image/webp'> {
+  if (kind === 'icon' || blob.type === 'image/svg+xml' || await animatedWebp(blob)) return 'image/png';
+  return blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
+}
+
 export async function prepareImage(input: {
   readonly blob: Blob;
   readonly kind: ImageAssetKind;
@@ -69,17 +58,18 @@ export async function prepareImage(input: {
   const { blob, kind } = input;
   validateImageFile(blob);
   const svg = blob.type === 'image/svg+xml';
-  const image = svg ? await svgBitmap(blob) : await createImageBitmap(blob);
+  const vector = svg ? await prepareSvgImage(blob) : null;
+  const image = vector ? await loadLocalImage(vector.blob) : await createImageBitmap(blob);
   try {
     const size = imageOutputSize({ width: image.width, height: image.height, kind, svg });
+    if (kind === 'icon' && vector) return { kind, ...size, mime: 'image/svg+xml', blob: vector.blob, sourceUrl: null };
     const canvas = document.createElement('canvas');
     canvas.width = size.width;
     canvas.height = size.height;
     const context = canvas.getContext('2d');
     if (!context) fail('浏览器无法创建图片画布');
     context.drawImage(image, 0, 0, size.width, size.height);
-    const mime = kind === 'icon' || svg || await animatedWebp(blob)
-      ? 'image/png' : blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
+    const mime = await imageOutputMime(blob, kind);
     return { kind, ...size, mime, blob: await encode(canvas, mime), sourceUrl: null };
   } finally {
     if (image instanceof ImageBitmap) image.close();

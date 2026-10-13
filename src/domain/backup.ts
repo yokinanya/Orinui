@@ -9,7 +9,8 @@ import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from 
 import { normalizeShortcutUrl } from '@/domain/url';
 import { validateSettings, type AppSettings } from '@/domain/settings';
 import type { ImageAsset } from '@/domain/asset';
-import { BUILT_IN_ICON_IDS, type Shortcut } from '@/domain/shortcut';
+import type { Shortcut } from '@/domain/shortcut';
+import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { validateRemoteImageUrl } from '@/domain/remote-image-url';
 
 export const BACKUP_VERSION = 1;
@@ -84,21 +85,6 @@ function validateGroups(value: unknown): Group[] {
   return result;
 }
 
-function validateIcon(value: unknown): Shortcut['icon'] {
-  const raw = record(value, '网站图标');
-  if (raw.kind === 'letter') { exactKeys(raw, ['kind'], '文字图标'); return { kind: 'letter' }; }
-  if (raw.kind === 'built-in') {
-    exactKeys(raw, ['kind', 'iconId'], '内置图标');
-    if (typeof raw.iconId !== 'string' || !BUILT_IN_ICON_IDS.some((id) => id === raw.iconId)) fail('内置图标标识不正确');
-    return { kind: 'built-in', iconId: raw.iconId as import('@/domain/shortcut').BuiltInIconId };
-  }
-  if (raw.kind === 'asset') {
-    exactKeys(raw, ['kind', 'assetId'], '图片图标');
-    return { kind: 'asset', assetId: textField(raw.assetId, '图标资源标识') };
-  }
-  fail('网站图标类型不正确');
-}
-
 function validateShortcuts(value: unknown, groups: readonly Group[]): Shortcut[] {
   if (!Array.isArray(value) || value.length > LIMITS.shortcuts) fail('网站数量不符合限制');
   const groupIds = new Set(groups.map((group) => group.id));
@@ -121,7 +107,7 @@ function validateShortcuts(value: unknown, groups: readonly Group[]): Shortcut[]
     orderSet.add(raw.order as number);
     orders.set(groupId, orderSet);
     const sourceUrl = validateSourceUrl(raw.iconSourceUrl, '图标来源地址');
-    return { id, groupId, title, url, icon: validateIcon(raw.icon), iconSourceUrl: sourceUrl, order: raw.order as number };
+    return { id, groupId, title, url, icon: parseShortcutIcon(raw.icon), iconSourceUrl: sourceUrl, order: raw.order as number };
   });
   for (const orderSet of orders.values()) {
     if ([...orderSet].some((order, index) => order !== index)) fail('网站顺序必须连续');
@@ -135,8 +121,9 @@ function validateAssetKind(value: unknown): ImageAsset['kind'] {
 }
 
 function validateAssetMime(value: unknown, kind: ImageAsset['kind']): ImageAsset['mime'] {
-  if (value !== 'image/png' && value !== 'image/jpeg' && value !== 'image/webp') fail('图片资源格式不正确');
-  if (kind === 'icon' && value !== 'image/png') fail('网站图标必须是 PNG');
+  if (value !== 'image/png' && value !== 'image/jpeg' && value !== 'image/webp' && value !== 'image/svg+xml') fail('图片资源格式不正确');
+  if (kind === 'icon' && value !== 'image/png' && value !== 'image/svg+xml') fail('网站图标必须是 PNG 或 SVG');
+  if (kind === 'background' && value === 'image/svg+xml') fail('SVG 不能作为背景图片');
   return value;
 }
 
@@ -218,6 +205,7 @@ function validateShortcutAssetReference(shortcut: Shortcut, assetMap: ReadonlyMa
   }
   const asset = assetMap.get(shortcut.icon.assetId);
   if (!asset || asset.kind !== 'icon') fail('网站图片图标引用不存在');
+  if (shortcut.icon.color && asset.mime !== 'image/svg+xml') fail('SVG 图标颜色只能用于 SVG 资源');
   if (shortcut.iconSourceUrl !== asset.sourceUrl) fail('网站图标来源地址不一致');
   return asset.id;
 }

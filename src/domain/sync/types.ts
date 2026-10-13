@@ -39,7 +39,7 @@ export interface SyncShortcut {
 export interface SyncAsset {
   readonly id: string;
   readonly kind: 'background' | 'icon';
-  readonly mime: 'image/png' | 'image/jpeg' | 'image/webp';
+  readonly mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml';
   readonly width: number;
   readonly height: number;
   readonly byteLength: number;

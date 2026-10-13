@@ -1,47 +1,70 @@
-import { FieldError, FieldLegend, FieldSet } from '@/components/ui/field';
-import { ImageUpload } from '@/features/appearance/ImageUpload';
-import { RemoteImageDownload } from '@/features/appearance/RemoteImageDownload';
+import { Button } from '@/components/ui/button';
+import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
+import { ColorPicker } from '@/features/appearance/ColorPicker';
 import { ClearImageSourceButton } from '@/features/appearance/ClearImageSourceButton';
+import { RemoteImageDownload } from '@/features/appearance/RemoteImageDownload';
 import { ShortcutIconChoices } from '@/features/shortcuts/ShortcutIconChoices';
-import { BUILT_IN_ICONS } from '@/features/shortcuts/built-in-icons';
-import { shortcutInitial } from '@/features/shortcuts/shortcut-initial';
+import { ShortcutIconPreview } from '@/features/shortcuts/ShortcutIconPreview';
+import { ShortcutIconOccupancyField } from '@/features/shortcuts/ShortcutIconOccupancyField';
+import { ICON_PREVIEW_FRAME_SIZE } from '@/features/shortcuts/icon-size-style';
 import { useShortcutIconSource } from '@/features/shortcuts/use-shortcut-icon-source';
 import { useBlobUrl, useLocalImage } from '@/hooks/use-local-image';
 import type { ShortcutDraft } from '@/features/shortcuts/use-shortcut-draft';
 
-function IconPreview({ draft, url }: { readonly draft: ShortcutDraft; readonly url: string | null }) {
-  if (url) return <img src={url} alt="图标预览" className="size-16 rounded-2xl object-contain" />;
-  if (draft.icon.kind === 'asset') return null;
-  const Icon = draft.icon.kind === 'built-in' ? BUILT_IN_ICONS[draft.icon.iconId].Icon : null;
+const DEFAULT_SVG_COLOR = '#000000';
+
+function SvgColorField({ draft }: { readonly draft: ShortcutDraft }) {
   return (
-    <span role="img" aria-label={Icon ? '内置图形预览' : '名称首字母预览'}
-      className="inline-flex size-16 items-center justify-center rounded-2xl bg-muted text-2xl text-foreground">
-      {Icon ? <Icon aria-hidden="true" className="size-7" /> : shortcutInitial(draft.title)}
-    </span>
+    <Field>
+      <div className="flex items-center justify-between gap-2">
+        <FieldLabel htmlFor="shortcut-svg-color">SVG 图标颜色</FieldLabel>
+        <div className="flex items-center gap-2">
+          <ColorPicker id="shortcut-svg-color" label="SVG 图标颜色" value={draft.svgColor ?? DEFAULT_SVG_COLOR}
+            disabled={draft.saving || draft.imageBusy} onChange={draft.setSvgColor} />
+          <Button type="button" variant="ghost" size="sm" disabled={!draft.svgColor || draft.saving || draft.imageBusy}
+            onClick={() => draft.setSvgColor(null)}>恢复原色</Button>
+        </div>
+      </div>
+    </Field>
   );
+}
+
+function SavedAssetSource({ draft, source }: { readonly draft: ShortcutDraft; readonly source: ReturnType<typeof useShortcutIconSource> }) {
+  if (draft.icon.kind !== 'asset' || draft.image) return null;
+  return (
+    <ClearImageSourceButton key={draft.icon.assetId} assetId={draft.icon.assetId} sourceUrl={source.sourceUrl}
+      disabled={draft.saving || draft.imageBusy} onCleared={source.onCleared} />
+  );
+}
+
+function SavedImageError({ message }: { readonly message: string | null }) {
+  if (!message) return null;
+  return <FieldError role="alert">{message}</FieldError>;
 }
 
 export function ShortcutIconFields({ draft }: { readonly draft: ShortcutDraft }) {
   const url = useBlobUrl(draft.image?.blob ?? null);
-  const saved = useLocalImage(draft.icon.kind === 'asset' ? draft.icon.assetId : null);
+  const assetId = draft.icon.kind === 'asset' ? draft.icon.assetId : null;
+  const saved = useLocalImage(assetId);
   const source = useShortcutIconSource({ draft, saved });
+  const mime = draft.image?.mime ?? saved.mime;
   return (
     <FieldSet className="min-w-0 gap-4">
       <FieldLegend variant="label">图标</FieldLegend>
       <figure aria-label="图标预览" className="flex items-center gap-4">
-        <IconPreview draft={draft} url={url ?? saved.url} />
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-border bg-transparent"
+          style={{ width: ICON_PREVIEW_FRAME_SIZE, height: ICON_PREVIEW_FRAME_SIZE }}>
+          <ShortcutIconPreview draft={draft} url={url ?? saved.url} mime={mime} />
+        </div>
         <ShortcutIconChoices draft={draft} />
       </figure>
-      {saved.error && <FieldError role="alert">{saved.error}</FieldError>}
-      <ImageUpload compact id="shortcut-image" kind="icon" disabled={draft.saving}
-        onBusyChange={draft.setImageBusy} onReady={(image) => { draft.setImage(image); }} />
-      <RemoteImageDownload id="shortcut-image-url" kind="icon" disabled={draft.saving} onBusyChange={draft.setImageBusy}
+      {mime === 'image/svg+xml' ? <SvgColorField draft={draft} /> : null}
+      <SavedImageError message={saved.error} />
+      <ShortcutIconOccupancyField draft={draft} />
+      <RemoteImageDownload id="shortcut-image-url" kind="icon" disabled={draft.saving || draft.imageBusy} onBusyChange={draft.setImageBusy}
         initialSourceUrl={source.sourceUrl}
         onReady={(image) => { draft.selectRemoteImage(image); }} />
-      {draft.icon.kind === 'asset' && !draft.image && (
-        <ClearImageSourceButton key={draft.icon.assetId} assetId={draft.icon.assetId} sourceUrl={source.sourceUrl}
-          disabled={draft.saving || draft.imageBusy} onCleared={source.onCleared} />
-      )}
+      <SavedAssetSource draft={draft} source={source} />
     </FieldSet>
   );
 }

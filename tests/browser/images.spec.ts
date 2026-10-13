@@ -53,14 +53,14 @@ test('图标草稿取消、保存、刷新、删除撤销', async ({ page }) => 
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   await page.getByLabel('名称', { exact: true }).fill('图片站点');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
-  await page.getByLabel('上传图标').setInputFiles(svg());
+  await page.getByLabel('选择图标文件').setInputFiles(svg());
   await expect(page.getByRole('img', { name: '图标预览' })).toBeVisible();
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByRole('link', { name: '图片站点' })).toHaveCount(0);
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   await page.getByLabel('名称', { exact: true }).fill('图片站点');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
-  await page.getByLabel('上传图标').setInputFiles(svg());
+  await page.getByLabel('选择图标文件').setInputFiles(svg());
   await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '保存', exact: true }).click();
   const link = page.getByRole('link', { name: '图片站点' });
@@ -105,9 +105,9 @@ for (const mime of ['image/png', 'image/jpeg', 'image/webp']) {
 
 test('拒绝解码损坏文件与超过图标像素上限的图片', async ({ page }) => {
   await page.getByRole('button', { name: '添加第一个网站' }).click();
-  await page.getByLabel('上传图标').setInputFiles({ name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('broken') });
+  await page.getByLabel('选择图标文件').setInputFiles({ name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('broken') });
   await expect(page.locator('[data-slot="field-error"]')).toBeVisible();
-  await page.getByLabel('上传图标').setInputFiles(await rasterFile(page, { mime: 'image/png', width: 3000, height: 2000 }));
+  await page.getByLabel('选择图标文件').setInputFiles(await rasterFile(page, { mime: 'image/png', width: 3000, height: 2000 }));
   await expect(page.getByText('图片像素不能超过 4 MP')).toBeVisible();
   await expect(page.getByRole('img', { name: '图标预览' })).toHaveCount(0);
 });

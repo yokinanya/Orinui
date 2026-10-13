@@ -2,6 +2,7 @@ import { fail } from '@/domain/errors';
 import { newId } from '@/domain/id';
 import { LIMITS } from '@/domain/limits';
 import type { Shortcut, ShortcutIcon } from '@/domain/shortcut';
+import { parseShortcutIcon, parseSvgIconColor } from '@/domain/shortcut-icon';
 import { normalizeShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import type { Database } from '@/storage/db';
@@ -14,6 +15,7 @@ export interface NewShortcut {
   title: string;
   url: string;
   icon?: ShortcutIcon;
+  svgColor?: string | null;
   iconSourceUrl?: string | null;
   image?: NewImageAsset;
 }
@@ -22,6 +24,7 @@ export interface ShortcutPatch {
   title?: string;
   url?: string;
   icon?: ShortcutIcon;
+  svgColor?: string | null;
   iconSourceUrl?: string | null;
   image?: NewImageAsset;
 }
@@ -33,21 +36,34 @@ export interface RemovedShortcut extends Shortcut {
 async function resolveIcon(db: Database, input: {
   readonly icon: ShortcutIcon;
   readonly image?: NewImageAsset;
+  readonly svgColor?: string | null;
 }): Promise<ShortcutIcon> {
+  const icon = parseShortcutIcon(input.icon);
+  const color = resolveSvgColor(icon, input.svgColor);
   if (input.image) {
     if (input.image.kind !== 'icon') fail('网站图标需要图标图片资源');
     const asset = await createImageAsset(db, input.image);
-    return { kind: 'asset', assetId: asset.id };
+    return createAssetIcon({ assetId: asset.id, mime: asset.mime, occupancy: icon.occupancy, color });
   }
-  if (input.icon.kind === 'letter') return { kind: 'letter' };
-  if (input.icon.kind === 'built-in') {
-    if (!['compass', 'book', 'briefcase', 'code', 'heart', 'sparkles'].includes(input.icon.iconId)) fail('内置图标无效');
-    return input.icon;
+  if (icon.kind !== 'asset') {
+    if (color) fail('颜色只能用于 SVG 图标');
+    return icon;
   }
-  if (input.icon.kind !== 'asset') fail('图标类型不正确');
-  const asset = await db.assets.get(input.icon.assetId);
+  const asset = await db.assets.get(icon.assetId);
   if (!asset || asset.kind !== 'icon') fail('网站图标资源不存在');
-  return { kind: 'asset', assetId: asset.id };
+  return createAssetIcon({ assetId: asset.id, mime: asset.mime, occupancy: icon.occupancy, color });
+}
+
+function resolveSvgColor(icon: ShortcutIcon, requested?: string | null): string | null {
+  const color = requested === undefined && icon.kind === 'asset' ? icon.color : requested;
+  return color === undefined || color === null ? null : parseSvgIconColor(color);
+}
+
+function createAssetIcon(input: { readonly assetId: string; readonly mime: ImageAsset['mime'];
+  readonly occupancy: number | undefined; readonly color: string | null }): ShortcutIcon {
+  if (input.color && input.mime !== 'image/svg+xml') fail('颜色只能用于 SVG 图标');
+  return parseShortcutIcon({ kind: 'asset', assetId: input.assetId,
+    ...(input.occupancy === undefined ? {} : { occupancy: input.occupancy }), ...(input.color === null ? {} : { color: input.color }) });
 }
 
 export async function listShortcuts(db: Database, groupId: string): Promise<Shortcut[]> {
@@ -76,7 +92,7 @@ export async function createShortcut(db: Database, input: NewShortcut): Promise<
       groupId: input.groupId,
       title,
       url,
-      icon: await resolveIcon(db, { icon: input.icon ?? { kind: 'letter' }, image: input.image }),
+      icon: await resolveIcon(db, { icon: input.icon ?? { kind: 'letter' }, image: input.image, svgColor: input.svgColor }),
       iconSourceUrl: input.iconSourceUrl ?? null,
       order: nextOrder(siblings),
     };
@@ -101,7 +117,7 @@ export async function updateShortcut(db: Database, id: string, patch: ShortcutPa
       ...current,
       title: title ?? current.title,
       url: url ?? current.url,
-      icon: await resolveIcon(db, { icon: patch.icon ?? current.icon, image: patch.image }),
+      icon: await resolveIcon(db, { icon: patch.icon ?? current.icon, image: patch.image, svgColor: patch.svgColor }),
       iconSourceUrl: patch.iconSourceUrl === undefined ? current.iconSourceUrl : patch.iconSourceUrl,
     };
 

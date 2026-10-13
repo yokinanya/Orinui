@@ -40,16 +40,7 @@ export async function totalAssetBytes(db: Database): Promise<number> {
 }
 
 export async function createImageAsset(db: Database, input: NewImageAsset): Promise<ImageAsset> {
-  if (!Object.hasOwn(IMAGE_LIMITS, input.kind)) fail('图片资源类别不正确');
-  imageOutputSize(input);
-  if (Math.max(input.width, input.height) > IMAGE_LIMITS[input.kind].edge) fail('图片输出尺寸超限');
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(input.mime) || input.blob.type !== input.mime) {
-    fail('图片资源格式不正确');
-  }
-  if (input.kind === 'icon' && input.mime !== 'image/png') fail('图标需要静态 PNG');
-  if (input.blob.size === 0) {
-    fail('图片内容为空');
-  }
+  validateImageAsset(input);
 
   return db.transaction('rw', db.assets, async () => {
     const total = await totalAssetBytes(db);
@@ -71,6 +62,25 @@ export async function createImageAsset(db: Database, input: NewImageAsset): Prom
     await db.assets.add(asset);
     return asset;
   });
+}
+
+function validateImageAsset(input: NewImageAsset): void {
+  validateImageKindAndSize(input);
+  validateImageMime(input);
+  if (input.blob.size === 0) fail('图片内容为空');
+}
+
+function validateImageKindAndSize(input: NewImageAsset): void {
+  if (!Object.hasOwn(IMAGE_LIMITS, input.kind)) fail('图片资源类别不正确');
+  imageOutputSize(input);
+  if (Math.max(input.width, input.height) > IMAGE_LIMITS[input.kind].edge) fail('图片输出尺寸超限');
+}
+
+function validateImageMime(input: NewImageAsset): void {
+  const supported = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(input.mime);
+  if (!supported || input.blob.type !== input.mime) fail('图片资源格式不正确');
+  if (input.kind === 'icon' && input.mime !== 'image/png' && input.mime !== 'image/svg+xml') fail('图标需要 PNG 或安全 SVG');
+  if (input.mime === 'image/svg+xml' && input.kind !== 'icon') fail('SVG 仅可用于网站图标');
 }
 
 export async function getImageAsset(db: Database, id: string): Promise<ImageAsset | undefined> {

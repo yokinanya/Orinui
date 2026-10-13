@@ -18,8 +18,8 @@
   border-radius: 0;
   padding: 0;
   color: #fff;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);
-  -webkit-text-stroke: 1px rgb(0 0 0 / 90%);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 88%), 0 0 9px rgb(0 0 0 / 50%);
+  -webkit-text-stroke: 1.05px rgb(0 0 0 / 100%);
   paint-order: stroke fill;
 }
 

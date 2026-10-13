@@ -36,6 +36,18 @@ describe('parseBackup', () => {
     });
     expect(parseBackup(value).document.shortcuts[0]?.icon).toEqual({ kind: 'built-in', iconId: 'heart' });
   });
+  it('permits icon color only when the referenced backup asset is SVG', () => {
+    const shortcut = { id: 's', groupId: 'main', title: '站点', url: 'https://example.com',
+      icon: { kind: 'asset', assetId: 'a', color: '#12abef' }, iconSourceUrl: null, order: 0 };
+    const asset = { id: 'a', kind: 'icon', mime: 'image/svg+xml', width: 10, height: 10,
+      sourceUrl: null, data: 'PHN2Zz4=' };
+    expect(parseBackup(backup({ shortcuts: [shortcut], assets: [asset] })).document.shortcuts[0]?.icon)
+      .toMatchObject({ color: '#12abef' });
+    expect(() => parseBackup(backup({ shortcuts: [shortcut], assets: [{ ...asset, mime: 'image/png' }] })))
+      .toThrow(/只能用于 SVG/);
+    expect(() => parseBackup(backup({ assets: [{ ...asset, kind: 'background' }] })))
+      .toThrow(/SVG 不能作为背景/);
+  });
   it('rejects omitted nested settings and duplicate built-in search engine ids', () => {
     const settings = createDefaultSettings();
     expect(() => parseBackup(backup({ settings: { ...settings, clock: {} } })).document).toThrow();

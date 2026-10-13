@@ -1,6 +1,7 @@
 import type { Shortcut } from '@/domain/shortcut';
 import { cn } from '@/lib/utils';
 import { ShortcutIcon } from '@/features/shortcuts/ShortcutIcon';
+import { iconFrameStyle } from '@/features/shortcuts/icon-size-style';
 
 interface ShortcutTileProps {
   shortcut: Shortcut;
@@ -28,7 +29,8 @@ export function ShortcutTile({ shortcut, editing = false }: ShortcutTileProps) {
     <>
       <span
         aria-hidden="true"
-        className="home-readable-surface flex size-12 items-center justify-center rounded-2xl bg-glass text-lg font-medium text-glass-foreground"
+        style={iconFrameStyle()}
+        className="home-readable-surface flex shrink-0 items-center justify-center rounded-2xl bg-glass font-medium text-glass-foreground"
       >
         <ShortcutIcon shortcut={shortcut} />
       </span>

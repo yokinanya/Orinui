@@ -21,6 +21,7 @@ interface ColorPickerProps {
   id: string;
   value: string;
   onChange: (color: string) => void;
+  disabled?: boolean;
   /** 供辅助技术读取的名称，例如“起始颜色” */
   label: string;
 }
@@ -34,7 +35,7 @@ interface ColorPickerProps {
  *
  * 拖动期间颜色变化很密，这里用节流合并写入，避免每一次 pointermove 都落一次数据库。
  */
-export function ColorPicker({ id, value, onChange, label }: ColorPickerProps) {
+export function ColorPicker({ id, value, onChange, label, disabled }: ColorPickerProps) {
   const picker = useColorPickerState(value, onChange);
 
   return (
@@ -42,6 +43,7 @@ export function ColorPicker({ id, value, onChange, label }: ColorPickerProps) {
       id={id}
       label={label}
       value={value}
+      disabled={disabled}
       {...picker}
     />
   );
@@ -205,6 +207,7 @@ function ColorPickerPanel({
   blurHex,
   keyDownHex,
   pickFromScreen,
+  disabled,
 }: ColorPickerPanelProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -213,6 +216,7 @@ function ColorPickerPanel({
           <button
             id={id}
             type="button"
+            disabled={disabled}
             aria-label={`${label}，当前 ${value}`}
             className="size-8 shrink-0 cursor-pointer rounded-full border border-border outline-none transition-shadow focus-visible:ring-3 focus-visible:ring-ring/40"
             style={{ backgroundColor: value }}

@@ -3,6 +3,7 @@ import { BACKUP_IMAGE_LIMIT, BACKUP_JSON_LIMIT, parseBackup, type BackupDocument
 import type { ImageAsset } from '@/domain/asset';
 import { imageOutputSize } from '@/domain/image';
 import { animatedWebp } from '@/platform/images';
+import { validateSyncImageAsset } from '@/platform/sync-images';
 import type { BackupSnapshot } from '@/storage/backup';
 
 const BASE64_CHUNK_BYTES = 32 * 1024;
@@ -53,6 +54,7 @@ async function restoreAsset(input: BackupDocument['assets'][number]): Promise<Im
 }
 
 function validateRestoredAssetBytes(input: BackupDocument['assets'][number], bytes: Uint8Array): void {
+  if (input.mime === 'image/svg+xml') return;
   if (!hasMimeSignature(bytes, input.mime)) fail('图片内容与其格式不一致');
   if (input.mime === 'image/png' && pngHasAnimation(bytes)) fail('备份中的 PNG 必须是静态图片');
 }
@@ -62,6 +64,7 @@ async function validateStaticWebp(input: BackupDocument['assets'][number], blob:
 }
 
 async function validateRestoredDimensions(input: BackupDocument['assets'][number], blob: Blob): Promise<void> {
+  if (input.mime === 'image/svg+xml') { await validateSyncImageAsset({ ...input, blob }); return; }
   const bitmap = await createImageBitmap(blob);
   try {
     const size = imageOutputSize({ width: bitmap.width, height: bitmap.height, kind: input.kind });

@@ -1,6 +1,6 @@
 # 手动同步协调层
 
-实施与验证日期：2026-10-12。公共对象接口、手动协调器、本机运行状态和集成检查已实现。Drive/WebDAV 适配器、连接界面与自动调度未接入；应用不会自行连接外部同步服务。
+实施与验证日期：2026-10-13。公共对象接口、手动协调器、本机运行状态和集成检查已实现。WebDAV 适配器、连接界面与启用后的事件触发已接入；未启用同步时应用不会连接外部服务。Drive 适配器尚未接入。
 
 本层沿用 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 的快照、合并、图片身份与加密格式，不改变提供方决策。
 
@@ -10,6 +10,7 @@
 - `src/domain/sync/object-types.ts` 与 `object-validation.ts`：对象/回执边界校验，拒绝重复设备、非法身份/版本、缺失字节和无效回执；复制接收字节。
 - `src/storage/sync/local-store.ts`：将协调端口绑定到已有导出/接收 API，使用短事务保存运行状态，数据库由参数注入。
 - `src/platform/sync-lock.ts`：委托注入的原生 Web Locks。调用方为同一配置文件使用同源、同数据库 scope 的锁，缺少管理器时明确失败。
+- `src/platform/webdav-*` 与 `src/sync/webdav-*`：HTTPS WebDAV 对象存取、强 ETag 条件发布、连接流程及配置文件级触发调度。适配器依然由运行时显式注入协调器。
 
 构造协调器不执行同步；显式调用 `syncNow()` 才调用对象端口。入口返回本轮结果或拒绝 Promise，不把传输失败转成成功。
 
@@ -54,10 +55,10 @@ Dexie schema 仍为 3，表/索引未改；`sync_state` 增加可选 hasAccepted
 
 ## 验证与边界
 
-- 编译、34 文件/278 项单元测试、MV3 构建和 44 项网页回归通过。
+- **历史协调层批次（2026-10-12）**：编译、34 文件/278 项单元测试、MV3 构建和 44 项网页回归通过。该记录对应当时的代码，不代表当前源码状态；后续批次结果见 [VERIFICATION.md](./VERIFICATION.md)。
 - 集成检查使用真实领域规则、Dexie/fake-indexeddb、Web Crypto 与 PNG 字节。测试对象服务实际存取密文、执行创建条件/revision/CAS 和失败注入；只位于 tests，不证明真实 HTTP 或提供方授权。
 - 覆盖首次加入/基线、并发字段、图片还原、媒体顺序/复用/修复、坏密文与缺失/冲突媒体、条件发布与回执丢失、部分上传恢复、编辑竞态、任务串行、同身份重连和撤销到期。
 - 独立 Chromium 153.0.8010.12 的真实扩展审计副本验证原生锁：第一页持锁时第二页等待，第一页抛错后第二页取得锁。[Web Locks 同源协作](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
 - 原生锁审计编译实际适配器源码；脚本/结果在忽略的 `.output/sync-lock-audit.mjs` 与 `.output/sync-lock-audit-result.json`。生产产物及用户配置未改，临时配置已关闭并清理。
 
-提供方、授权、连接/恢复密钥界面、自动触发、设备集合、远端清理、密钥轮换和真实双设备云端验收仍未接入，见 [TASKS.md](./TASKS.md)。
+Google Drive、设备集合、远端媒体清理、密钥轮换和第三方 WebDAV 服务验收仍未接入/完成。受控本机 HTTPS 服务上的双配置文件真实扩展审计通过；来源预授权，权限弹窗、拒绝与撤销尚未验证，见 [TASKS.md](./TASKS.md) 与 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。

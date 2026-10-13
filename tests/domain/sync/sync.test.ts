@@ -129,6 +129,23 @@ it('rejects absent media references and media totals above the data contract lim
     .toThrow(/图片资源总量超过/);
 });
 
+it('accepts SVG icon colors only for SVG icon assets in snapshots', () => {
+  const asset = { id: 'svg-1', kind: 'icon' as const, mime: 'image/svg+xml' as const, width: 512, height: 512,
+    byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null) };
+  const shortcutWithSvg = { ...shortcut({ title: 'SVG', url: 'https://svg.example.test/', deviceId: 'device-a', clock: 1 }),
+    icon: register({ kind: 'asset' as const, assetId: asset.id, color: '#12abef', occupancy: 75 }) };
+  expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg], assets: [asset] })
+    .shortcuts[0]?.icon.value).toMatchObject({ color: '#12abef', occupancy: 75 });
+  const legacyShortcut = { ...shortcut({ title: '旧同步', url: 'https://old-svg.example.test/', deviceId: 'device-a', clock: 2 }),
+    icon: register({ kind: 'asset' as const, assetId: asset.id, size: 32 }) };
+  expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [legacyShortcut], assets: [asset] })
+    .shortcuts[0]?.icon.value).toMatchObject({ occupancy: 67 });
+  expect(() => parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg],
+    assets: [{ ...asset, mime: 'image/png' }] })).toThrow(/只能用于 SVG/);
+  expect(() => parseSyncSnapshot({ ...snapshot('device-a'), assets: [{ ...asset, kind: 'background' }] }))
+    .toThrow(/SVG 不能作为背景/);
+});
+
 it('reports a typed conflict when a concurrently deleted custom engine remains selected', () => {
   const engine = { id: 'engine-e', name: 'Engine E', template: 'https://search.test/?q={query}', builtIn: false };
   const local = snapshot('device-a', { settings: {

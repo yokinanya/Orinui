@@ -1,6 +1,6 @@
 # 同步基础协议 v1
 
-状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。提供方、连接界面、自动调度和真实跨设备云端验收尚未接入；本文不表示云同步已经可用。
+状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。WebDAV 适配器、连接界面和事件触发已接入，并通过受控服务真实扩展审计；Google Drive 和第三方服务/用户权限验收仍未完成。本文不把受控审计等同于发布可用性。
 
 ## 版本与身份
 
@@ -34,7 +34,7 @@ DBCore 中间件只在本机已配置同步状态时捕获业务写入，并把�
 
 网站删除立即从本机可见列表移除，撤销仍限当前页面会话 5 秒。同步记录先保留活版本及 pendingDeleteUntil；期限内导出仍保留该网站及必要图片，撤销清掉待删除状态。到期再生成永久墓碑，不复活同 ID。
 
-pending 图片已从当前 assets 回收时，仅在本地同步记录中暂存撤销所需 Blob；共享图片只保留一份。finalizePendingDeletes 在导出前推进到期删除并释放缓存。后续调度层还需在期限到达/重新打开时触发这一流程，不能靠周期轮询。
+pending 图片已从当前 assets 回收时，仅在本地同步记录中暂存撤销所需 Blob；共享图片只保留一份。finalizePendingDeletes 在导出前推进到期删除并释放缓存。WebDAV 事件调度在最近一个撤销期限到达时使用单次 timer 触发；扩展页关闭可能中断，下一次扩展页打开或手动同步恢复，不使用周期轮询或自动重试。
 
 删除分组永久生效并给当时组内网站生成墓碑。合并时，仍指向已删组的网站也产生级联墓碑；已有网站墓碑优先于并发移组。没有自身墓碑且最新 placement 已移到存活组的网站保留。
 
@@ -94,6 +94,6 @@ AAD 是按固定字段顺序 JSON 编码的 `{ schemaVersion: 1, vaultId, kind, 
 
 手动协调先完整校验并事务提交本机候选，再上传媒体、条件发布快照；发布失败保留已完整接收的结果与未同步新编辑，不跨本机和远端伪造回滚。运行记录与基线标记不进入快照或 JSON 备份。
 
-尚需实施：Drive/WebDAV 对象适配器与原子存取保证的真实验收、明确授权和连接界面、自动同步调度、设备集合/远端清理、完整密钥轮换及真实两设备验收。详见 [TASKS.md](./TASKS.md)。
+尚需实施或验收：Google Drive 适配器；第三方 WebDAV 服务兼容性及实际权限弹窗/拒绝/撤销；设备集合/远端清理、完整密钥轮换及真实用户设备验收。受控服务审计范围见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)，进度见 [TASKS.md](./TASKS.md)。
 
 依据：[Dexie middleware](https://dexie.org/docs/Dexie/Dexie.use%28%29)、[Web Crypto importKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey)、[AES-GCM 参数](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams)。

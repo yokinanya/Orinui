@@ -29,6 +29,12 @@ afterEach(async () => { await Promise.all([first.delete(), second.delete()]); })
 
 async function verifyFixtureImage(asset: ImageAsset): Promise<void> {
   const bytes = new Uint8Array(await asset.blob.arrayBuffer());
+  if (asset.mime === 'image/svg+xml') {
+    expect(new TextDecoder().decode(bytes)).toContain('<svg');
+    expect(asset.width).toBe(512);
+    expect(asset.height).toBe(512);
+    return;
+  }
   expect([...bytes.slice(0, PNG_HEADER.length)]).toEqual(PNG_HEADER);
   expect(asset.width).toBe(1);
   expect(asset.height).toBe(1);
@@ -38,18 +44,31 @@ async function seedFirstDevice() {
   const { defaultGroup } = await ensureInitialized(first);
   const image = new Blob([Uint8Array.from(atob(PNG), (character) => character.charCodeAt(0))], { type: 'image/png' });
   const shortcut = await createShortcut(first, { groupId: defaultGroup.id, title: '共有网站', url: 'https://example.com',
+    icon: { kind: 'letter', occupancy: 71 },
     iconSourceUrl: 'https://images.example.com/icon.png',
     image: { kind: 'icon', mime: 'image/png', width: 1, height: 1, blob: image, sourceUrl: 'https://images.example.com/icon.png' } });
+  const svgImage = new Blob(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 0h512v512H0z"/></svg>'],
+    { type: 'image/svg+xml' });
+  const svgShortcut = await createShortcut(first, { groupId: defaultGroup.id, title: 'SVG 图标', url: 'https://svg.example.com',
+    icon: { kind: 'letter', occupancy: 88 }, svgColor: '#12abef',
+    image: { kind: 'icon', mime: 'image/svg+xml', width: 512, height: 512, blob: svgImage } });
   const material = await cipher.createKey();
   await initializeSyncVault(first, { vaultId: 'vault', deviceId: 'a', key: material.key });
   await initializeSyncVault(second, { vaultId: 'vault', deviceId: 'b', key: await cipher.importKey(material.recoveryKey) });
-  return shortcut;
+  return { shortcut, svgShortcut };
 }
 
 describe('provider-independent encrypted device exchange', () => {
   it('authenticates snapshot and photo bytes, joins an empty device and combines independent edits', async () => {
-    const shortcut = await seedFirstDevice();
+    const { shortcut, svgShortcut } = await seedFirstDevice();
     const sealed = await sealSyncExport(first, { crypto: cipher, encodeSnapshot: encodeSyncSnapshot });
+    const captured = await exportSyncSnapshot(first, cipher);
+    expect(captured.snapshot.shortcuts.find(({ id }) => id === shortcut.id)?.icon.value).toEqual({
+      kind: 'asset', assetId: shortcut.icon.kind === 'asset' ? shortcut.icon.assetId : '', occupancy: 71,
+    });
+    expect(captured.snapshot.shortcuts.find(({ id }) => id === svgShortcut.id)?.icon.value).toMatchObject({
+      kind: 'asset', occupancy: 88, color: '#12abef',
+    });
     const key = await readSyncKey(second, 'vault');
     const context = { vaultId: 'vault', kind: 'snapshot' as const, objectId: sealed.snapshot.id };
     const remote = decodeSyncSnapshot(await cipher.decrypt({ key, context, ciphertext: sealed.snapshot.ciphertext }), context);
@@ -60,7 +79,9 @@ describe('provider-independent encrypted device exchange', () => {
     const local = await exportSyncSnapshot(second, cipher);
     await applySyncSnapshot(second, { snapshot: planSyncJoin({ local: local.snapshot, remotes: [remote] }),
       assets: media, expectedGeneration: local.localGeneration }, { crypto: cipher, validateImage: verifyFixtureImage });
-    expect((await second.shortcuts.get(shortcut.id))?.iconSourceUrl).toBe('https://images.example.com/icon.png');
+    expect(await second.shortcuts.get(shortcut.id)).toMatchObject({ icon: { kind: 'asset', occupancy: 71 },
+      iconSourceUrl: 'https://images.example.com/icon.png' });
+    expect(await second.shortcuts.get(svgShortcut.id)).toMatchObject({ icon: { kind: 'asset', occupancy: 88, color: '#12abef' } });
     expect(await second.groups.count()).toBe(1);
     await updateShortcut(first, shortcut.id, { title: '设备 A 标题' });
     await updateShortcut(second, shortcut.id, { url: 'https://example.com/new' });
@@ -72,7 +93,7 @@ describe('provider-independent encrypted device exchange', () => {
   });
 
   it('preserves nonempty local data as an ordinary group on first joining', async () => {
-    const shortcut = await seedFirstDevice();
+    const { shortcut } = await seedFirstDevice();
     const localGroup = (await second.groups.toArray())[0]!;
     await createShortcut(second, { groupId: localGroup.id, title: '本机网站', url: 'https://local.example.com' });
     const local = await exportSyncSnapshot(second, cipher);
@@ -82,7 +103,7 @@ describe('provider-independent encrypted device exchange', () => {
       expectedGeneration: local.localGeneration }, { crypto: cipher, validateImage: verifyFixtureImage });
     expect(await second.groups.count()).toBe(2);
     expect((await second.groups.get(localGroup.id))?.isDefault).toBe(false);
-    expect((await second.shortcuts.toArray()).map(({ title }) => title).sort()).toEqual(['共有网站', '本机网站']);
+    expect((await second.shortcuts.toArray()).map(({ title }) => title).sort()).toEqual(['SVG 图标', '共有网站', '本机网站']);
     expect(await second.shortcuts.get(shortcut.id)).toBeDefined();
   });
 });

@@ -30,7 +30,7 @@
 | `src/storage` | Dexie 表、仓储、排序和事务；通过参数接收数据库 |
 | `src/sync` | 公共对象端口和手动同步用例；注入存储/锁/加密/算法，不包含具体网络提供方 |
 | `src/features` | 功能界面，通过 useData 读取数据和调用操作，不直接访问 Dexie |
-| `src/platform` | 唯一直接调用扩展 API、fetch、图片解码/画布及文件下载的边界 |
+| `src/platform` | 唯一直接调用扩展 API、fetch、图片解码/画布及文件下载的边界；WebDAV 请求与精确来源权限也集中于此 |
 | `src/hooks` | 跨功能复用钩子，包括本地 Blob 对象 URL 生命周期 |
 | `src/components/ui` | shadcn 组件，保留上游风格 |
 | `src/styles` | 颜色、字号层次、圆角、动效与全局样式 |
@@ -46,13 +46,14 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 | `extension.ts` | 从 runtime manifest 读取名称/版本；需要真实扩展环境 |
 | `navigation.ts` | 搜索和网站在当前标签页打开 |
 | `eyedropper.ts` | 能力检查、调用吸管；取消返回 null，能力缺失或失败明确报错 |
-| `images.ts` | 本地图片解码、尺寸检查、缩放/编码和照片取色 |
-| `svg.ts` | 静态 SVG 几何/属性白名单与拒绝规则 |
+| `images.ts` | 本地图片解码、尺寸检查、缩放/编码和照片取色；安全 SVG 图标保留矢量内容，背景处理为栅格输出 |
+| `svg.ts` | 静态 SVG 元素/属性白名单、XML namespace 处理及拒绝规则 |
+| `svg-image.ts` | SVG 输入校验后的图片归一化与 XML 序列化；为尺寸和缺失 viewBox 补齐规范值 |
 | `remote-images.ts` / `remote-image-download.ts` | 用户操作中申请具体来源与响应头权限；注入网络/监听/锁/图片处理端口，逐跳下载、体积检查和跨来源确认 |
 | `backup-file.ts` | JSON/Blob 编解码及本地文件读写 |
 | `backup-download.ts` | 导出文件的浏览器下载与对象 URL 生命周期 |
 
-已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。当前没有 Identity、Drive、WebDAV 或自动同步调度模块。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
+已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。`platform/webdav-client`、`webdav-protocol`、`webdav-xml` 与 `webdav-store` 实现 HTTPS WebDAV 请求、PROPFIND 解析及强 ETag 条件存取；`webdav-settings` 管理精确来源权限和当前配置文件的本机凭据。自动触发与待删除到期调度位于同步应用层。Drive/Identity 仍未接入。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
 
 ## 本地数据与事务
 
@@ -95,7 +96,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 - 网站删除会返回当前会话的撤销快照，包括所需图片；撤销重新检查分组/容量并事务化恢复。
 - use-local-image 读取本地 Blob，管理对象 URL、异步取消和读取/取色错误。
 - use-image-source 管理已保存来源回填与输入草稿；use-shortcut-icon-source 读取资源来源并同步网站草稿，显式处理来源清除。表单初始化只在打开或切换实体/分组时执行，元数据刷新不重置其他草稿字段。下载成功后来源与本地图片一起保存，不引入新的存储表或 schema 迁移。
-- SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；接受内容栅格化为静态 PNG。
+- SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、JSON 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
 - 图片链接下载只在用户主动操作中联网，使用 omit credentials/no-referrer，并对每一跳阻止浏览器自动重定向。临时 webRequest 观察读取响应头中的 Location，领域层严格校验目标；同来源继续，跨来源交回界面确认并重新请求具体来源权限。同一链接通过原生独占锁串行观察，请求结束后移除监听，不常驻收集网络信息。
 - Manifest 声明可选 HTTPS 与精确 localhost HTTP 来源，不安装时授予全部站点访问。私有 DNS 最终地址判定存在平台限制。
 - 备份由 platform 编解码、domain 严格校验、storage 事务化替换；导入不重新下载来源 URL。
@@ -137,6 +138,6 @@ Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它�
 
 ## 同步实现边界
 
-提供方、媒体范围、端到端加密和高层合并方向已经选定，但当前应用仍无外部同步连接。已实现基础层和手动协调器；基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md。
+提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器、WebDAV 提供方、连接界面与事件触发已接入；Google Drive 尚未接入。受控 localhost HTTPS 的真实扩展审计通过，第三方 WebDAV 与实际权限弹窗仍待验收。基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md，WebDAV 边界见 SYNC-WEBDAV.md。
 
 domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/条件发布，后续新编辑保留更高代次并返回 pending。运行身份与基线独立于发布成功，集成测试不代表云端验收。

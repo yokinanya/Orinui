@@ -6,12 +6,13 @@ import { photoSeed } from '@/platform/images';
 interface LocalImageState {
   readonly id: string | null;
   readonly url: string | null;
+  readonly mime: string | null;
   readonly seed: string | null;
   readonly sourceUrl: string | null;
   readonly error: string | null;
 }
 
-const EMPTY_IMAGE: LocalImageState = { id: null, url: null, seed: null, sourceUrl: null, error: null };
+const EMPTY_IMAGE: LocalImageState = { id: null, url: null, mime: null, seed: null, sourceUrl: null, error: null };
 
 export function useLocalImage(id: string | null, extractSeed = false): LocalImageState {
   const { readImageAsset } = useData();
@@ -26,9 +27,9 @@ export function useLocalImage(id: string | null, extractSeed = false): LocalImag
         const seed = extractSeed ? await photoSeed(asset.blob) : null;
         if (cancelled) return;
         objectUrl = URL.createObjectURL(asset.blob);
-        setState({ id, url: objectUrl, seed, sourceUrl: asset.sourceUrl, error: null });
+        setState({ id, url: objectUrl, mime: asset.mime, seed, sourceUrl: asset.sourceUrl, error: null });
       } catch (cause) {
-        if (!cancelled) setState({ id, url: null, seed: null, sourceUrl: null, error: cause instanceof Error ? cause.message : String(cause) });
+        if (!cancelled) setState({ id, url: null, mime: null, seed: null, sourceUrl: null, error: cause instanceof Error ? cause.message : String(cause) });
       }
     })();
     return () => {

@@ -2,22 +2,30 @@ import { fail } from '@/domain/errors';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
+const XML_NS = 'http://www.w3.org/XML/1998/namespace';
 const ELEMENTS = new Set(['svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'title', 'desc']);
 const ATTRIBUTES = new Set([
   'viewBox', 'width', 'height', 'x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
   'd', 'points', 'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity',
   'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
-  'opacity', 'transform', 'preserveAspectRatio', 'version',
+  'opacity', 'transform', 'preserveAspectRatio', 'version', 'color', 'clip-rule', 'vector-effect',
 ]);
+
+function isNamespaceAttribute(attribute: Attr): boolean {
+  if (attribute.namespaceURI === XMLNS_NS && attribute.value === SVG_NS) return true;
+  if (attribute.namespaceURI !== XML_NS || attribute.localName !== 'space') return false;
+  if (attribute.value !== 'default' && attribute.value !== 'preserve') fail('SVG xml:space 只能是 default 或 preserve');
+  return true;
+}
 
 function validateElement(element: Element): void {
   if (element.namespaceURI !== SVG_NS || !ELEMENTS.has(element.localName)) {
     fail('SVG 含不支持的元素，请改用 PNG/WebP');
   }
   for (const attribute of Array.from(element.attributes)) {
-    if (attribute.namespaceURI === XMLNS_NS && attribute.value === SVG_NS) continue;
+    if (isNamespaceAttribute(attribute)) continue;
     if (attribute.namespaceURI !== null || !ATTRIBUTES.has(attribute.name)) {
-      fail('SVG 含不支持的属性，请改用 PNG/WebP');
+      fail(`SVG 含不支持的属性「${attribute.name}」，请改用 PNG/WebP`);
     }
     if (/url\s*\(|[\\]|[\u0000-\u001f]/i.test(attribute.value)) {
       fail('SVG 不允许资源引用或转义样式，请改用 PNG/WebP');

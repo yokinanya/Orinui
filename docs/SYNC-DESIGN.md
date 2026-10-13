@@ -1,8 +1,8 @@
 # 跨设备同步设计
 
-决策日期：2026-10-11；实施进度更新于 2026-10-12。同步范围、提供方与安全策略已定；基础层与手动协调器已实现，提供方和连接界面尚未接入。
+决策日期：2026-10-11；实施进度更新于 2026-10-13。同步范围、提供方与安全策略已定；基础层、手动协调器、WebDAV 适配器、连接界面与事件调度已实现。WebDAV 通过受控 localhost HTTPS 服务的真实扩展双配置文件审计；Drive、第三方 WebDAV 服务与权限弹窗仍未验收/接入。
 
-当前数据库为版本 3，保留四张领域表并新增三张同步表。已有公共对象端口、手动协调及本机运行记录；没有 OAuth 配置、提供方适配器或连接界面。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调顺序/边界见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)。实施进度见 [TASKS.md](./TASKS.md)，真实检查结果见 [VERIFICATION.md](./VERIFICATION.md)。
+当前数据库为版本 3，保留四张领域表并新增三张同步表。已有公共对象端口、手动协调及本机运行记录；WebDAV 已接入，Google OAuth/Drive 尚未接入。WebDAV 凭据配置保存在当前配置文件 `chrome.storage.local`，不在 Dexie 同步状态中。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调顺序/边界见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，WebDAV 细节见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。实施进度见 [TASKS.md](./TASKS.md)，真实检查结果见 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 目标与范围
 
@@ -11,7 +11,7 @@
 - 同步是可选功能。用户明确启用并配置提供方后，扩展在本地修改后及扩展打开时同步；同时提供手动同步入口。不启用定时轮询。
 - 不创建 Orinui 账号或自营同步后端。用户使用自己的 Google Drive 或 WebDAV 服务账号。
 - 不使用 Chrome `storage.sync` 保存正文或通知标记。图片和数据都由所选外部提供方承载。
-- 一个同步库一次选择一个提供方；不双写。更换提供方需要用户发起迁移。
+- 一个同步库一次选择一个提供方；不双写。更换提供方需要用户发起迁移。当前仅 WebDAV 已接入，Drive 仍是已定方案。
 
 ## 提供方决策
 
@@ -30,7 +30,8 @@ Chrome `storage.sync` 的配额约为总计 100 KiB、单项 8 KiB，且无法�
 
 已在 `src/storage/db.ts` 增加三张 Dexie 表；升级不自动启用同步：
 
-- `sync_state`：vaultId、deviceId、时钟/代次、默认组、本机基线及运行/成功记录；提供方连接配置尚待接入。OAuth token 不复制到这张表。
+- `sync_state`：vaultId、deviceId、时钟/代次、默认组、本机基线及运行/成功记录。WebDAV 凭据不复制到这张表；连接配置单独保存在 `chrome.storage.local`。OAuth token 及 Drive 配置尚未接入。
+- WebDAV 的 `chrome.storage.local` 配置访问级别为 `TRUSTED_CONTEXTS`，包含 HTTPS URL、用户名和应用密码，并在当前配置文件保存 vault/device 身份。`storage` 是扩展权限；来源权限保持 optional，仅在用户操作时申请配置 URL 的精确 origin。凭据不进入 Dexie、JSON 备份、vault 描述或数据快照。
 - `sync_records`：实体类型、实体 ID、字段路径、逻辑版本、修改设备，以及删除墓碑。同步元数据不混入用户可见领域字段。
 - `sync_keys`：只保存非可导出的 Web Crypto `CryptoKey`，供本机后续加解密；恢复密钥正文不持久化。
 
@@ -54,12 +55,12 @@ Settings 按设置分区/自定义引擎 ID 版本化。分组和快捷方式的
 
 恢复密钥遗失且所有已解锁设备都不可用时，云端内容无法恢复；现存设备上的本地数据与用户导出的 JSON 备份仍可用。恢复密钥遗失但仍有可解锁设备时，可从该设备重新生成恢复密钥并重新加密 vault。加密保护提供方一侧的数据，不防护已解锁设备、恶意扩展代码或本机恶意软件。
 
-WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配置文件中；它不随设备快照或 JSON 备份同步。连接 WebDAV 必须使用 HTTPS。
+WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；描述明文只含 schemaVersion 与 vaultId，按 `kind=snapshot`、`objectId=vaultId` 加密。对象路径为 `vaults/<vaultId>/devices/<deviceId>/snapshot.enc` 和 `vaults/<vaultId>/assets/<assetId>.enc`。WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配置文件中；它不随设备快照或 JSON 备份同步。连接 WebDAV 必须使用 HTTPS。
 
 ## 同步与失败行为
 
 - Chrome Identity 的交互式授权从解释用途的设置按钮发起，不在启动时弹窗。[Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/api/identity)
-- 同步仅在用户启用后访问外部服务。设置页提供手动同步；启用后的本地变更和扩展打开会触发异步同步，不等待其完成再渲染主页。
+- 同步仅在用户启用后访问外部服务。设置页提供手动同步；启用后扩展页打开、本机 generation 写入和撤销截止时间的单次 timeout 会触发异步同步，不等待其完成再渲染主页。无定时轮询或自动重试；页面关闭可能中断运行，下次扩展页打开或用户手动操作恢复。
 - 网络中断、授权取消、权限拒绝、校验/解密错误或提供方失败时，保留本机已有数据和未同步编辑，明确显示失败或待同步。远端数据未通过完整校验时不得部分应用；不得跳过媒体、覆盖较新快照或伪报成功。
 - 远端格式包含独立 schemaVersion。未知未来版本拒绝应用并说明原因；不降级或静默重写。
 
@@ -67,14 +68,14 @@ WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配�
 
 字段版本、耦合寄存器、严格格式、墓碑/撤销、首次合并、来源 URL 和本地导入/重置规则已经落实，详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
-公共对象接口、条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。仍需真实提供方对象寻址/原子保证、授权/连接界面、自动触发/待删除到期调度、设备集合、远端媒体回收与密钥轮换；应用尚未连接外部同步服务。
+公共对象接口、条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。WebDAV 对象适配器和连接界面已接入。预览只展示本地/远端数量，不冻结合并候选；用户确认时重新读取远端并重新计算计划。连接确认取得本机锁后再次校验 vault/device 身份，等待期间身份变化会丢弃旧准备数据和界面计划。所有 HTTP 重定向一律拒绝，避免把 Basic 认证转发到其他 origin。Drive 授权/适配器、设备集合、远端媒体回收与密钥轮换仍待实施。
 
 ## 验收状态
 
 - 已有基础层自动检查覆盖：不同字段并发修改、同字段决胜、删除/撤销、跨组移动、排序、首次合并与事务回滚。
 - 已有加密检查覆盖恢复密钥导入、不可导出密钥持久化、错误密钥、密文/对象身份篡改、未知版本及媒体校验；完整密钥轮换尚未实现。
-- 待提供方集成：分别验证完整上传、同时修改、重复操作、断网和授权失败；不得用假成功路径代替真实对象操作。
-- 待真实扩展和服务端：Google OAuth/appDataFolder、HTTPS WebDAV、第二 Chrome 配置文件的图片还原和权限撤销。普通网页预览不替代这些检查。
+- WebDAV 已在受控本机 HTTPS 服务的真实扩展双配置文件中验证新建库、恢复密钥确认/导入、首次合并、图片还原、修改发布、手动接收、503 失败恢复及断开保留本地数据；该 fixture 不代表第三方服务兼容。
+- 待真实扩展和服务端：Google OAuth/appDataFolder、第三方 HTTPS WebDAV 兼容性、浏览器来源权限弹窗/拒绝/撤销、真实用户服务器上的双配置文件还原及权限撤销。普通网页预览不替代这些检查。
 
 ### 依据
 
