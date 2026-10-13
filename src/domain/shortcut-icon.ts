@@ -1,6 +1,6 @@
 import { BUILT_IN_ICON_IDS, type BuiltInIconId, type ShortcutIcon } from '@/domain/shortcut';
 
-export const SHORTCUT_ICON_OCCUPANCY = { minimum: 50, maximum: 100, default: 100, step: 1 } as const;
+export const SHORTCUT_ICON_OCCUPANCY = { minimum: 50, maximum: 100, default: 75, step: 1 } as const;
 const LEGACY_ICON_SIZE = { minimum: 24, maximum: 64, default: 48 } as const;
 
 function record(value: unknown): Record<string, unknown> {

@@ -15,7 +15,7 @@ export function SearchSettingsPanel() {
       <Separator />
       <CustomEngineForm />
       {settings.search.customEngines.length > 0 && <><Separator /><CustomEngineList /></>}
-      <p className="text-sm text-muted-foreground">联网搜索建议仍未启用；查询不会发送到建议服务。</p>
+      <p className="text-sm text-muted-foreground">搜索建议未开启，输入内容不会发送给建议服务。</p>
     </FieldGroup>
   );
 }

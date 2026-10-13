@@ -1,4 +1,4 @@
-import { argbFromHex, hexFromArgb, themeFromSourceColor, type Scheme } from '@material/material-color-utilities';
+import { argbFromHex, hexFromArgb, Hct, themeFromSourceColor, type Scheme } from '@material/material-color-utilities';
 
 import { fail } from '@/domain/errors';
 
@@ -6,6 +6,7 @@ import { fail } from '@/domain/errors';
 export type ColorTokenMap = Record<string, string>;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const READABLE_SURFACE_TONE_THRESHOLD = 50;
 
 /** 浅色与深色的半透明表面透明度不同，玻璃层需要各自的分量。 */
 const GLASS_ALPHA = { light: 0.62, dark: 0.55 } as const;
@@ -14,29 +15,40 @@ const GLASS_BORDER_ALPHA = { light: 0.5, dark: 0.12 } as const;
 
 const HOME_READABILITY = {
   light: {
-    '--home-readable-surface': 'rgba(250, 248, 245, 0.98)',
-    '--home-readable-search-surface': 'rgba(250, 248, 245, 0.98)',
-    '--home-readable-hover': 'rgba(236, 232, 226, 0.98)',
+    '--home-readable-surface': 'color-mix(in oklch, rgba(250, 248, 245, 0.68) 94%, var(--home-readable-accent))',
+    '--home-readable-search-surface': 'color-mix(in oklch, rgba(250, 248, 245, 0.84) 94%, var(--home-readable-accent))',
+    '--home-readable-hover': 'color-mix(in oklch, rgba(236, 232, 226, 0.86) 90%, var(--home-readable-accent))',
     '--home-readable-foreground': '#302c27',
     '--home-readable-muted': '#514b45',
-    '--home-readable-border': '#625950',
-    '--home-readable-focus': '#302c27',
+    '--home-readable-border': 'color-mix(in oklch, var(--home-readable-accent) 35%, transparent)',
+    '--home-readable-focus': 'var(--home-readable-accent)',
+    '--home-readable-accent': 'var(--primary)',
   },
   dark: {
-    '--home-readable-surface': 'rgba(12, 10, 8, 0.98)',
-    '--home-readable-search-surface': 'rgba(12, 10, 8, 0.98)',
-    '--home-readable-hover': 'rgba(38, 35, 31, 0.98)',
+    '--home-readable-surface': 'color-mix(in oklch, rgba(12, 10, 8, 0.68) 94%, var(--home-readable-accent))',
+    '--home-readable-search-surface': 'color-mix(in oklch, rgba(12, 10, 8, 0.84) 94%, var(--home-readable-accent))',
+    '--home-readable-hover': 'color-mix(in oklch, rgba(38, 35, 31, 0.86) 90%, var(--home-readable-accent))',
     '--home-readable-foreground': '#f4f1ec',
     '--home-readable-muted': '#c4c0b9',
-    '--home-readable-border': '#c4c0b9',
-    '--home-readable-focus': '#f4f1ec',
+    '--home-readable-border': 'color-mix(in oklch, var(--home-readable-accent) 35%, transparent)',
+    '--home-readable-focus': 'var(--home-readable-accent)',
+    '--home-readable-accent': 'var(--primary)',
   },
 } as const;
 
 export const HOME_READABILITY_TOKEN_NAMES: readonly string[] = Object.keys(HOME_READABILITY.light);
 
-/** Stable theme-paired surfaces keep wallpaper contrast independent from dynamic accents. */
-export function homeReadabilityTokens(isDark: boolean, isPhoto = false): ColorTokenMap {
+function isDarkBackground(backgroundColor: string | null, themeIsDark: boolean): boolean {
+  if (backgroundColor === null) return themeIsDark;
+  return Hct.fromInt(argbFromHex(backgroundColor)).tone < READABLE_SURFACE_TONE_THRESHOLD;
+}
+
+function accentToken(backgroundIsDark: boolean, themeIsDark: boolean): string {
+  return backgroundIsDark === themeIsDark ? 'var(--primary)' : 'var(--primary-foreground)';
+}
+
+/** Solid and gradient backgrounds choose a readable surface from their actual color. */
+export function homeReadabilityTokens(isDark: boolean, isPhoto = false, backgroundColor: string | null = null): ColorTokenMap {
   if (isPhoto) {
     return {
       '--home-readable-surface': 'rgba(14, 16, 20, 0.48)',
@@ -46,10 +58,15 @@ export function homeReadabilityTokens(isDark: boolean, isPhoto = false): ColorTo
       '--home-readable-muted': '#ffffff',
       '--home-readable-border': 'rgba(255, 255, 255, 0.24)',
       '--home-readable-focus': '#ffffff',
+      '--home-readable-accent': 'var(--primary)',
     };
   }
 
-  return { ...(isDark ? HOME_READABILITY.dark : HOME_READABILITY.light) };
+  const surfaceIsDark = isDarkBackground(backgroundColor, isDark);
+  return {
+    ...(surfaceIsDark ? HOME_READABILITY.dark : HOME_READABILITY.light),
+    '--home-readable-accent': accentToken(surfaceIsDark, isDark),
+  };
 }
 
 function rgba(hex: string, alpha: number): string {

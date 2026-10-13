@@ -12,9 +12,19 @@ export interface BackgroundCase {
 const TEXT_CONTRAST = 4.5;
 const LARGE_TEXT_AND_ICON_CONTRAST = 3;
 const LARGE_TEXT_SIZE = 24;
+const PHOTO_MASK_LARGE_STEP = 10;
 export interface ReadabilityTarget {
   readonly selector: string;
   readonly icon?: boolean;
+}
+
+export async function setPhotoMask(page: Page, percent: number) {
+  const slider = page.getByRole('slider', { name: '照片遮罩强度（%）' });
+  await slider.press('Home');
+  const largeSteps = Math.floor(percent / PHOTO_MASK_LARGE_STEP);
+  for (let step = 0; step < largeSteps; step += 1) await slider.press('PageUp');
+  for (let step = largeSteps * PHOTO_MASK_LARGE_STEP; step < percent; step += 1) await slider.press('ArrowRight');
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText(`${percent}%`);
 }
 const HOMEPAGE_TARGETS: readonly ReadabilityTarget[] = [
   { selector: 'time' }, { selector: 'time + p' },
@@ -108,11 +118,11 @@ export async function uploadContrastPhoto(page: Page, input: { readonly color: '
   await page.getByRole('tab', { name: '外观', exact: true }).click();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="${input.color}"/></svg>`;
   await page.getByLabel('上传照片').setInputFiles({ name: 'contrast.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
-  const mask = page.getByLabel('照片遮罩强度（%）');
-  await expect(mask).toHaveValue('55');
-  await mask.fill(String(input.mask));
+  const mask = page.getByRole('slider', { name: '照片遮罩强度（%）' });
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('55%');
+  await setPhotoMask(page, input.mask);
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
-  await expect.poll(() => mask.inputValue()).toBe(String(input.mask));
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText(`${input.mask}%`);
   await expect.poll(() => page.evaluate(() => {
     const mask = document.documentElement.style.getPropertyValue('--wallpaper-mask');
     const alpha = mask.match(/[\d.]+/g)?.at(-1);

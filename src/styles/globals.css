@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './home-readability.css';
+@import './settings-panel.css';
 
 /*
  * shadcn/ui 的 Base UI 组件依赖以下变体：
@@ -100,7 +101,7 @@
   --input: oklch(0.9 0.006 85);
   --ring: oklch(0.32 0.018 62);
 
-  /* 壁纸之上的半透明表面：主页浮层与设置抽屉使用 */
+  /* 壁纸之上的半透明表面：主页浮层与设置面板使用 */
   --glass: oklch(1 0 0 / 0.62);
   --glass-strong: oklch(0.995 0.003 85 / 0.9);
   --glass-border: oklch(1 0 0 / 0.5);

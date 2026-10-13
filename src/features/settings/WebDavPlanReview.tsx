@@ -19,7 +19,7 @@ function RecoveryKeyPanel({ connection, recoveryKey }: { readonly connection: Co
     <Alert>
       <AlertTitle>先保存恢复密钥</AlertTitle>
       <AlertDescription className="flex flex-col gap-3">
-        <p>此密钥只显示一次。请复制并保存在安全位置；丢失后无法解密远端数据。</p>
+        <p>密钥只显示一次。请妥善保存；丢失后无法读取云端数据。</p>
         <Field>
           <FieldLabel htmlFor="webdav-new-recovery-key">恢复密钥</FieldLabel>
           <Input id="webdav-new-recovery-key" readOnly value={recoveryKey} onFocus={(event) => event.currentTarget.select()} />
@@ -60,7 +60,7 @@ export function WebDavPlanReview({ connection }: WebDavPlanReviewProps) {
       <h3 id="webdav-plan-title" className="text-sm font-medium">首次合并预览</h3>
       <PlanCounts title="本机数据" values={plan.local} />
       <PlanCounts title="远端数据" values={plan.remote} />
-      <p className="text-sm text-muted-foreground">保留两边网站与分组；同一内容的修改按同步规则合并，删除记录继续生效。</p>
+      <p className="text-sm text-muted-foreground">两边的网站和分组都会保留；相同项会合并，已删除的项不会恢复。</p>
       {newRecoveryKey && <RecoveryKeyPanel connection={connection} recoveryKey={newRecoveryKey} />}
       {connection.error && <p role="alert" className="text-sm text-destructive">{connection.error}</p>}
       <PlanActions connection={connection} mode={plan.mode} recoveryKey={newRecoveryKey} />

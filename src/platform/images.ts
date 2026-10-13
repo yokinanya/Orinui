@@ -1,4 +1,4 @@
-import { hexFromArgb, sourceColorFromImage } from '@material/material-color-utilities';
+import { argbFromRgb, hexFromArgb, QuantizerCelebi, Score } from '@material/material-color-utilities';
 
 import type { ImageAssetKind } from '@/domain/asset';
 import { fail } from '@/domain/errors';
@@ -8,6 +8,14 @@ import type { NewImageAsset } from '@/storage/assets';
 
 const IMAGE_QUALITY = 0.9;
 const ANIMATION_CHUNK = 'ANIM';
+const PHOTO_SEED_EDGE = 128;
+const RGBA_CHANNELS = 4;
+const ALPHA_CHANNEL = 3;
+const RED_CHANNEL = 0;
+const GREEN_CHANNEL = 1;
+const BLUE_CHANNEL = 2;
+const OPAQUE_ALPHA = 255;
+const COLOR_QUANTIZATION = 128;
 const RIFF_HEADER_BYTES = 12;
 const CHUNK_HEADER_BYTES = 8;
 
@@ -76,6 +84,29 @@ export async function prepareImage(input: {
   }
 }
 
-export async function photoSeed(blob: Blob): Promise<string> {
-  return hexFromArgb(await sourceColorFromImage(await loadLocalImage(blob)));
+export async function photoSeed(blob: Blob, sourceWidth: number, sourceHeight: number): Promise<string> {
+  const scale = Math.min(1, PHOTO_SEED_EDGE / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const image = await createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' });
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  try {
+    if (!context) fail('无法创建照片取色画布');
+    context.drawImage(image, 0, 0, width, height);
+    const { data } = context.getImageData(0, 0, width, height);
+    const pixels: number[] = [];
+    for (let index = 0; index < data.length; index += RGBA_CHANNELS) {
+      if (data[index + ALPHA_CHANNEL] === OPAQUE_ALPHA) {
+        pixels.push(argbFromRgb(data[index + RED_CHANNEL]!, data[index + GREEN_CHANNEL]!, data[index + BLUE_CHANNEL]!));
+      }
+    }
+    const color = Score.score(QuantizerCelebi.quantize(pixels, COLOR_QUANTIZATION))[0];
+    if (color === undefined) fail('照片没有可用于动态配色的不透明颜色');
+    return hexFromArgb(color);
+  } finally {
+    image.close();
+  }
 }

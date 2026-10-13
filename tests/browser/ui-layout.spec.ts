@@ -13,7 +13,7 @@ async function openSettings(page: import('@playwright/test').Page) {
   return page.getByRole('dialog', { name: '设置' });
 }
 
-test('主页搜索聚焦只显示单线，当前分组用下划线区分', async ({ page }) => {
+test('主页搜索聚焦不显示底部线，当前分组用下划线区分', async ({ page }) => {
   await page.goto('/newtab.html');
 
   const search = page.getByRole('search');
@@ -26,12 +26,10 @@ test('主页搜索聚焦只显示单线，当前分组用下划线区分', async
     return {
       outline: style.outlineStyle,
       image: style.backgroundImage,
-      imageSize: style.backgroundSize,
     };
   });
   expect(searchStyle.outline).toBe('none');
-  expect(searchStyle.image).not.toBe('none');
-  expect(searchStyle.imageSize).toContain('2px');
+  expect(searchStyle.image).toBe('none');
 
   const tab = page.getByRole('navigation', { name: '分组' }).getByRole('button', { name: '常用', exact: true });
   const tabStyle = await tab.evaluate((element) => {
@@ -170,11 +168,11 @@ test('分组标签保持无外框与三点，溢出时隐藏滚动条且菜单�
 
 test('320px 布局设置没有横向溢出且完整显示 24 小时选项', async ({ page }) => {
   await page.setViewportSize(NARROW_VIEWPORT);
-  const sheet = await openSettings(page);
+  const settingsPanel = await openSettings(page);
   await page.getByRole('tab', { name: '布局', exact: true }).click();
 
-  const panel = page.getByRole('tabpanel', { name: '布局', exact: true });
-  const dimensions = await panel.evaluate((element) => ({
+  const panelContent = page.getByRole('tabpanel', { name: '布局', exact: true });
+  const dimensions = await panelContent.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
   }));
@@ -182,39 +180,39 @@ test('320px 布局设置没有横向溢出且完整显示 24 小时选项', asyn
 
   const option = page.getByRole('button', { name: '24 小时', exact: true });
   await expect(option).toBeVisible();
-  const [sheetBox, optionBox] = await Promise.all([sheet.boundingBox(), option.boundingBox()]);
-  expect(sheetBox).not.toBeNull();
+  const [panelBox, optionBox] = await Promise.all([settingsPanel.boundingBox(), option.boundingBox()]);
+  expect(panelBox).not.toBeNull();
   expect(optionBox).not.toBeNull();
-  expect(optionBox!.x).toBeGreaterThanOrEqual(sheetBox!.x);
-  expect(optionBox!.x + optionBox!.width).toBeLessThanOrEqual(sheetBox!.x + sheetBox!.width);
+  expect(optionBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
+  expect(optionBox!.x + optionBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
 });
 
-test('320px 取色弹层完整位于设置抽屉内', async ({ page }) => {
+test('320px 取色弹层完整位于设置面板内', async ({ page }) => {
   await page.setViewportSize(NARROW_VIEWPORT);
-  const sheet = await openSettings(page);
+  const panel = await openSettings(page);
   await page.getByRole('tab', { name: '外观', exact: true }).click();
   await page.getByRole('button', { name: '渐变', exact: true }).click();
   await page.getByRole('button', { name: /^起始颜色，当前 / }).click();
 
   const picker = page.locator('[data-slot="popover-content"]');
   await expect(picker).toBeVisible();
-  const [sheetBox, pickerBox] = await Promise.all([sheet.boundingBox(), picker.boundingBox()]);
-  expect(sheetBox).not.toBeNull();
+  const [panelBox, pickerBox] = await Promise.all([panel.boundingBox(), picker.boundingBox()]);
+  expect(panelBox).not.toBeNull();
   expect(pickerBox).not.toBeNull();
-  expect(pickerBox!.x).toBeGreaterThanOrEqual(sheetBox!.x);
-  expect(pickerBox!.y).toBeGreaterThanOrEqual(sheetBox!.y);
-  expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(sheetBox!.x + sheetBox!.width);
-  expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(sheetBox!.y + sheetBox!.height);
+  expect(pickerBox!.x).toBeGreaterThanOrEqual(panelBox!.x);
+  expect(pickerBox!.y).toBeGreaterThanOrEqual(panelBox!.y);
+  expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(panelBox!.x + panelBox!.width);
+  expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(panelBox!.y + panelBox!.height);
 });
 
 test('设置关闭按钮有中文名称，Escape 恢复焦点且网站保存可由 Tab 到达', async ({ page }) => {
   await page.setViewportSize(NARROW_VIEWPORT);
-  const sheet = await openSettings(page);
-  const closeButton = sheet.locator('[data-slot="sheet-close"]');
+  const panel = await openSettings(page);
+  const closeButton = panel.locator('[data-slot="dialog-close"]');
   await expect(closeButton).toHaveAccessibleName('关闭');
 
   await page.keyboard.press('Escape');
-  await expect(sheet).toBeHidden();
+  await expect(panel).toBeHidden();
   await expect(page.getByRole('button', { name: '设置', exact: true })).toBeFocused();
 
   await page.getByRole('button', { name: '添加第一个网站', exact: true }).click();

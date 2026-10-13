@@ -71,7 +71,7 @@ export function CreateGroupDialog({ open, onOpenChange }: GroupFormDialogProps) 
         >
           <DialogHeader>
             <DialogTitle>新建分组</DialogTitle>
-            <DialogDescription>分组用于归类网站，在主页标签行按这里的顺序排列。</DialogDescription>
+            <DialogDescription>分组会显示在主页标签栏。</DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="py-4">
@@ -143,7 +143,6 @@ export function RenameGroupDialog({ group, open, onOpenChange }: RenameGroupDial
         >
           <DialogHeader>
             <DialogTitle>重命名分组</DialogTitle>
-            <DialogDescription>改名不会影响组内网站。</DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="py-4">

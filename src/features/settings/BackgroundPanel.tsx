@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -9,7 +10,10 @@ import { PhotoBackgroundPanel } from '@/features/settings/PhotoBackgroundPanel';
 const DEFAULT_SOLID = { kind: 'solid', color: '#f2ece3' } as const;
 const DEFAULT_GRADIENT = { kind: 'gradient', from: '#f4efe6', to: '#c9d6e4', angle: 160 } as const;
 const FULL_TURN_DEGREES = 360;
-const BACKGROUND_OPTIONS = [{ value: 'default', label: '默认' }, { value: 'solid', label: '纯色' }, { value: 'gradient', label: '渐变' }] as const;
+const BACKGROUND_OPTIONS = [
+  { value: 'default', label: '默认' }, { value: 'solid', label: '纯色' },
+  { value: 'gradient', label: '渐变' }, { value: 'photo', label: '图片' },
+] as const;
 
 function ColorField(props: { readonly id: string; readonly label: string; readonly value: string; readonly onChange: (color: string) => void }) {
   return (
@@ -42,23 +46,43 @@ function GradientFields({ background, onChange }: { readonly background: Gradien
 export function BackgroundPanel() {
   const { appearance, update } = useAppearanceActions();
   const { background } = appearance;
+  const [photoRequested, setPhotoRequested] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const selectedKind: Background['kind'] = photoRequested ? 'photo' : background.kind;
   const setBackground = (next: Background) => update({ background: next });
+  useEffect(() => {
+    if (background.kind === 'photo') setPhotoRequested(false);
+  }, [background.kind]);
+
+  const selectKind = (value: string[]) => {
+    const next = BACKGROUND_OPTIONS.find((option) => option.value === value[0])?.value;
+    if (!next) return;
+    setPhotoRequested(next === 'photo');
+    if (next === 'photo') return;
+    if (next === 'default') setBackground({ kind: 'default' });
+    if (next === 'solid') setBackground(DEFAULT_SOLID);
+    if (next === 'gradient') setBackground(DEFAULT_GRADIENT);
+  };
+
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel>背景</FieldLabel>
-        <ToggleGroup value={[background.kind]} onValueChange={(value) => {
-          if (value[0] === 'default') setBackground({ kind: 'default' });
-          if (value[0] === 'solid') setBackground(DEFAULT_SOLID);
-          if (value[0] === 'gradient') setBackground(DEFAULT_GRADIENT);
-        }}>
-          {BACKGROUND_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value}>{option.label}</ToggleGroupItem>)}
+        <FieldLabel id="background-kind-label">背景类型</FieldLabel>
+        <ToggleGroup aria-labelledby="background-kind-label" value={[selectedKind]} variant="outline" spacing={1}
+          disabled={photoBusy} className="w-full flex-wrap gap-2" onValueChange={selectKind}>
+          {BACKGROUND_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value} className="flex-1">
+            {option.label}
+          </ToggleGroupItem>)}
         </ToggleGroup>
-        {background.kind === 'photo' && <FieldDescription>切换背景会移除当前照片。</FieldDescription>}
+        {background.kind === 'photo' && selectedKind !== 'photo'
+          && <FieldDescription>切换类型会移除当前图片。</FieldDescription>}
       </Field>
-      <PhotoBackgroundPanel />
-      {background.kind === 'solid' && <ColorField id="background-color" label="背景颜色" value={background.color} onChange={(color) => setBackground({ kind: 'solid', color })} />}
-      {background.kind === 'gradient' && <GradientFields background={background} onChange={setBackground} />}
+      {selectedKind === 'photo' && <PhotoBackgroundPanel onBusyChange={setPhotoBusy} />}
+      {selectedKind === 'solid' && <ColorField id="background-color" label="背景颜色"
+        value={background.kind === 'solid' ? background.color : DEFAULT_SOLID.color}
+        onChange={(color) => setBackground({ kind: 'solid', color })} />}
+      {selectedKind === 'gradient' && <GradientFields
+        background={background.kind === 'gradient' ? background : DEFAULT_GRADIENT} onChange={setBackground} />}
     </FieldGroup>
   );
 }

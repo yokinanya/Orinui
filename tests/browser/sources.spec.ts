@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
 test('已保存的图片直链在重新打开时回填，包括资源保留来源的网站旧记录', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
   const link = await createImageShortcut(page);
   await setFixtureSources(page, null);
@@ -36,7 +36,7 @@ test('已保存的图片直链在重新打开时回填，包括资源保留来�
 test('图片来源异步读取完成时不会覆盖用户已输入的地址', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
   await createImageShortcut(page);
   const ids = await setFixtureSources(page);
@@ -56,7 +56,7 @@ test('图片来源异步读取完成时不会覆盖用户已输入的地址', as
 test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留并写入JSON备份', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
   const link = await createImageShortcut(page);
   const ids = await setFixtureSources(page);
@@ -97,7 +97,7 @@ test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留�
 test('来源已被外部清除时显示错误且仍可重试', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   const ids = await page.evaluate(async (sourceUrl) => {
     const opening = indexedDB.open('orinui');
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -131,5 +131,5 @@ test('来源已被外部清除时显示错误且仍可重试', async ({ page }) 
   await clear.click();
   await expect(page.getByRole('alert')).toContainText('图片没有可清除的来源地址');
   await expect(clear).toBeEnabled();
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
 });

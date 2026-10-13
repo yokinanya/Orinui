@@ -79,7 +79,7 @@ function ImportFileField({ actions }: { readonly actions: BackupActions }) {
           event.target.value = '';
           void actions.selectFile(file);
         }} />
-      <FieldDescription>文件最大 70 MiB；图片总量最大 50 MiB。导入前会显示内容摘要并要求确认。</FieldDescription>
+      <FieldDescription>文件最大 70 MiB，图片总量最大 50 MiB。确认前可预览备份内容。</FieldDescription>
       {actions.error && <FieldError role="alert">{actions.error}</FieldError>}
     </Field>
   );
@@ -91,7 +91,7 @@ export function BackupPanel() {
     <FieldGroup>
       <Field>
         <FieldLabel>备份文件</FieldLabel>
-        <FieldDescription>导出内容包含网站、分组、设置和图片。导入会完整替换本机数据。</FieldDescription>
+        <FieldDescription>备份包含网站、分组、设置和图片；导入会替换本机数据。</FieldDescription>
         <Button type="button" variant="outline" onClick={() => void actions.exportFile()}>
           <DownloadIcon data-icon="inline-start" />导出 JSON
         </Button>

@@ -1,3 +1,4 @@
+import { ExternalLinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { ColorPicker } from '@/features/appearance/ColorPicker';
@@ -33,7 +34,7 @@ function SavedAssetSource({ draft, source }: { readonly draft: ShortcutDraft; re
   if (draft.icon.kind !== 'asset' || draft.image) return null;
   return (
     <ClearImageSourceButton key={draft.icon.assetId} assetId={draft.icon.assetId} sourceUrl={source.sourceUrl}
-      disabled={draft.saving || draft.imageBusy} onCleared={source.onCleared} />
+      disabled={draft.saving || draft.imageBusy} onCleared={source.onCleared} iconOnly />
   );
 }
 
@@ -62,9 +63,16 @@ export function ShortcutIconFields({ draft }: { readonly draft: ShortcutDraft })
       <SavedImageError message={saved.error} />
       <ShortcutIconOccupancyField draft={draft} />
       <RemoteImageDownload id="shortcut-image-url" kind="icon" disabled={draft.saving || draft.imageBusy} onBusyChange={draft.setImageBusy}
+        headerAction={<div className="flex items-center gap-2">
+          <SavedAssetSource draft={draft} source={source} />
+          <a href="https://dashboardicons.com/icons" target="_blank" rel="noreferrer"
+            aria-label="从 Dashboard Icons 找图标链接" title="从 Dashboard Icons 复制图标链接"
+            className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring">
+            Dashboard Icons <ExternalLinkIcon aria-hidden="true" className="size-3" />
+          </a>
+        </div>}
         initialSourceUrl={source.sourceUrl}
         onReady={(image) => { draft.selectRemoteImage(image); }} />
-      <SavedAssetSource draft={draft} source={source} />
     </FieldSet>
   );
 }

@@ -1,4 +1,4 @@
-import { resolveSeed, type AppearanceSettings } from '@/domain/appearance';
+import { backgroundSeed, resolveSeed, type AppearanceSettings } from '@/domain/appearance';
 import { requiresHomeReadabilitySurface, wallpaperStyle } from '@/features/appearance/background-style';
 import {
   colorTokensFromSeed,
@@ -78,7 +78,9 @@ function applyHomeReadability(
   }
 
   root.setAttribute('data-home-readable', 'true');
-  for (const [token, value] of Object.entries(homeReadabilityTokens(isDark, appearance.background.kind === 'photo'))) {
+  for (const [token, value] of Object.entries(homeReadabilityTokens(
+    isDark, appearance.background.kind === 'photo', backgroundSeed(appearance.background),
+  ))) {
     root.style.setProperty(token, value);
   }
 }

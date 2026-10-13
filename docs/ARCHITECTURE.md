@@ -47,7 +47,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 | `navigation.ts` | 搜索和网站在当前标签页打开 |
 | `eyedropper.ts` | 能力检查、调用吸管；取消返回 null，能力缺失或失败明确报错 |
 | `images.ts` | 本地图片解码、尺寸检查、缩放/编码和照片取色；安全 SVG 图标保留矢量内容，背景处理为栅格输出 |
-| `svg.ts` | 静态 SVG 元素/属性白名单、XML namespace 处理及拒绝规则 |
+| `svg.ts` / `svg-style.ts` / `svg-stylesheet.ts` / `svg-references.ts` | 静态 SVG 白名单、内联/简单内嵌 CSS 的级联转换、XML/XLink 归一化及内部资源引用/循环检查；未知或危险内容明确拒绝 |
 | `svg-image.ts` | SVG 输入校验后的图片归一化与 XML 序列化；为尺寸和缺失 viewBox 补齐规范值 |
 | `remote-images.ts` / `remote-image-download.ts` | 用户操作中申请具体来源与响应头权限；注入网络/监听/锁/图片处理端口，逐跳下载、体积检查和跨来源确认 |
 | `backup-file.ts` | JSON/Blob 编解码及本地文件读写 |
@@ -95,6 +95,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 - 替换独占图片时在事务中释放旧资源再检查容量；失败恢复原引用及 Blob。共享图片仍有引用时保留。
 - 网站删除会返回当前会话的撤销快照，包括所需图片；撤销重新检查分组/容量并事务化恢复。
 - use-local-image 读取本地 Blob，管理对象 URL、异步取消和读取/取色错误。
+- 主页先发布本地照片对象 URL，再独立提取动态色；动态色关闭时跳过取色。取色只对保比例、最长边 128px 的采样图运行 Material 色彩量化，避免扫描整张高分辨率照片阻塞背景显示；取色失败单独显示错误。
 - use-image-source 管理已保存来源回填与输入草稿；use-shortcut-icon-source 读取资源来源并同步网站草稿，显式处理来源清除。表单初始化只在打开或切换实体/分组时执行，元数据刷新不重置其他草稿字段。下载成功后来源与本地图片一起保存，不引入新的存储表或 schema 迁移。
 - SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、JSON 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
 - 图片链接下载只在用户主动操作中联网，使用 omit credentials/no-referrer，并对每一跳阻止浏览器自动重定向。临时 webRequest 观察读取响应头中的 Location，领域层严格校验目标；同来源继续，跨来源交回界面确认并重新请求具体来源权限。同一链接通过原生独占锁串行观察，请求结束后移除监听，不常驻收集网络信息。
@@ -111,7 +112,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 
 键盘拖放用空格拿起/放下、Escape 取消，Enter 保留给对象自身动作；菜单提供不依赖拖动的排序路径。编辑模式状态由 ShortcutsRegion 持有。删除分组先查询数量再确认。
 
-设置抽屉内边距位于滚动容器自身，避免 Switch 扩大的点击热区造成横向溢出。当前有抽屉/弹窗过渡；主页进入和分组内容切换通过 CSS/WAAPI 实现。数据桥用 loadedShortcutsGroupId 确认数组归属，丢弃过期请求；不重挂编辑区域，减少动态效果时只淡化。主页可读性与照片样式独立维护在 home-readability.css，由 globals.css 引入，避免全局样式文件超过工程规模限制。
+设置面板使用模态 Dialog，左侧为纵向标签、右侧为独立纵向滚动内容；半透明表面保留背景上下文。内边距位于滚动容器自身，避免 Switch 扩大的点击热区造成横向溢出。主页右下角的编辑与设置入口组成固定操作列；编辑模式状态由主页组合层持有，因此可从此入口控制分组与网站排序。当前有弹窗过渡；主页进入和分组内容切换通过 CSS/WAAPI 实现。数据桥用 loadedShortcutsGroupId 确认数组归属，丢弃过期请求；不重挂编辑区域，减少动态效果时只淡化。主页可读性与照片样式独立维护在 home-readability.css，由 globals.css 引入，避免全局样式文件超过工程规模限制。
 
 ## shadcn 与样式约定
 

@@ -50,7 +50,7 @@ function CompactUploadButton({ compact, busy, disabled, onClick }: UploadButtonP
 
 function UploadDescription({ compact, busy }: { readonly compact: boolean; readonly busy: boolean }) {
   if (compact) return null;
-  return <FieldDescription>{busy ? '正在处理…' : 'PNG、JPEG、WebP、静态 SVG · 最大 10 MiB'}</FieldDescription>;
+  return <FieldDescription>{busy ? '正在处理…' : '支持 PNG、JPEG、WebP 和静态 SVG；最大 10 MiB。'}</FieldDescription>;
 }
 
 function UploadError({ message, compact }: { readonly message: string | null; readonly compact: boolean }) {

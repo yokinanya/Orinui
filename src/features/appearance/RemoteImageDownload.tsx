@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowUpRightIcon, DownloadIcon, LoaderCircleIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ArrowUpRightIcon, LoaderCircleIcon, SaveIcon } from 'lucide-react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import type { ImageAssetKind } from '@/domain/asset';
@@ -12,13 +13,14 @@ interface RemoteImageDownloadProps {
   readonly id: string;
   readonly kind: ImageAssetKind;
   readonly initialSourceUrl?: string | null;
+  readonly headerAction?: ReactNode;
   readonly disabled?: boolean;
   readonly onReady: (image: NewImageAsset) => Promise<void> | void;
   readonly onBusyChange?: (busy: boolean) => void;
 }
 
 function useDownloadState({ kind, initialSourceUrl, onReady, onBusyChange }: RemoteImageDownloadProps) {
-  const { source, changeSource, acceptSource } = useImageSource(initialSourceUrl);
+  const { source, hasUnsavedSource, changeSource, acceptSource } = useImageSource(initialSourceUrl);
   const [error, setError] = useState<string | null>(null);
   const [redirect, setRedirect] = useState<RedirectConfirmationRequiredError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,7 +46,7 @@ function useDownloadState({ kind, initialSourceUrl, onReady, onBusyChange }: Rem
     acceptSource(redirect.targetUrl);
     void download(redirect.targetUrl);
   };
-  return { source, changeSource: changeUserSource, error, redirect, busy, download, confirmRedirect };
+  return { source, hasUnsavedSource, changeSource: changeUserSource, error, redirect, busy, download, confirmRedirect };
 }
 
 function RedirectNotice({ redirect }: { readonly redirect: RedirectConfirmationRequiredError }) {
@@ -56,19 +58,25 @@ function RedirectNotice({ redirect }: { readonly redirect: RedirectConfirmationR
 }
 
 function downloadButtonLabel(busy: boolean, redirect: RedirectConfirmationRequiredError | null): string {
-  if (busy) return '正在下载…';
-  return redirect ? '授权并继续下载' : '下载到本机';
+  if (busy) return '正在保存…';
+  return redirect ? '授权并继续保存' : '保存';
 }
 
 export function RemoteImageDownload(props: RemoteImageDownloadProps) {
-  const { id, disabled } = props;
-  const { source, changeSource, error, redirect, busy, download, confirmRedirect } = useDownloadState(props);
+  const { id, disabled, headerAction } = props;
+  const { source, hasUnsavedSource, changeSource, error, redirect, busy, download, confirmRedirect } = useDownloadState(props);
   const unavailable = Boolean(busy || disabled);
   const actionLabel = downloadButtonLabel(busy, redirect);
-  const ActionIcon = busy ? LoaderCircleIcon : redirect ? ArrowUpRightIcon : DownloadIcon;
+  const ActionIcon = busy ? LoaderCircleIcon : redirect ? ArrowUpRightIcon : SaveIcon;
   return (
     <Field data-invalid={error !== null} data-disabled={unavailable}>
-      <FieldLabel htmlFor={id}>自定义图片URL</FieldLabel>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <FieldLabel htmlFor={id}>自定义图片URL</FieldLabel>
+          {hasUnsavedSource && <span role="status" className="text-xs text-muted-foreground">未保存</span>}
+        </div>
+        {headerAction}
+      </div>
       <InputGroup data-disabled={unavailable} data-invalid={error !== null}>
         <InputGroupInput id={id} type="url" value={source} autoComplete="off" disabled={unavailable}
           aria-invalid={error !== null} onChange={(event) => changeSource(event.target.value)} />

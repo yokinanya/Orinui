@@ -24,7 +24,7 @@ test('图标编辑以紧凑图标按钮选择上传并将图片URL操作收在�
   await expect(imageUrl).toBeVisible();
   const inputGroup = page.locator('[data-slot="input-group"]');
   await expect(inputGroup.locator('[data-slot="input-group-addon"][data-align="inline-end"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: '下载到本机', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
   await expect(page.getByText('图片和链接保存在本机及备份。', { exact: true })).toHaveCount(0);
 });
 

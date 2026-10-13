@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react';
+
 import { BackgroundLayer } from '@/app/BackgroundLayer';
+import { HomeActions } from '@/app/HomeActions';
 import { useData } from '@/app/data-context';
 import { DataProvider } from '@/app/DataProvider';
 import { useApplyAppearance, useSystemPrefersDark } from '@/app/theme';
@@ -10,12 +13,11 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { DEFAULT_LAYOUT, visibleSlots, type SlotId } from '@/domain/layout';
 import { Clock } from '@/features/clock/Clock';
 import { SearchField } from '@/features/search/SearchField';
-import { SettingsTrigger } from '@/features/settings/SettingsTrigger';
 import { ShortcutsRegion } from '@/features/shortcuts/ShortcutsRegion';
 import { useLocalImage } from '@/hooks/use-local-image';
 import { notifyError } from '@/lib/notify';
 
-function renderSlot(slot: SlotId) {
+function renderSlot(slot: SlotId, editing: boolean) {
   switch (slot) {
     case 'clock':
       return <Clock key={slot} />;
@@ -26,7 +28,7 @@ function renderSlot(slot: SlotId) {
         </div>
       );
     case 'shortcuts':
-      return <ShortcutsRegion key={slot} />;
+      return <ShortcutsRegion key={slot} editing={editing} />;
   }
 }
 
@@ -46,11 +48,12 @@ function LoadingState() {
  * 数据契约 §4：按固定命名插槽的持久化顺序渲染，隐藏的区域不渲染。
  * 初始化失败时显示明确原因，而不是让页面停留在空白状态。
  */
-function HomePage() {
+function HomePage({ editing }: { readonly editing: boolean }) {
   const { status, error, settings, updateLayout } = useData();
   const systemPrefersDark = useSystemPrefersDark();
   const background = settings.appearance.background;
-  const photo = useLocalImage(background.kind === 'photo' ? background.assetId : null, true);
+  const photo = useLocalImage(background.kind === 'photo' ? background.assetId : null,
+    settings.appearance.dynamicColor.enabled);
 
   useApplyAppearance({ appearance: settings.appearance, systemPrefersDark, photoUrl: photo.url, photoSeed: photo.seed });
 
@@ -81,6 +84,7 @@ function HomePage() {
     <main className="flex min-h-dvh flex-col items-center justify-center gap-10 px-6 py-16">
       <div className="motion-home-enter flex w-full max-w-3xl flex-col items-center gap-10">
         {photo.error && <Alert variant="destructive"><AlertTitle>照片无法读取</AlertTitle><AlertDescription>{photo.error}</AlertDescription></Alert>}
+        {photo.seedError && <Alert variant="destructive"><AlertTitle>照片取色失败</AlertTitle><AlertDescription>{photo.seedError}</AlertDescription></Alert>}
         {visibleSlots(settings.layout).length === 0 && <Alert>
           <AlertTitle>主页内容已隐藏</AlertTitle>
           <AlertDescription>恢复默认布局以显示时钟、搜索和网站分组。</AlertDescription>
@@ -88,9 +92,27 @@ function HomePage() {
             恢复主页内容
           </Button>
         </Alert>}
-        {visibleSlots(settings.layout).map(renderSlot)}
+        {visibleSlots(settings.layout).map((slot) => renderSlot(slot, editing))}
       </div>
     </main>
+  );
+}
+
+function HomeContent() {
+  const { status, activeGroupId, settings } = useData();
+  const [editing, setEditing] = useState(false);
+  const canEdit = status === 'ready' && activeGroupId !== null && visibleSlots(settings.layout).includes('shortcuts');
+
+  useEffect(() => {
+    if (!canEdit) setEditing(false);
+  }, [canEdit]);
+
+  return (
+    <>
+      <BackgroundLayer />
+      <HomePage editing={editing} />
+      <HomeActions editing={editing} canEdit={canEdit} onEditingChange={setEditing} />
+    </>
   );
 }
 
@@ -99,9 +121,7 @@ export function App() {
     <TooltipProvider>
       <Toaster>
         <DataProvider>
-          <BackgroundLayer />
-          <HomePage />
-          <SettingsTrigger />
+          <HomeContent />
         </DataProvider>
       </Toaster>
     </TooltipProvider>

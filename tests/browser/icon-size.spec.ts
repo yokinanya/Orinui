@@ -72,7 +72,7 @@ test('取消不写入占比，切换图标类型和替换 SVG 保留占比', asy
     buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#37a1b2"/></svg>'),
   });
   const preview = page.getByRole('img', { name: '图标预览', exact: true });
-  await expectRenderedWidth(preview, 33.6);
+  await expectRenderedWidth(preview, 37.2);
   await expect(page.getByLabel('当前图标占比')).toHaveText('60%');
   await page.getByRole('button', { name: '保存', exact: true }).click();
 

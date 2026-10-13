@@ -17,7 +17,7 @@ export function WebDavSyncPanel() {
     <section aria-labelledby="webdav-sync-title" className="flex flex-col gap-4">
       <div>
         <h3 id="webdav-sync-title" className="text-sm font-medium">WebDAV 同步</h3>
-        <p className="mt-1 text-sm text-muted-foreground">连接自己的 HTTPS WebDAV 存储。云端内容使用端到端加密。</p>
+        <p className="mt-1 text-sm text-muted-foreground">连接自己的 HTTPS WebDAV 存储；云端数据会加密。</p>
       </div>
       <WebDavCredentialsForm connection={connection} />
       <WebDavPlanReview connection={connection} />

@@ -1,5 +1,9 @@
 # UI 设计验证
 
+## 主页操作入口与设置面板（2026-10-14）
+
+编辑按钮移到右下角设置按钮上方；设置从右侧抽屉改为居中模态面板，五个设置分区保留。后续调整为左侧竖向标签、80% 透明表面、隐藏滚动条并移除标题描述。compile/build 通过；本批未运行测试或真实浏览器检查。
+
 记录日期：2026-10-13。对照 [VISUAL-SPEC.md](./VISUAL-SPEC.md) 和用户实际 UI 反馈记录修复。用户整体视觉与交互验收尚未完成，自动回归与开发者检查不代替用户确认。
 
 ## 简洁界面与来源回填（2026-10-13）
@@ -9,6 +13,10 @@
 - 来源链接回填后可主动更新本地图片，异步读取不覆盖输入；来源清除不删除图片或其他草稿字段。已有资源保留来源而网站字段为空时也能读取，保存时同步网站字段。
 
 最终隔离真实扩展截图（本地蓝紫测试 PNG）：[主页](./ui-review/compact-photo-dark-1440.png)、[搜索焦点](./ui-review/compact-search-focused-1440.png)、[横屏编辑](./ui-review/compact-editor-landscape-1280.png)、[内置图标选择](./ui-review/compact-icon-picker-1280.png)、[375px 编辑](./ui-review/compact-editor-portrait-375.png)。完整用户视觉验收仍待确认。
+
+## 搜索输入状态（2026-10-14）
+
+按用户反馈移除输入/聚焦时的底部白线；保持半透明表面与透明外框。自动回归断言已同步，但本批未执行测试；compile/build 通过。
 
 ## 用户反馈修复（2026-10-12）
 
@@ -62,7 +70,7 @@ UI 修复批次验证（2026-10-11）：`pnpm compile`、26 文件/247 项单元
 | P2 | 照片默认 55% 遮罩未保证小字可读性：浅色主题+黑图的日期/网站名称 2.626:1，深色主题+白图为 2.580:1；黑白条纹的暗区也复现 | [background-style.ts:51](../src/features/appearance/background-style.ts)、[apply-appearance.ts:56](../src/app/apply-appearance.ts)；[条纹背景截图](./ui-review/photo-stripes-light-mask55.png) |
 | P2 | 关闭动态配色后，主页前景只跟随主题：浅色+黑纯色时钟 1.157:1，深色+白纯色时钟 1.120:1，几乎不可读 | [apply-appearance.ts:48](../src/app/apply-appearance.ts)；[黑背景截图](./ui-review/solid-black-dynamic-off.png) |
 | P2 | 强反差渐变采用整屏统一前景；黑→白、白→黑时，部分网站名称最低 1.259:1。即使动态配色开启，纯色与主题相反时，当前分组标签仅 2.982:1/1.561:1，编辑图标仅 1.270:1/1.158:1 | [background-style.ts:78](../src/features/appearance/background-style.ts)、[SortableGroupTab.tsx:33](../src/features/groups/SortableGroupTab.tsx)、[GroupTabs.tsx:73](../src/features/groups/GroupTabs.tsx)；[渐变截图](./ui-review/gradient-black-white.png) |
-| P2 | 320px 视口中布局页“24 小时”被裁切；抽屉宽 240px，面板 `scrollWidth=265`、`clientWidth=240`，需横向移动才能看到完整选项 | [ClockSettingsPanel.tsx:16](../src/features/settings/ClockSettingsPanel.tsx)、[SettingsSheet.tsx:30](../src/features/settings/SettingsSheet.tsx)；[布局截图](./ui-review/drawer-布局-320.png) |
+| P2 | 320px 视口中布局页“24 小时”被裁切；当时抽屉宽 240px，面板 `scrollWidth=265`、`clientWidth=240`，需横向移动才能看到完整选项 | [ClockSettingsPanel.tsx:16](../src/features/settings/ClockSettingsPanel.tsx)、[SettingsPanel.tsx](../src/features/settings/SettingsPanel.tsx)；[布局截图](./ui-review/drawer-布局-320.png) |
 | P3 | 320px 取色弹层宽 256px，左边界 x40，抽屉左边界 x80；弹层越出抽屉 40px。控件仍在视口内可操作，属于面板布局一致性问题 | [ColorPicker.tsx:89](../src/features/appearance/ColorPicker.tsx)；[取色截图](./ui-review/color-picker-320.png) |
 | P3 | 中文界面中抽屉和对话框的关闭按钮可访问名称为英文 `Close`；设置 tabs 还使用 `transition-all`，应收窄为实际过渡属性 | [sheet.tsx:78](../src/components/ui/sheet.tsx)、[dialog.tsx:75](../src/components/ui/dialog.tsx)、[tabs.tsx:58](../src/components/ui/tabs.tsx) |
 
@@ -74,7 +82,7 @@ UI 修复批次验证（2026-10-11）：`pnpm compile`、26 文件/247 项单元
 - 网站网格：1440/768/640px 为 6 列，375px 为 3 列，320px 为 2 列；页面自然纵向滚动，没有主页横向溢出，固定设置入口可见。
 - 长网站名称按格子宽度截断，但链接保留完整可访问名称；多分组的标签行在窄屏可横向滚动。编辑模式的操作按钮与网站/分组保持同一整体。
 - `/` 聚焦搜索；初始没有自动聚焦。`Shift+F10` 在网站链接上打开实际菜单，编辑等操作可见。
-- 设置抽屉初始焦点进入选中的 tab；连续 35 次 Tab 均保留在抽屉内。Escape 关闭后回到设置按钮，768/375/320px 都复现。
+- 设置面板初始焦点进入选中的 tab；连续 35 次 Tab 均保留在面板内。Escape 关闭后回到设置按钮，768/375/320px 都复现。
 - 320px 网站对话框可用 Tab 到达“保存”；该按钮实测位于 y696–732、视口高 800px，滚动后完整可见。四种对话框尺寸的内容均能纵向滚动。
 - 原生 200% 缩放下主页与布局页无横向溢出；长面板纵向滚动。该检查不代替所有设备/视口组合。
 - 减少动态效果时，主页使用 `home-content-fade`、`transform=none`；抽屉过渡缩短。分组切换的快速操作与减少位移已有 27 项网页回归套件中的专项覆盖。

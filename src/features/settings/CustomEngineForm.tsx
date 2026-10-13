@@ -31,7 +31,7 @@ export function CustomEngineForm() {
           <FieldLabel htmlFor="engine-template">HTTPS 搜索模板</FieldLabel>
           <Input id="engine-template" value={template} placeholder="https://example.com/search?q={query}"
             onChange={(event) => setTemplate(event.target.value)} />
-          <FieldDescription>模板必须是 HTTPS，并在查询参数值中包含一个 {'{query}'}。</FieldDescription>
+          <FieldDescription>使用 HTTPS，并在搜索词位置填入 {'{query}'}。</FieldDescription>
           {error && <FieldError role="alert">{error}</FieldError>}
         </Field>
         <Button type="submit" disabled={settings.search.customEngines.length >= LIMITS.customEngines}>添加搜索引擎</Button>

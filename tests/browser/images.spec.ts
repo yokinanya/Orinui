@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { setPhotoMask } from './contrast-helpers';
 import { readFile } from 'node:fs/promises';
 
 const svg = (content = '<rect width="40" height="20" fill="#37a1b2"/>') => ({
@@ -27,21 +28,21 @@ async function rasterFile(page: Page, input: { readonly mime: string; readonly w
 test('照片上传、动态色、遮罩与刷新持久化', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(svg());
-  await expect(page.getByLabel('照片遮罩强度（%）')).toHaveValue('55');
-  await page.getByLabel('照片遮罩强度（%）').fill('80');
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('55%');
+  await setPhotoMask(page, 80);
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper-mask'))).toContain('0.8');
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--primary'))).not.toBe('');
   await page.reload();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await expect(page.getByLabel('照片遮罩强度（%）')).toHaveValue('80');
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('80%');
 });
 
 test('危险 SVG 被明确拒绝，不修改现有照片', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(svg());
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   const previous = await page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'));
   await page.getByLabel('上传照片').setInputFiles(svg('<script>alert(1)</script>'));
@@ -86,7 +87,7 @@ for (const content of [
     await page.getByRole('button', { name: '设置', exact: true }).click();
     await page.getByLabel('上传照片').setInputFiles(svg(content));
     await expect(page.getByText(/SVG (含不支持|不允许)/)).toBeVisible();
-    await expect(page.getByLabel('照片遮罩强度（%）')).toHaveCount(0);
+    await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toHaveCount(0);
   });
 }
 
@@ -229,8 +230,8 @@ test('分组颜色菜单写入对应语义角色', async ({ page }) => {
 test('带照片的 JSON 备份可恢复本地图片与外观设置', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(svg());
-  await expect(page.getByLabel('照片遮罩强度（%）')).toBeVisible();
-  await page.getByLabel('照片遮罩强度（%）').fill('70');
+  await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
+  await setPhotoMask(page, 70);
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', { name: '导出 JSON' }).click(),
@@ -248,5 +249,5 @@ test('带照片的 JSON 备份可恢复本地图片与外观设置', async ({ pa
   await page.reload();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await expect(page.getByLabel('照片遮罩强度（%）')).toHaveValue('70');
+  await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('70%');
 });

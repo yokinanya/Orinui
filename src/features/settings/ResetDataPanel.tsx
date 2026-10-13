@@ -19,14 +19,14 @@ export function ResetDataPanel() {
   };
   return (
     <FieldGroup>
-      <FieldDescription>清除网站、分组、背景图片和设置，并恢复空白默认分组。扩展本身不受影响。</FieldDescription>
+      <FieldDescription>清除所有本地数据，Chrome 扩展会保留。</FieldDescription>
       {error && <FieldError role="alert">{error}</FieldError>}
       <Button type="button" variant="destructive" onClick={() => setOpen(true)}>重置本地数据</Button>
       <AlertDialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>永久删除本地数据？</AlertDialogTitle>
-            <AlertDialogDescription>网站、分组、自定义背景和所有设置都会删除，并创建一个空的「常用」分组。</AlertDialogDescription>
+            <AlertDialogDescription>本机网站、分组、背景和设置都会删除，并恢复空白的「常用」分组。</AlertDialogDescription>
           </AlertDialogHeader>
           {error && <FieldError role="alert">{error}</FieldError>}
           <AlertDialogFooter>

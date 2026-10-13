@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { parseShortcutIcon, SHORTCUT_ICON_OCCUPANCY, shortcutIconOccupancy } from '@/domain/shortcut-icon';
 
 describe('shortcut icon occupancy', () => {
-  it('uses a 100% default and omits an explicit default', () => {
+  it('uses a 75% default and omits an explicit default', () => {
     expect(shortcutIconOccupancy(parseShortcutIcon({ kind: 'letter' }))).toBe(SHORTCUT_ICON_OCCUPANCY.default);
-    expect(parseShortcutIcon({ kind: 'asset', assetId: 'icon-1', occupancy: 100 }))
+    expect(parseShortcutIcon({ kind: 'asset', assetId: 'icon-1', occupancy: 75 }))
       .toEqual({ kind: 'asset', assetId: 'icon-1' });
   });
 
   it('preserves valid non-default occupancy on every icon variant', () => {
-    expect(parseShortcutIcon({ kind: 'letter', occupancy: 75 })).toEqual({ kind: 'letter', occupancy: 75 });
+    expect(parseShortcutIcon({ kind: 'letter', occupancy: 76 })).toEqual({ kind: 'letter', occupancy: 76 });
     expect(parseShortcutIcon({ kind: 'built-in', iconId: 'heart', occupancy: 50 }))
       .toEqual({ kind: 'built-in', iconId: 'heart', occupancy: 50 });
     expect(parseShortcutIcon({ kind: 'asset', assetId: 'icon-1', occupancy: 64 }))
@@ -25,9 +25,9 @@ describe('shortcut icon occupancy', () => {
     expect(parseShortcutIcon({ kind: 'built-in', iconId: 'heart', size: 30 }))
       .toEqual({ kind: 'built-in', iconId: 'heart', occupancy: 63 });
     expect(parseShortcutIcon({ kind: 'asset', assetId: 'icon-1', size: 48 }))
-      .toEqual({ kind: 'asset', assetId: 'icon-1' });
+      .toEqual({ kind: 'asset', assetId: 'icon-1', occupancy: 100 });
     expect(parseShortcutIcon({ kind: 'asset', assetId: 'icon-2', size: 64 }))
-      .toEqual({ kind: 'asset', assetId: 'icon-2' });
+      .toEqual({ kind: 'asset', assetId: 'icon-2', occupancy: 100 });
   });
 
   it.each([23, 65, 24.5, Number.NaN, '32'])('rejects invalid legacy size %s', (size) => {

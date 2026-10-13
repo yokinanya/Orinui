@@ -16,7 +16,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 /**
  * 主页搜索入口。
  *
- * 视觉规格：宽而克制的半透明磨砂输入框，聚焦时强化边界。
+ * 视觉规格：宽而克制的半透明磨砂输入框，聚焦时保持表面，不添加底部线条。
  * 初始不自动聚焦，点击或按 `/` 聚焦；搜索建议默认关闭，因此本阶段不发起任何网络请求。
  */
 export function SearchField() {
@@ -55,7 +55,7 @@ export function SearchField() {
         submit();
       }}
     >
-      <InputGroup className="home-readable-surface h-12 rounded-2xl border-transparent backdrop-blur-md"
+      <InputGroup className="home-readable-surface h-12 rounded-2xl border border-primary/30 backdrop-blur-md"
         style={{ backgroundColor: 'var(--home-readable-search-surface, var(--glass))' }}>
         <InputGroupAddon className="pl-4">
           <SearchIcon className="home-readable-muted text-glass-foreground-muted" />

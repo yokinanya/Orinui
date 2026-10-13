@@ -1,0 +1,7 @@
+.settings-panel-scroll {
+  scrollbar-width: none;
+}
+
+.settings-panel-scroll::-webkit-scrollbar {
+  display: none;
+}

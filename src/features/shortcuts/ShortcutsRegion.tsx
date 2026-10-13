@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useData } from '@/app/data-context';
 import type { Shortcut } from '@/domain/shortcut';
@@ -12,9 +12,9 @@ import { browserContentMotion } from '@/platform/content-motion';
  * 快捷方式区域：分组标签 + 网站网格，并承载主页的编辑模式。
  *
  * 网站与分组的操作都从主页进入：右键任意网站或分组标签即可调出操作菜单，
- * 分组标签行末尾的「编辑」按钮切换到可拖动排序、带「＋ 添加网站」格子的编辑模式。
+ * 主页右下角的编辑按钮切换到可拖动排序、带「＋ 添加网站」格子的编辑模式。
  */
-export function ShortcutsRegion() {
+export function ShortcutsRegion({ editing }: { readonly editing: boolean }) {
   const { shortcuts, activeGroupId, loadedShortcutsGroupId } = useData();
   const { contentRef, isWaiting } = useGroupContentMotion({
     activeGroupId,
@@ -22,14 +22,8 @@ export function ShortcutsRegion() {
     motion: browserContentMotion,
     shortcutCount: shortcuts.length,
   });
-  const [editing, setEditing] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [target, setTarget] = useState<Shortcut | null>(null);
-
-  // 分组被删空后编辑模式没有可操作的对象，主动退出避免留下无意义的空状态
-  useEffect(() => {
-    if (!activeGroupId) setEditing(false);
-  }, [activeGroupId]);
 
   const openCreate = () => {
     setTarget(null);
@@ -43,7 +37,7 @@ export function ShortcutsRegion() {
 
   return (
     <section aria-label="快捷方式" className="flex w-full flex-col items-center gap-6">
-      <GroupTabs editing={editing} onEditingChange={setEditing} />
+      <GroupTabs editing={editing} />
 
       <ShortcutGroupContent activeGroupId={activeGroupId} contentRef={contentRef} editing={editing}
         isWaiting={isWaiting} onAdd={openCreate} onEdit={openEdit} shortcuts={shortcuts} />

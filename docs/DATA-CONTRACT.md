@@ -74,9 +74,9 @@
 
 ### 2.6 网站图标占比
 
-- `ShortcutIcon.occupancy` 为可选整数百分比，范围 50–100、步长 1；省略时按 100% 显示。主页外框固定 48px，编辑预览外框固定 64px，滑块只改变边框内图案的尺寸。
-- 默认值 100% 采用规范形式：序列化时省略 `occupancy`；显式值只保存用户偏离默认后的选择。没有该字段的旧记录继续按 100% 显示。
-- 当前 IndexedDB 版本 4 把旧版 `ShortcutIcon.size` 像素值换算为 `round(size / 48 * 100)` 并限制在 50–100%，同时迁移本地同步寄存器。JSON 版本 1 和同步快照版本 1 的旧 `size` 输入也按同一公式归一化；新导出只写 `occupancy`。旧尺寸大于 48px 时归一化为 100%。
+- `ShortcutIcon.occupancy` 为可选整数百分比，范围 50–100、步长 1；省略时按 75% 显示。主页外框固定 48px，编辑预览外框固定 64px。两处以外框内可绘制区域为基准应用相同占比；预览只扣除 1px 边框，不再额外缩小图案。
+- 默认值 75% 采用规范形式：序列化时省略 `occupancy`；显式值只保存用户偏离默认后的选择。没有该字段的记录按当前默认 75% 显示。
+- 当前 IndexedDB 版本 4 把旧版 `ShortcutIcon.size` 像素值换算为 `round(size / 48 * 100)` 并限制在 50–100%，同时迁移本地同步寄存器。JSON 版本 1 和同步快照版本 1 的旧 `size` 输入也按同一公式归一化；新导出只写 `occupancy`。旧尺寸大于 48px 时归一化为 100%；换算结果正好 75% 时按新默认值省略。
 - 占比与图标类型/资源引用共同构成图标原子字段，在同步中使用同一字段寄存器合并；不把占比拆成独立冲突字段。
 - 占比改变只影响固定外框中的图案显示，不修改图片 Blob。编辑表单中的实时预览是透明底草稿，外框用细边框标识；取消不保存，保存时与网站数据一起写入。
 - `ShortcutIcon.color` 是可选的小写 `#rrggbb` 单色覆盖，只能用于引用 `image/svg+xml` 资源的 asset 图标；省略时显示 SVG 原色。设置颜色后通过本地 CSS mask 整体单色渲染，清除颜色恢复原色。PNG/WebP、文字/内置图标和背景不接受该字段。
@@ -105,9 +105,12 @@ JPEG、PNG、WebP，以及受限静态 SVG。SVG 只在满足安全子集时被�
 
 ### 5.2 安全 SVG 子集
 
-- 必须为静态 SVG：拒绝脚本、`foreignObject`、事件属性、外部引用/字体、CSS `url()` 与外部样式表。
-- 元素与属性只允许 `src/platform/svg.ts` 的显式白名单；除 SVG 命名空间声明外拒绝其他 namespace 属性。允许 XML `xml:space` 属性，值仅接受 `default` 或 `preserve`。
-- 允许元素：`svg`、`g`、`path`、`rect`、`circle`、`ellipse`、`line`、`polyline`、`polygon`、`title`、`desc`。允许几何/显示属性仅为 `viewBox`、`width`、`height`、`x`、`y`、`x1`、`x2`、`y1`、`y2`、`cx`、`cy`、`r`、`rx`、`ry`、`d`、`points`、`fill`、`fill-opacity`、`fill-rule`、`stroke`、`stroke-width`、`stroke-opacity`、`stroke-linecap`、`stroke-linejoin`、`stroke-miterlimit`、`stroke-dasharray`、`stroke-dashoffset`、`opacity`、`transform`、`preserveAspectRatio`、`version`、`color`、`clip-rule`、`vector-effect`。不接受 `style`、`href`、CSS/资源引用及其他未列属性。
+- 必须为静态 SVG：拒绝脚本、`foreignObject`、事件属性、外部引用/字体与外部样式表。`url(#id)` 仅允许引用同一文件内的已验证资源，不允许外部 URL、data URL、CSS 变量或转义。
+- 元素与属性只允许 `src/platform/svg.ts` 的显式白名单。允许 SVG/XLink 命名空间声明；`xlink:href` 仅支持内部引用并归一化为 `href`，两者同时存在时必须一致。允许 XML `xml:space` 属性，值仅接受 `default` 或 `preserve`；其他 namespace 属性拒绝。
+- 允许几何元素和静态资源元素：`svg`、`g`、`path`、`rect`、`circle`、`ellipse`、`line`、`polyline`、`polygon`、`title`、`desc`，以及 `defs`、`linearGradient`、`radialGradient`、`stop`、`clipPath`、`mask`、`pattern`、`use`、`symbol`、`style`。完整属性白名单见 `src/platform/svg.ts`；新增渐变、蒙版、裁剪、平铺图案、id/class 及内部引用属性。资源引用检查目标存在、唯一、类型匹配及无循环；不下载依赖资源。
+- 内联 `style` 支持 `src/platform/svg-style.ts` 列出的静态展示属性，完整解析并按浏览器 CSS 值语法检查后转换为展示属性；重复声明与 `!important` 保持原优先级。根节点另接受并保留 `flex:none`、`line-height:1`。不支持的声明、CSS 注释、转义或动态变量明确报错，不丢弃未知样式。
+- 内嵌 `style` 样式表（可声明 `type="text/css"`）支持简单元素/class/id 选择器、同一元素的组合选择器及逗号列表。先解析全部规则，再按 important、内联优先级、选择器权重和声明顺序转换为属性，移除已完整转换的样式表。媒体查询、伪类、组合器、外部样式、嵌套规则及其他未支持语法明确拒绝；不是通用 CSS 引擎。
+- 根节点正数 `em`、`rem`、百分比尺寸必须提供有效 `viewBox`，按对应 viewBox 宽高归一化；不依赖宿主页字体或容器尺寸。缺少有效 viewBox 时明确失败。数值与 px 尺寸规则保留。
 - 拒绝 DTD、实体声明和非 XML 声明的处理指令；属性值不接受 `url()`、反斜线或控制字符。
 - SVG 原文件 ≤10 MiB；需要栅格化时输出 ≤1024×1024 且 ≤4 MP。保留的 SVG 图标不经画布转换。
 - 背景 SVG 在本地画布栅格化为 PNG；图标 SVG 通过同一白名单后规范化为 `image/svg+xml`：显式设置最长边不超过 1024 的宽高；缺少 `viewBox` 时按原尺寸补 `0 0 <width> <height>`，再由 XMLSerializer 序列化。保留白名单内的矢量几何与展示属性，不保证原字节相同。无法可靠安全处理时明确报错，提示改用 PNG/WebP。
@@ -129,7 +132,7 @@ JPEG、PNG、WebP，以及受限静态 SVG。SVG 只在满足安全子集时被�
 
 ### 5.5 图标直链下载
 
-- Dashboard Icons 可作为用户参考的外链，不内置其目录、不调用其接口；用户粘贴图片链接并主动下载。
+- 网站图标编辑的 URL 栏旁提供 Dashboard Icons 外链；不内置目录、不调用接口，用户自行复制链接并主动保存。
 - 用户也可主动提供例如 `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/x.svg` 的静态 SVG 直链；不会自动重新下载既有图标，只有用户重新选择并下载 SVG 后才能使用 SVG 单色功能。既有 PNG 位图不能转换回矢量。
 - 接受任意公网 HTTPS 主机；HTTP 仅允许主机名严格等于 `localhost`。
 - 拒绝明显本机/回环 IP 与内网主机名（尽力校验，见 §9 限制）。每次请求均阻止浏览器自动跟随重定向；读取响应的跳转地址后，重新校验协议、主机及凭据。通过校验的同来源跳转可继续；跨来源时先展示目标，用户再次点击后才对该来源申请权限并请求，循环跳转明确报错。
@@ -140,7 +143,7 @@ JPEG、PNG、WebP，以及受限静态 SVG。SVG 只在满足安全子集时被�
 - 下载成功后本地化保存；实际下载完成的已批准来源 URL 写入记录，界面可提供来源链接，不保存许可字段。
 - 再次打开图片设置时回填已保存来源，只有用户点击下载才更新本地图片；显示、刷新和回填均不发网络请求。输入新地址未下载/保存时仍是界面草稿，不给当前本地图片改写来源。
 - 网站图标编辑以所引用资源的实际来源回填，保存时同步网站来源字段；已有资源保留来源但网站字段为空的记录也可读取。清除来源成功后输入同步清空，保留图片和其他未保存字段；异步读取不能覆盖用户正在输入的地址。
-- 上传图标按钮与首字、内置图标选择按钮同行；主页图标外框固定 48px，图案占比滑块为 50–100%、步长 1%、默认 100%，编辑预览为固定 64px、透明底和细边框。取消编辑不写入，保存/刷新/JSON 导入导出及加密同步均携带该设置。
+- 上传图标按钮与首字、内置图标选择按钮同行；主页图标外框固定 48px，图案占比滑块为 50–100%、步长 1%、默认 75%，编辑预览为固定 64px、透明底和细边框。取消编辑不写入，保存/刷新/JSON 导入导出及加密同步均携带该设置。
 
 ### 5.6 资源清理
 
@@ -171,7 +174,7 @@ JPEG、PNG、WebP，以及受限静态 SVG。SVG 只在满足安全子集时被�
 - 完整替换：先展示汇总概览（分组数、网站数、图片数、主题与引擎），再二次确认。
 - 先完整校验整份文件，再以单一事务替换；任一错误（未知新版本、非法地址、超限、结构损坏、未知字段）拒绝整份文件，现有数据保持不变。
 - 当前只接受 JSON 备份版本 1；没有声明支持其他版本的旧格式或通用备份迁移器。版本 1 内的旧 `ShortcutIcon.size` 会按 §2.6 显式归一化；未知版本拒绝，不降级导入。IndexedDB 数据库版本与 JSON 备份版本独立。
-- `ShortcutIcon.occupancy` 与 SVG 专用 `color` 是 JSON 版本 1 中的可选已知字段；IndexedDB 升至版本 4，JSON 仍为版本 1。缺少 `occupancy` 时按 100% 显示，缺少 `color` 时显示 SVG 原色。旧 JSON 中的 `size` 被换算为占比；新导出只写 `occupancy`。较旧构建可能把新字段按未知字段拒绝，不宣称跨版本向下兼容。
+- `ShortcutIcon.occupancy` 与 SVG 专用 `color` 是 JSON 版本 1 中的可选已知字段；IndexedDB 为版本 4，JSON 为版本 1。缺少 `occupancy` 时按 75% 显示，缺少 `color` 时显示 SVG 原色。旧 JSON 中的 `size` 被换算为占比；新导出只写偏离 75% 默认值的 `occupancy`。较旧构建可能把新字段按未知字段拒绝，不宣称跨版本向下兼容。
 - 不根据来源 URL 重新下载图片，只恢复内嵌图片与来源记录。
 - 站点权限不随备份恢复，导入不能授予浏览器权限。已配置同步时，完整替换给旧实体生成墓碑；已登记过的导入 ID 与引用一起更换，详见 SYNC-PROTOCOL.md。
 
@@ -217,7 +220,7 @@ MVP 不请求联网建议，不存储查询历史；只在用户提交时打开�
 - Dexie 是本地工作数据源。Google Drive appDataFolder 或 HTTPS WebDAV 保存加密的每设备完整快照和独立媒体对象；一个同步库一次只使用一个提供方。Chrome storage.sync 不承载数据。
 - 同步状态、设备身份、字段级逻辑版本、删除墓碑和本地 CryptoKey 存放在独立 Dexie 表，不进入用户可见领域记录或普通 JSON 备份。
 - 字段级冲突以 Lamport 逻辑时钟及设备 ID 确定胜者；同 ID 删除墓碑优先且 ID 不复用。位置合并后确定性排序并重新编号。
-- `ShortcutIcon.occupancy` 与 SVG 专用 `color` 是快照版本 1 的可选已知字段，不提升快照版本；旧快照缺省显示 100%/原色，旧 `size` 值导入时换算为占比。含新字段的新快照会被旧构建按未知字段明确拒绝，不声称向下兼容。占比、颜色与图标类型/引用共享同一原子字段寄存器。
+- `ShortcutIcon.occupancy` 与 SVG 专用 `color` 是快照版本 1 的可选已知字段，不提升快照版本；缺省占比按当前默认 75% 显示，缺省颜色显示 SVG 原色，旧 `size` 值导入时换算为占比。含新字段的新快照会被旧构建按未知字段明确拒绝，不声称向下兼容。占比、颜色与图标类型/引用共享同一原子字段寄存器。
 - 云端快照与媒体统一 AES-256-GCM 加密。WebDAV 根目录的 `vault.json` 只含版本、vaultId 和库描述密文；描述密文使用 `kind=snapshot`、`objectId=vaultId` 的 AAD。每设备快照位于 `vaults/<vaultId>/devices/<deviceId>/snapshot.enc`，媒体位于 `vaults/<vaultId>/assets/<assetId>.enc`。恢复密钥为本地随机生成的 256-bit 密钥，用户保存并手动带到新设备；密钥和提供方凭据不上传。
 - 首次连接先合并，不静默覆盖本地用户数据。无效远端数据不得部分应用；候选和媒体完整校验后，通过单一 IndexedDB 事务提交。随后发布失败保留完整本机合并和新编辑，明确失败/待同步，不伪造跨本机与远端的原子回滚。
 - sync_state 的本机基线、运行 ID/阶段/发布确认和最近成功记录不进入快照或 JSON 备份。完整接收后记住首次合并基线，即使发布失败也不重复提升旧字段；断开/重连后的旧运行不改新连接状态。

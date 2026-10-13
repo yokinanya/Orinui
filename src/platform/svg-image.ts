@@ -23,13 +23,19 @@ function requireDimension(value: number | undefined): number {
   return value;
 }
 
+function readDimension(source: string | null, viewBoxDimension: number | undefined): number {
+  if (source === null) return requireDimension(viewBoxDimension);
+  if (/^(?:\d+(?:\.\d+)?|\.\d+)(?:em|rem|%)$/.test(source) && Number.parseFloat(source) > 0) {
+    return requireDimension(viewBoxDimension);
+  }
+  return requireDimension(Number(source.replace(/px$/, '')));
+}
+
 function svgDimensions(root: SVGSVGElement): { readonly width: number; readonly height: number } {
   const box = readViewBox(root);
   const rawWidth = root.getAttribute('width');
   const rawHeight = root.getAttribute('height');
-  const width = rawWidth === null ? box?.[WIDTH_COMPONENT] : Number(rawWidth.replace(/px$/, ''));
-  const height = rawHeight === null ? box?.[HEIGHT_COMPONENT] : Number(rawHeight.replace(/px$/, ''));
-  return { width: requireDimension(width), height: requireDimension(height) };
+  return { width: readDimension(rawWidth, box?.[WIDTH_COMPONENT]), height: readDimension(rawHeight, box?.[HEIGHT_COMPONENT]) };
 }
 
 /** 保留已验证的几何内容，统一尺寸，使上传、下载、备份与同步使用相同的静态 SVG。 */
