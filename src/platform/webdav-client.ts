@@ -1,8 +1,14 @@
 import { parseWebDavCredentials, validateWebDavIdentity } from '@/domain/webdav/validation';
+import type { WebDavConsistencyMode } from '@/domain/webdav/configuration';
 import { WEBDAV_HTTP_STATUS } from '@/platform/webdav-http';
+
+const DAV_ENDPOINT_ROOT = /(?:^|\/)dav\/$/;
+const APP_COLLECTION_NAME = 'Orinui';
+const NUTSTORE_ORIGIN = 'https://dav.jianguoyun.com';
 
 export interface WebDavInput {
   readonly credentials: { readonly url: string; readonly username: string; readonly password: string };
+  readonly consistencyMode?: WebDavConsistencyMode;
   readonly fetch: typeof fetch;
   readonly parseXml: (source: string) => Document;
 }
@@ -10,6 +16,9 @@ export interface WebDavInput {
 
 export interface WebDavClient {
   readonly root: URL;
+  readonly isNutstore: boolean;
+  readonly consistencyMode: WebDavConsistencyMode;
+  readonly autoCreateRootCollection: boolean;
   readonly parseXml: WebDavInput['parseXml'];
   url(...segments: readonly string[]): URL;
   request(url: URL, init?: RequestInit): Promise<Response>;
@@ -25,9 +34,20 @@ function encodeCredentials(username: string, password: string): string {
 export function createWebDavClient(input: WebDavInput): WebDavClient {
   const credentials = parseWebDavCredentials(input.credentials);
   const root = new URL(credentials.url);
+  const consistencyMode = input.consistencyMode ?? 'strong-etag';
+  const isNutstore = root.origin === NUTSTORE_ORIGIN;
+  const isDavEndpointRoot = DAV_ENDPOINT_ROOT.test(root.pathname);
+  if (isDavEndpointRoot) {
+    root.pathname = `${root.pathname}${APP_COLLECTION_NAME}/`;
+  }
+  // A bare /dav endpoint uses an app-specific collection to avoid writing into the service root.
+  const autoCreateRootCollection = isDavEndpointRoot;
   const authorization = encodeCredentials(credentials.username, credentials.password);
   return {
     root,
+    isNutstore,
+    consistencyMode,
+    autoCreateRootCollection,
     parseXml: input.parseXml,
     url(...segments) {
       const path = segments.map((segment) => encodeURIComponent(validateWebDavIdentity(segment, '路径'))).join('/');

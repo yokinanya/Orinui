@@ -1,8 +1,8 @@
 # 跨设备同步设计
 
-决策日期：2026-10-11；实施进度更新于 2026-10-13。同步范围、提供方与安全策略已定；基础层、手动协调器、WebDAV 适配器、连接界面与事件调度已实现。WebDAV 通过受控 localhost HTTPS 服务的真实扩展双配置文件审计；Drive、第三方 WebDAV 服务与权限弹窗仍未验收/接入。
+决策日期：2026-10-11；进度与优先级更新于 2026-10-14。同步范围、提供方与安全策略已定；基础层、手动协调器、WebDAV 适配器、连接界面与事件调度已实现。WebDAV 通过受控 localhost HTTPS 服务的真实扩展双配置文件审计；真实第三方服务和用户设备仍待验收。现有功能扩展权限已由用户确认，记录见 VERIFICATION.md；Google Drive 适配器与 OAuth 延后，不阻塞当前 WebDAV 阶段。
 
-当前数据库为版本 3，保留四张领域表并新增三张同步表。已有公共对象端口、手动协调及本机运行记录；WebDAV 已接入，Google OAuth/Drive 尚未接入。WebDAV 凭据配置保存在当前配置文件 `chrome.storage.local`，不在 Dexie 同步状态中。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调顺序/边界见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，WebDAV 细节见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。实施进度见 [TASKS.md](./TASKS.md)，真实检查结果见 [VERIFICATION.md](./VERIFICATION.md)。
+当前数据库为版本 4，保留四张领域表和三张同步表。已有公共对象端口、手动协调及本机运行记录；WebDAV 已接入，Google OAuth/Drive 尚未接入且已延期。WebDAV 凭据配置保存在当前配置文件 `chrome.storage.local`，不在 Dexie 同步状态中。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调顺序/边界见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，WebDAV 细节见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。实施进度见 [TASKS.md](./TASKS.md)，真实检查结果见 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 目标与范围
 
@@ -11,11 +11,11 @@
 - 同步是可选功能。用户明确启用并配置提供方后，扩展在本地修改后及扩展打开时同步；同时提供手动同步入口。不启用定时轮询。
 - 不创建 Orinui 账号或自营同步后端。用户使用自己的 Google Drive 或 WebDAV 服务账号。
 - 不使用 Chrome `storage.sync` 保存正文或通知标记。图片和数据都由所选外部提供方承载。
-- 一个同步库一次选择一个提供方；不双写。更换提供方需要用户发起迁移。当前仅 WebDAV 已接入，Drive 仍是已定方案。
+- 一个同步库一次选择一个提供方；不双写。更换提供方需要用户发起迁移。当前仅 WebDAV 已接入，Drive 方案保留但实施延后。
 
 ## 提供方决策
 
-支持两个提供方，默认推荐 Google Drive `appDataFolder`：
+长期方案包含两个提供方，原设计推荐 Google Drive `appDataFolder`；当前阶段按用户决定先推进 WebDAV，Drive 适配器与授权验收延期：
 
 1. **Google Drive appDataFolder**：使用 Chrome Identity OAuth 和 `drive.appdata` scope。文件仅由 Orinui 应用访问，Drive 界面中隐藏。启用授权必须由设置页的清晰按钮发起；不得在扩展首次启动时弹授权。Drive 账号是用户自己的第三方账号，不是 Orinui 账号。用户在 Drive 侧删除应用数据后，云端同步副本可能被删除，本地数据与 JSON 备份不受影响。
 2. **WebDAV**：供 NAS、Nextcloud 等自托管服务使用。只接受 HTTPS；用户输入服务器 URL 与账号/应用密码，不把凭据写入 URL。仅请求用户配置的精确源权限。凭据只存于当前 Chrome 配置文件的本地扩展存储，不进入 Dexie 同步快照或 JSON 备份。RFC 4918 不要求 WebDAV 服务器支持锁，因此协议不依赖 LOCK。
@@ -68,14 +68,14 @@ WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；�
 
 字段版本、耦合寄存器、严格格式、墓碑/撤销、首次合并、来源 URL 和本地导入/重置规则已经落实，详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
-公共对象接口、条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。WebDAV 对象适配器和连接界面已接入。预览只展示本地/远端数量，不冻结合并候选；用户确认时重新读取远端并重新计算计划。连接确认取得本机锁后再次校验 vault/device 身份，等待期间身份变化会丢弃旧准备数据和界面计划。所有 HTTP 重定向一律拒绝，避免把 Basic 认证转发到其他 origin。Drive 授权/适配器、设备集合、远端媒体回收与密钥轮换仍待实施。
+公共对象接口、提供方条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。WebDAV 默认使用强 ETag 条件发布；坚果云模板使用单独的 SHA-256 读回兼容模式，其非原子并发边界会在确认界面说明。预览只展示本地/远端数量，不冻结合并候选；用户确认时重新读取远端并重新计算计划。连接确认取得本机锁后再次校验 vault/device 身份，等待期间身份变化会丢弃旧准备数据和界面计划。所有 HTTP 重定向一律拒绝，避免把 Basic 认证转发到其他 origin。设备集合、远端媒体回收与密钥轮换尚待细化协议及 MVP 边界，之后再安排实现；Drive 授权/适配器延期。下一阶段计划见 TASKS.md。
 
 ## 验收状态
 
 - 已有基础层自动检查覆盖：不同字段并发修改、同字段决胜、删除/撤销、跨组移动、排序、首次合并与事务回滚。
 - 已有加密检查覆盖恢复密钥导入、不可导出密钥持久化、错误密钥、密文/对象身份篡改、未知版本及媒体校验；完整密钥轮换尚未实现。
 - WebDAV 已在受控本机 HTTPS 服务的真实扩展双配置文件中验证新建库、恢复密钥确认/导入、首次合并、图片还原、修改发布、手动接收、503 失败恢复及断开保留本地数据；该 fixture 不代表第三方服务兼容。
-- 待真实扩展和服务端：Google OAuth/appDataFolder、第三方 HTTPS WebDAV 兼容性、浏览器来源权限弹窗/拒绝/撤销、真实用户服务器上的双配置文件还原及权限撤销。普通网页预览不替代这些检查。
+- 待真实服务和设备：第三方 HTTPS WebDAV 兼容性、该服务来源上的权限与同步流程、真实用户服务器双配置文件还原及真实设备并发/离线/删除。现有功能扩展权限的用户确认不代表该服务已验收；普通网页预览也不替代这些检查。Google OAuth/appDataFolder 及其验收延期。
 
 ### 依据
 

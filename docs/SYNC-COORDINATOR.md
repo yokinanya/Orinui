@@ -10,7 +10,7 @@
 - `src/domain/sync/object-types.ts` 与 `object-validation.ts`：对象/回执边界校验，拒绝重复设备、非法身份/版本、缺失字节和无效回执；复制接收字节。
 - `src/storage/sync/local-store.ts`：将协调端口绑定到已有导出/接收 API，使用短事务保存运行状态，数据库由参数注入。
 - `src/platform/sync-lock.ts`：委托注入的原生 Web Locks。调用方为同一配置文件使用同源、同数据库 scope 的锁，缺少管理器时明确失败。
-- `src/platform/webdav-*` 与 `src/sync/webdav-*`：HTTPS WebDAV 对象存取、强 ETag 条件发布、连接流程及配置文件级触发调度。适配器依然由运行时显式注入协调器。
+- `src/platform/webdav-*` 与 `src/sync/webdav-*`：HTTPS WebDAV 对象存取、连接流程及配置文件级触发调度。默认使用强 ETag 条件发布；坚果云兼容模式改用 SHA-256 revision、写前读取比较和写后回读校验。适配器依然由运行时显式注入协调器。
 
 构造协调器不执行同步；显式调用 `syncNow()` 才调用对象端口。入口返回本轮结果或拒绝 Promise，不把传输失败转成成功。
 
@@ -23,10 +23,10 @@
 | listSnapshots | 每设备一个快照及不透明 revision，重复设备拒绝 |
 | readSnapshot | 读取恰好观察到的 revision；变化明确失败 |
 | readAsset | 返回实际加密对象，或明确的 null（不存在） |
-| createAsset | 仅创建不存在的媒体，不覆盖已有对象；返回实际 created/revision |
-| publishSnapshot | 原子发布完整快照；expectedRevision=null 时仅创建，否则只替换观察到的版本 |
+| createAsset | 创建媒体并返回实际 created/revision；条件模式保证不覆盖，坚果云模式先读后写并回读核对 |
+| publishSnapshot | 按 expectedRevision 检查并发布完整快照；强 ETag 模式为原子条件写，坚果云模式为 SHA-256 写前比较与写后核验，不具备原子比较写入 |
 
-创建媒体后重新读取实际对象，核对回执版本、解密、长度和 SHA-256；创建竞争返回已有对象也需验证内容。这些存取保证尚待真实提供方实现/验收，不能用普通覆盖写伪装条件发布或把测试内存服务带入生产。
+创建媒体后重新读取实际对象，核对回执版本、解密、长度和 SHA-256；创建竞争返回已有对象也需验证内容。坚果云兼容模式只能检测发布前已出现的冲突，并核对写入后的字节，不能阻止两份使用相同 deviceId 的配置并发覆盖；不同配置文件各自使用不同 deviceId，本机同配置文件继续由 Web Locks 串行化。此模式仅由坚果云模板显式选择，其他服务仍要求强 ETag 条件写入。
 
 ## 执行顺序与本机状态
 
@@ -34,12 +34,12 @@
 2. 导出本机一致快照、推进到期删除，读取并校验全部远端快照。
 3. 尚无本机基线且无自身远端快照时使用首次加入计划，否则正常合并；备齐并校验引用媒体。
 4. 按 expectedGeneration、库/设备身份和 runId 原子提交完整本机候选，保存代次、观察时钟与基线标记。
-5. 上传缺失媒体、验证写入结果，再按观察到的自身 revision 发布加密快照。
+5. 上传缺失媒体、验证写入结果，再按观察到的自身 revision 发布加密快照。提供方条件能力及本机选择的 WebDAV 一致性模式决定 revision 与发布保护方式。
 6. 收到合法回执后记录成功时间/已发布代次。本机有更高代次时返回 pending，否则 synced。
 
 接收先本机提交、后远端发布，使上传期间的新编辑取得更高代次和逻辑版本，避免与尚未提交的候选争用同一版本。网络、加解密、哈希和图像解码都在事务外，事务只检查当前状态并原子写入。[Dexie 事务说明](https://dexie.org/docs/Tutorial/Best-Practices)
 
-Dexie schema 仍为 3，表/索引未改；`sync_state` 增加可选 hasAcceptedSnapshot、lastSync 和 lastSuccessfulSync。它们记录本机基线、运行身份/阶段/发布状态/时间/错误及成功代次/revision，不进入快照或普通 JSON 备份。
+当前 Dexie schema 为 4；同步表及索引在版本 3 引入，版本 4 不改表/索引，只迁移规范化图标占比和对应同步寄存器。`sync_state` 可选保存 hasAcceptedSnapshot、lastSync 和 lastSuccessfulSync，记录本机基线、运行身份/阶段/发布状态/时间/错误及成功代次/revision，不进入快照或普通 JSON 备份。
 
 基线在完整接收事务中保存：首次接收后发布失败，再次运行不会重新提升已收到的字段、覆盖其他设备后续修改。空设备首次接收有变化时，代次也递增。旧 runId 在断开并用同一库/设备重连后，不能修改新连接状态。
 
@@ -61,4 +61,4 @@ Dexie schema 仍为 3，表/索引未改；`sync_state` 增加可选 hasAccepted
 - 独立 Chromium 153.0.8010.12 的真实扩展审计副本验证原生锁：第一页持锁时第二页等待，第一页抛错后第二页取得锁。[Web Locks 同源协作](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
 - 原生锁审计编译实际适配器源码；脚本/结果在忽略的 `.output/sync-lock-audit.mjs` 与 `.output/sync-lock-audit-result.json`。生产产物及用户配置未改，临时配置已关闭并清理。
 
-Google Drive、设备集合、远端媒体清理、密钥轮换和第三方 WebDAV 服务验收仍未接入/完成。受控本机 HTTPS 服务上的双配置文件真实扩展审计通过；来源预授权，权限弹窗、拒绝与撤销尚未验证，见 [TASKS.md](./TASKS.md) 与 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。
+设备集合、远端媒体清理、密钥轮换的协议与 MVP 边界及第三方 WebDAV 服务验收仍待完成；Google Drive 适配器与 OAuth 延期。受控本机 HTTPS 服务上的双配置文件真实扩展审计通过，但该审计预授权来源，未验证权限弹窗、拒绝与撤销。2026-10-14 现有功能扩展权限另获用户确认；真实 WebDAV 服务及该来源上的权限与同步组合仍需记录，见 [TASKS.md](./TASKS.md)、[VERIFICATION.md](./VERIFICATION.md) 与 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。

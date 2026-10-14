@@ -4,13 +4,13 @@ import { parseSnapshotHeads, parseObjectRead } from '@/domain/sync/object-valida
 import type { SyncCodec } from '@/sync/ports';
 import { materializeSyncSnapshot, mergeSyncSnapshots } from '@/domain/sync';
 import type { WebDavCounts } from '@/sync/webdav-types';
-import { validateWebDavVaultDescriptor, WEBDAV_CONFIGURATION_VERSION } from '@/domain/webdav/configuration';
+import { validateWebDavVaultDescriptor, WEBDAV_VAULT_DESCRIPTOR_VERSION } from '@/domain/webdav/configuration';
 
 export async function sealWebDavVault(input: { readonly crypto: SyncCrypto; readonly key: CryptoKey;
   readonly vaultId: string }): Promise<Uint8Array> {
   return input.crypto.encrypt({ key: input.key,
     context: { vaultId: input.vaultId, kind: 'snapshot', objectId: input.vaultId },
-    plaintext: new TextEncoder().encode(JSON.stringify({ schemaVersion: WEBDAV_CONFIGURATION_VERSION, vaultId: input.vaultId })),
+    plaintext: new TextEncoder().encode(JSON.stringify({ schemaVersion: WEBDAV_VAULT_DESCRIPTOR_VERSION, vaultId: input.vaultId })),
   });
 }
 

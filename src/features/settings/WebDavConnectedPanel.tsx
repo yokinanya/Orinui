@@ -50,7 +50,7 @@ export function WebDavConnectedPanel({ connection }: WebDavConnectedPanelProps) 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>断开 WebDAV 同步？</AlertDialogTitle>
-            <AlertDialogDescription>只会移除本机连接和密钥。当前本机数据与远端同步库都会保留。</AlertDialogDescription>
+            <AlertDialogDescription>只移除本机连接和密钥，本机与云端数据都会保留。</AlertDialogDescription>
           </AlertDialogHeader>
           {connection.error && <FieldError role="alert">{connection.error}</FieldError>}
           <AlertDialogFooter>

@@ -2,120 +2,10 @@ import { expect, it } from 'vitest';
 
 import { parseWebDavMultiStatus } from '@/platform/webdav-xml';
 import { createWebDavRemote } from '@/platform/webdav-store';
+import { createWebDavClient } from '@/platform/webdav-client';
+import { documentFor, element, ok, response, setup, xmlFor } from './webdav-test-helpers';
 
-interface TestElement {
-  readonly localName: string;
-  readonly namespaceURI: string;
-  readonly children: readonly TestElement[];
-  readonly textContent: string;
-}
-
-interface ElementOptions {
-  readonly children?: readonly TestElement[];
-  readonly textContent?: string;
-  readonly namespaceURI?: string;
-}
-
-function element(localName: string, options: ElementOptions = {}): TestElement {
-  return { localName, namespaceURI: options.namespaceURI ?? 'DAV:', children: options.children ?? [], textContent: options.textContent ?? '' };
-}
-
-function statusText(status: number): string {
-  return `HTTP/1.1 ${status} ${status === 200 ? 'OK' : 'Not Found'}`;
-}
-
-function propstat(properties: readonly TestElement[], status: number): TestElement {
-  return element('propstat', { children: [element('prop', { children: properties }),
-    element('status', { textContent: statusText(status) })] });
-}
-
-function hasEtag(options: NonNullable<Parameters<typeof propstats>[0]>): boolean {
-  return options.etag !== undefined || options.etagStatus !== undefined;
-}
-
-function makeEtag(options: NonNullable<Parameters<typeof propstats>[0]>): TestElement {
-  return element('getetag', { textContent: options.etag ?? '' });
-}
-
-function propstats(options: { readonly collection?: boolean; readonly etag?: string; readonly status?: number;
-  readonly resourceTypeStatus?: number; readonly etagStatus?: number } = {}): readonly TestElement[] {
-  const resourceStatus = options.resourceTypeStatus ?? options.status ?? 200;
-  const etagStatus = options.etagStatus ?? options.status ?? 200;
-  const resourceType = element('resourcetype', { children: options.collection ? [element('collection')] : [] });
-  if (!hasEtag(options)) return [propstat([resourceType], resourceStatus)];
-  if (etagStatus === resourceStatus) {
-    const properties = [resourceType, makeEtag(options)];
-    return [propstat(properties, resourceStatus)];
-  }
-  return [propstat([resourceType], resourceStatus), propstat([makeEtag(options)], etagStatus)];
-}
-
-function response(href: string, options: Parameters<typeof propstats>[0] = {}): TestElement {
-  return element('response', { children: [element('href', { textContent: href }), ...propstats(options)] });
-}
-
-function documentFor(responses: readonly TestElement[]): Document {
-  const root = element('multistatus', { children: responses });
-  return { documentElement: root, getElementsByTagName: () => [] } as unknown as Document;
-}
-
-function xmlFor(...responses: readonly TestElement[]): string {
-  return JSON.stringify(responses);
-}
-
-function setup(handler: (url: URL, init: RequestInit) => Response | Promise<Response>) {
-  const documents = new Map<string, Document>();
-  const fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => handler(new URL(input.toString()), init);
-  const parseXml = (source: string) => documents.get(source) ?? documentFor(JSON.parse(source) as TestElement[]);
-  const remote = createWebDavRemote({
-    credentials: { url: 'https://dav.example.test/orinui/', username: '用户', password: 'pāss' },
-    fetch: fetch as typeof globalThis.fetch,
-    parseXml,
-  });
-  return { remote, documents };
-}
-
-function ok(body = '', status = 200, headers?: HeadersInit) {
-  return new Response(status === 204 || status === 304 ? null : body, { status, headers });
-}
-
-function readProbe(path: string, headers: Headers, stored: Map<string, Uint8Array>): Response {
-  const body = stored.get(path);
-  if (!body) return ok('', 404);
-  if (headers.has('If-Match') && headers.get('If-Match') !== '"probe-r1"') return ok('', 412);
-  const copy = new ArrayBuffer(body.byteLength);
-  new Uint8Array(copy).set(body);
-  return new Response(copy, { status: 200, headers: { ETag: '"probe-r1"' } });
-}
-
-function writeProbe(input: { readonly path: string; readonly init: RequestInit;
-  readonly headers: Headers; readonly stored: Map<string, Uint8Array> }): Response {
-  const { path, init, headers, stored } = input;
-  if (headers.has('If-None-Match') && stored.has(path)) return ok('', 412);
-  if (headers.has('If-Match') && headers.get('If-Match') !== '"probe-r1"') return ok('', 412);
-  stored.set(path, new Uint8Array(init.body as ArrayBuffer));
-  return ok('', 201, { ETag: '"probe-r1"' });
-}
-
-function deleteProbe(path: string, headers: Headers, stored: Map<string, Uint8Array>): Response {
-  if (headers.get('If-Match') !== '"probe-r1"' || !stored.has(path)) return ok('', 412);
-  stored.delete(path);
-  return ok('', 204);
-}
-
-function conditionProbeHandler(probePath: string, stored: Map<string, Uint8Array>, calls: string[]) {
-  return (url: URL, init: RequestInit): Response => {
-    const method = init.method ?? 'GET';
-    const headers = new Headers(init.headers);
-    calls.push(`${method} ${headers.get('If-None-Match') ?? headers.get('If-Match') ?? '-'}`);
-    if (method === 'MKCOL') return ok('', 201);
-    if (url.pathname !== probePath) throw new Error(`unexpected ${method} ${url.pathname}`);
-    if (method === 'PUT') return writeProbe({ path: probePath, init, headers, stored });
-    if (method === 'GET') return readProbe(probePath, headers, stored);
-    if (method === 'DELETE') return deleteProbe(probePath, headers, stored);
-    throw new Error(`unexpected ${method} ${url.pathname}`);
-  };
-}
+const PARALLEL_SNAPSHOT_TIMEOUT_MS = 50;
 
 it('rejects insecure or ambiguous collection URLs and unsafe path identities', async () => {
     expect(() => createWebDavRemote({ credentials: { url: 'http://dav.test/root/', username: 'u', password: 'p' }, fetch, parseXml: () => documentFor([]) })).toThrow(/HTTPS/);
@@ -137,31 +27,73 @@ it('sends Basic UTF-8 authorization and rejects redirected responses', async () 
 
 it('prepares parent collections in order, creating only the configured hierarchy', async () => {
     const urls: string[] = [];
-    const { remote } = setup((url, init) => { urls.push(`${init.method} ${url.pathname}`); return ok('', 201); });
+    const { remote } = setup((url, init) => {
+      urls.push(`${init.method} ${url.pathname}`);
+      if (init.method === 'PROPFIND') {
+        return url.pathname === '/orinui/'
+          ? ok(xmlFor(response(url.pathname, { collection: true })), 207)
+          : ok('', 404);
+      }
+      return ok('', 201);
+    });
     await remote.prepareCollections({ vaultId: 'vault-1', deviceId: 'device-1' });
     expect(urls).toEqual([
-      'MKCOL /orinui/', 'MKCOL /orinui/vaults/', 'MKCOL /orinui/vaults/vault-1/',
-      'MKCOL /orinui/vaults/vault-1/devices/', 'MKCOL /orinui/vaults/vault-1/devices/device-1/',
-      'MKCOL /orinui/vaults/vault-1/assets/',
+      'PROPFIND /orinui/', 'PROPFIND /orinui/vaults/', 'MKCOL /orinui/vaults/',
+      'PROPFIND /orinui/vaults/vault-1/', 'MKCOL /orinui/vaults/vault-1/',
+      'PROPFIND /orinui/vaults/vault-1/devices/', 'PROPFIND /orinui/vaults/vault-1/assets/',
+      'MKCOL /orinui/vaults/vault-1/devices/', 'MKCOL /orinui/vaults/vault-1/assets/',
+      'PROPFIND /orinui/vaults/vault-1/devices/device-1/', 'MKCOL /orinui/vaults/vault-1/devices/device-1/',
     ]);
   });
 
-it('confirms an existing collection from resourcetype when getetag is unavailable', async () => {
+it('reports the exact collection path when creation is forbidden', async () => {
+    const { remote } = setup((url, init) => {
+      if (init.method === 'PROPFIND') {
+        return url.pathname === '/orinui/'
+          ? ok(xmlFor(response(url.pathname, { collection: true })), 207)
+          : ok('', 404);
+      }
+      return ok('', 403);
+    });
+    await expect(remote.prepareCollections({ vaultId: 'v1', deviceId: 'd1' }))
+      .rejects.toThrow('WebDAV 创建 collection 失败（HTTP 403）：/orinui/vaults/');
+});
+
+it('verifies a collection after MKCOL reports a concurrent create', async () => {
     const methods: string[] = [];
     const { remote } = setup((url, init) => {
       methods.push(`${init.method} ${url.pathname}`);
-      if (init.method === 'MKCOL') return ok('', 405);
+      if (init.method === 'PROPFIND') {
+        if (url.pathname === '/orinui/' || url.pathname === '/orinui/vaults/' && methods.includes('MKCOL /orinui/vaults/')) {
+          return ok(xmlFor(response(url.pathname, { collection: true, resourceTypeStatus: 200, etagStatus: 404 })), 207);
+        }
+        return ok('', 404);
+      }
+      return url.pathname === '/orinui/vaults/' ? ok('', 405) : ok('', 201);
+    });
+    await remote.prepareCollections({ vaultId: 'v1', deviceId: 'd1' });
+    expect(methods).toEqual([
+      'PROPFIND /orinui/', 'PROPFIND /orinui/vaults/', 'MKCOL /orinui/vaults/', 'PROPFIND /orinui/vaults/',
+      'PROPFIND /orinui/vaults/v1/', 'MKCOL /orinui/vaults/v1/',
+      'PROPFIND /orinui/vaults/v1/devices/', 'PROPFIND /orinui/vaults/v1/assets/',
+      'MKCOL /orinui/vaults/v1/devices/', 'MKCOL /orinui/vaults/v1/assets/',
+      'PROPFIND /orinui/vaults/v1/devices/d1/', 'MKCOL /orinui/vaults/v1/devices/d1/',
+    ]);
+  });
+
+it('confirms existing collections from resourcetype without requiring getetag', async () => {
+    const methods: string[] = [];
+    const { remote } = setup((url, init) => {
+      methods.push(`${init.method} ${url.pathname}`);
       return ok(xmlFor(response(url.pathname, { collection: true, resourceTypeStatus: 200, etagStatus: 404 })), 207);
     });
     await remote.prepareCollections({ vaultId: 'v1', deviceId: 'd1' });
     expect(methods).toEqual([
-      'MKCOL /orinui/', 'PROPFIND /orinui/', 'MKCOL /orinui/vaults/', 'PROPFIND /orinui/vaults/',
-      'MKCOL /orinui/vaults/v1/', 'PROPFIND /orinui/vaults/v1/', 'MKCOL /orinui/vaults/v1/devices/',
-      'PROPFIND /orinui/vaults/v1/devices/', 'MKCOL /orinui/vaults/v1/devices/d1/',
-      'PROPFIND /orinui/vaults/v1/devices/d1/', 'MKCOL /orinui/vaults/v1/assets/',
-      'PROPFIND /orinui/vaults/v1/assets/',
+      'PROPFIND /orinui/', 'PROPFIND /orinui/vaults/', 'PROPFIND /orinui/vaults/v1/',
+      'PROPFIND /orinui/vaults/v1/devices/', 'PROPFIND /orinui/vaults/v1/assets/',
+      'PROPFIND /orinui/vaults/v1/devices/d1/',
     ]);
-  });
+});
 
 it('reads and conditionally creates the encrypted vault descriptor', async () => {
     let stored = '';
@@ -177,6 +109,81 @@ it('reads and conditionally creates the encrypted vault descriptor', async () =>
     await remote.createVault({ vaultId: 'vault-1', ciphertext: Uint8Array.of(3, 4, 5) });
     const read = await remote.readVault();
     expect(read).toEqual({ vaultId: 'vault-1', ciphertext: Uint8Array.of(3, 4, 5) });
+  });
+
+it('uses an Orinui collection when the Nutstore URL points to the account root', async () => {
+    const requests: string[] = [];
+    let storedManifest: string | null = null;
+    const { remote } = setup((url, init) => {
+      const method = init.method ?? 'GET';
+      requests.push(`${method} ${url.pathname}`);
+      if (method === 'PROPFIND') {
+        return ok('', 404);
+      }
+      if (method === 'MKCOL') return ok('', 201);
+      if (method === 'PUT') {
+        storedManifest = String(init.body);
+        return ok('', 201);
+      }
+      if (method === 'GET') return storedManifest ? ok(storedManifest) : ok('', 404);
+      throw new Error(`unexpected ${method} ${url.pathname}`);
+    }, { url: 'https://dav.jianguoyun.com/dav', consistencyMode: 'readback-only' });
+
+    await remote.prepareCollections({ vaultId: 'vault-1', deviceId: 'device-1' });
+    await remote.createVault({ vaultId: 'vault-1', ciphertext: Uint8Array.of(3, 4, 5) });
+
+    expect(requests).toContain('MKCOL /dav/Orinui/');
+    expect(requests).toContain('PUT /dav/Orinui/vault.json');
+    expect(requests).not.toContain('PUT /dav/vault.json');
+    expect(requests.filter((request) => request === 'GET /dav/Orinui/vault.json')).toHaveLength(2);
+  });
+
+it('uses an Orinui collection for any bare DAV endpoint URL', () => {
+    const client = createWebDavClient({
+      credentials: { url: 'https://dav.example.test/dav', username: 'user', password: 'password' },
+      fetch,
+      parseXml: () => documentFor([]),
+    });
+    expect(client.root.pathname).toBe('/dav/Orinui/');
+    expect(client.autoCreateRootCollection).toBe(true);
+  });
+
+it('recognizes only Nutstore AncestorsNotFound 409 as a missing descriptor', async () => {
+    const missing = '<d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com"><s:exception>AncestorsNotFound</s:exception></d:error>';
+    const { remote: nutstore } = setup(() => ok(missing, 409), {
+      url: 'https://dav.jianguoyun.com/dav', consistencyMode: 'readback-only',
+    });
+    await expect(nutstore.readVault()).resolves.toBeNull();
+
+    const conflict = '<d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com"><s:exception>Conflict</s:exception></d:error>';
+    const { remote: nutstoreConflict } = setup(() => ok(conflict, 409), {
+      url: 'https://dav.jianguoyun.com/dav', consistencyMode: 'readback-only',
+    });
+    await expect(nutstoreConflict.readVault()).rejects.toThrow('WebDAV 读取同步库描述失败（HTTP 409）');
+
+    const { remote: otherProvider } = setup(() => ok(missing, 409), {
+      url: 'https://dav.example.test/dav', consistencyMode: 'readback-only',
+    });
+    await expect(otherProvider.readVault()).rejects.toThrow('WebDAV 读取同步库描述失败（HTTP 409）');
+  });
+
+it('keeps a user-specified Nutstore subdirectory unchanged', async () => {
+    const requests: string[] = [];
+    const { remote } = setup((url, init) => {
+      const method = init.method ?? 'GET';
+      requests.push(`${method} ${url.pathname}`);
+      if (method === 'PROPFIND') {
+        return url.pathname === '/dav/custom/'
+          ? ok(xmlFor(response(url.pathname, { collection: true })), 207)
+          : ok('', 404);
+      }
+      return ok('', 201);
+    }, { url: 'https://dav.jianguoyun.com/dav/custom/', consistencyMode: 'readback-only' });
+
+    await remote.prepareCollections({ vaultId: 'vault-1', deviceId: 'device-1' });
+
+    expect(requests[0]).toBe('PROPFIND /dav/custom/');
+    expect(requests).not.toContain('PROPFIND /dav/Orinui/');
   });
 
 it('lists direct device collections and gets strong snapshot ETags via PROPFIND', async () => {
@@ -200,6 +207,43 @@ it('lists direct device collections and gets strong snapshot ETags via PROPFIND'
       ? ok(xmlFor(response('/orinui/vaults/v1/devices/d1/', { collection: true, etagStatus: 404 })), 207)
       : ok(xmlFor(response(url.pathname, { collection: false, etagStatus: 404 })), 207));
     await expect(missingSnapshotTag.remote.objects.listSnapshots({ vaultId: 'v1' })).rejects.toThrow(/getetag 属性查询未成功/);
+  });
+
+it('reads snapshot revisions for separate devices concurrently', async () => {
+    const paths: string[] = [];
+    let releaseRequests = (): void => undefined;
+    let resolveAllStarted = (): void => undefined;
+    const requestGate = new Promise<void>((resolve) => { releaseRequests = resolve; });
+    const allStarted = new Promise<void>((resolve) => { resolveAllStarted = resolve; });
+    const { remote } = setup(async (url, init) => {
+      if (new Headers(init.headers).get('Depth') === '1') {
+        return ok(xmlFor(response('/orinui/vaults/v1/devices/', { collection: true }),
+          response('/orinui/vaults/v1/devices/d1/', { collection: true }),
+          response('/orinui/vaults/v1/devices/d2/', { collection: true }),
+          response('/orinui/vaults/v1/devices/d3/', { collection: true })), 207);
+      }
+      paths.push(url.pathname);
+      if (paths.length === 3) resolveAllStarted();
+      await requestGate;
+      return ok(xmlFor(response(url.pathname, { etag: '"snapshot-r1"' })), 207);
+    });
+    const loading = remote.objects.listSnapshots({ vaultId: 'v1' });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<void>((resolve) => {
+      timeout = setTimeout(resolve, PARALLEL_SNAPSHOT_TIMEOUT_MS);
+    });
+    await Promise.race([allStarted, timedOut]);
+    const startedConcurrently = paths.length === 3;
+    releaseRequests();
+    if (timeout !== undefined) clearTimeout(timeout);
+
+    const heads = await loading;
+    expect(startedConcurrently).toBe(true);
+    expect(heads).toEqual([
+      { deviceId: 'd1', revision: '"snapshot-r1"' },
+      { deviceId: 'd2', revision: '"snapshot-r1"' },
+      { deviceId: 'd3', revision: '"snapshot-r1"' },
+    ]);
   });
 
 it('reads snapshots with exact If-Match and rejects stale or weak revisions', async () => {
@@ -251,26 +295,6 @@ it('publishes snapshots with create-only or exact replacement conditions', async
     const conflict = setup(() => ok('', 412));
     await expect(conflict.remote.objects.publishSnapshot({ vaultId: 'v1', objectId: 'd1', expectedRevision: '"old"', ciphertext: Uint8Array.of(2) }))
       .rejects.toThrow(/条件发布冲突/);
-  });
-
-it('proves server preconditions and removes the probe with its observed strong ETag', async () => {
-    const probeUrl = '/orinui/vaults/v1/probe-d1.enc';
-    const stored = new Map<string, Uint8Array>();
-    const calls: string[] = [];
-    const { remote } = setup(conditionProbeHandler(probeUrl, stored, calls));
-    await remote.prepareCollections({ vaultId: 'v1', deviceId: 'd1' });
-    await remote.verifyConditions({ vaultId: 'v1', deviceId: 'd1' });
-    expect(stored.size).toBe(0);
-    expect(calls).toContain('PUT *');
-    expect(calls).toContain('DELETE "probe-r1"');
-  });
-
-it('fails explicitly when If-None-Match is ignored and leaves its diagnostic probe', async () => {
-    const { remote } = setup((url, init) => {
-      if (init.method === 'PUT') return ok('', 201, { ETag: '"probe-r1"' });
-      throw new Error(`unexpected ${init.method} ${url.pathname}`);
-    });
-    await expect(remote.verifyConditions({ vaultId: 'v1', deviceId: 'd1' })).rejects.toThrow(/预期 HTTP 412，实际 201/);
   });
 
 it('rejects malformed DAV multistatus and non-success propstat entries', () => {

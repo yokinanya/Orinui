@@ -1,10 +1,10 @@
 # 同步基础协议 v1
 
-状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。WebDAV 适配器、连接界面和事件触发已接入，并通过受控服务真实扩展审计；Google Drive 和第三方服务/用户权限验收仍未完成。本文不把受控审计等同于发布可用性。
+状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。WebDAV 适配器、连接界面和事件触发已接入，并通过受控服务真实扩展审计；真实第三方 WebDAV 服务及用户设备仍待验收。现有功能扩展权限已有用户确认，Google Drive 适配器与 OAuth 延期，详见 [VERIFICATION.md](./VERIFICATION.md)。本文不把受控审计等同于发布可用性。
 
 ## 版本与身份
 
-Dexie schema 3 保存本机数据和同步元数据，JSON 备份仍是版本 1；同步快照 schemaVersion 为 1，加密对象格式为 ORINUI01。这四套版本独立升级，未知同步/加密版本明确拒绝。
+Dexie schema 4 保存本机数据和同步元数据，JSON 备份仍是版本 1；同步快照 schemaVersion 为 1，加密对象格式为 ORINUI01。这四套版本独立升级，未知同步/加密版本明确拒绝。
 
 vaultId 标识一个同步库，deviceId 标识一个 Chrome 配置文件。实体标识沿用已有稳定 ID，新实体使用 UUID。协议接受既有非空字符串标识，但拒绝首尾空白和控制字符；不能用永久删除的标识重新创建实体。
 
@@ -70,7 +70,7 @@ JSON 导入仍是用户确认的完整替换。已被该库登记过的导入 ID
 
 ## 加密字节格式
 
-恢复密钥是 32 字节随机值，以规范 Base64url 编码为 43 字符且无 padding。导入后为不可导出的 AES-256-GCM CryptoKey；密钥只留本机 IndexedDB，不写到云端、普通配置或 JSON 备份。
+恢复密钥是 32 字节随机值，以规范 Base64url 编码为 43 字符且无 padding。新生成密钥会重新取随机值，直到首字符为 ASCII 字母或数字；导入仍接受全部规范 Base64url 编码，以兼容既有密钥。导入后为不可导出的 AES-256-GCM CryptoKey；密钥只留本机 IndexedDB，不写到云端、普通配置或 JSON 备份。
 
 加密对象为：
 
@@ -92,8 +92,8 @@ AAD 是按固定字段顺序 JSON 编码的 `{ schemaVersion: 1, vaultId, kind, 
 - sync：公共对象端口、分阶段 syncNow、运行身份/失败与发布确认状态；本地适配器保存一次性基线，原生锁保证同源同 scope 串行。顺序与对象契约见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)。
 - 自动检查使用独立内存 IndexedDB 模拟设备，真实 Web Crypto 进行密钥和密文验证；不模拟提供方上传成功。
 
-手动协调先完整校验并事务提交本机候选，再上传媒体、条件发布快照；发布失败保留已完整接收的结果与未同步新编辑，不跨本机和远端伪造回滚。运行记录与基线标记不进入快照或 JSON 备份。
+手动协调先完整校验并事务提交本机候选，再上传媒体、按提供方一致性策略发布快照；强 ETag 服务使用原子条件发布，坚果云使用 SHA-256 写前比较和写后回读。发布失败保留已完整接收的结果与未同步新编辑，不跨本机和远端伪造回滚。运行记录与基线标记不进入快照或 JSON 备份。此适配器策略不改变本文件定义的快照/加密 schema。
 
-尚需实施或验收：Google Drive 适配器；第三方 WebDAV 服务兼容性及实际权限弹窗/拒绝/撤销；设备集合/远端清理、完整密钥轮换及真实用户设备验收。受控服务审计范围见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)，进度见 [TASKS.md](./TASKS.md)。
+尚需实施或验收：第三方 WebDAV 服务兼容性及该来源上的权限与同步流程；设备集合/远端清理、完整密钥轮换的协议与 MVP 边界及真实用户设备验收。Google Drive 适配器及 OAuth 延期，不作为当前阶段阻塞项。受控服务审计范围见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)，进度见 [TASKS.md](./TASKS.md)。
 
 依据：[Dexie middleware](https://dexie.org/docs/Dexie/Dexie.use%28%29)、[Web Crypto importKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey)、[AES-GCM 参数](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams)。

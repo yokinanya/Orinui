@@ -1,12 +1,11 @@
-import { useState } from 'react';
-import { DownloadIcon } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { DownloadIcon, UploadIcon } from 'lucide-react';
 import { useData } from '@/app/data-context';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { FieldError, FieldGroup, FieldTitle } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { BACKUP_JSON_LIMIT } from '@/domain/backup';
 import { readBackupFile, type RestorableBackup } from '@/platform/backup-file';
 import { downloadBackupFile } from '@/platform/backup-download';
 
@@ -68,35 +67,35 @@ function ImportConfirmation({ actions }: { readonly actions: BackupActions }) {
   );
 }
 
-function ImportFileField({ actions }: { readonly actions: BackupActions }) {
+function BackupActionRow({ actions }: { readonly actions: BackupActions }) {
+  const input = useRef<HTMLInputElement>(null);
   return (
-    <Field data-invalid={actions.error !== null || undefined}>
-      <FieldLabel htmlFor="backup-file">导入 JSON</FieldLabel>
-      <Input id="backup-file" type="file" accept="application/json,.json" disabled={actions.busy}
-        aria-invalid={actions.error !== null || undefined}
+    <div className="flex flex-wrap items-center gap-2">
+      <FieldTitle className="mr-auto">本地备份</FieldTitle>
+      <Button type="button" variant="outline" size="sm" onClick={() => void actions.exportFile()}>
+        <DownloadIcon data-icon="inline-start" />导出 JSON
+      </Button>
+      <Button type="button" variant="outline" size="sm" disabled={actions.busy}
+        onClick={() => input.current?.click()}>
+        <UploadIcon data-icon="inline-start" />导入 JSON
+      </Button>
+      <Input ref={input} id="backup-file" type="file" accept="application/json,.json" className="hidden"
+        aria-label="选择本地备份 JSON 文件" disabled={actions.busy}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = '';
           void actions.selectFile(file);
         }} />
-      <FieldDescription>文件最大 70 MiB，图片总量最大 50 MiB。确认前可预览备份内容。</FieldDescription>
-      {actions.error && <FieldError role="alert">{actions.error}</FieldError>}
-    </Field>
+    </div>
   );
 }
 
 export function BackupPanel() {
   const actions = useBackupActions();
   return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel>备份文件</FieldLabel>
-        <FieldDescription>备份包含网站、分组、设置和图片；导入会替换本机数据。</FieldDescription>
-        <Button type="button" variant="outline" onClick={() => void actions.exportFile()}>
-          <DownloadIcon data-icon="inline-start" />导出 JSON
-        </Button>
-      </Field>
-      <ImportFileField actions={actions} />
+    <FieldGroup className="gap-2">
+      <BackupActionRow actions={actions} />
+      {actions.error && !actions.confirmOpen && <FieldError role="alert">{actions.error}</FieldError>}
       <ImportConfirmation actions={actions} />
     </FieldGroup>
   );

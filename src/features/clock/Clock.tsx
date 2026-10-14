@@ -52,11 +52,11 @@ export function Clock() {
     <div className="flex flex-col items-center gap-1">
       <time
         dateTime={now.toISOString()}
-        className="home-readable-chip text-6xl font-light tracking-tight text-glass-foreground tabular-nums md:text-7xl"
+        className="home-readable-ink text-6xl font-light tracking-tight text-glass-foreground tabular-nums md:text-7xl"
       >
         {formatTime(now, settings.clock.format)}
       </time>
-      <p className="home-readable-chip home-readable-muted text-sm text-glass-foreground-muted md:text-base">{dateFormat.format(now)}</p>
+      <p className="home-readable-muted text-sm text-glass-foreground-muted md:text-base">{dateFormat.format(now)}</p>
     </div>
   );
 }

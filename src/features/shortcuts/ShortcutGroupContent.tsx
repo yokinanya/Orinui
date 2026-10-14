@@ -34,7 +34,7 @@ export function ShortcutGroupContent({
 
 function EmptyGroup({ activeGroupId, onAdd }: { readonly activeGroupId: string | null; readonly onAdd: () => void }) {
   return (
-    <Empty className="home-readable-surface border-glass-border bg-glass/40 backdrop-blur-sm">
+    <Empty className="border-glass-border">
       <EmptyHeader>
         <EmptyTitle className="home-readable-ink text-glass-foreground">还没有网站</EmptyTitle>
         <EmptyDescription className="home-readable-muted text-glass-foreground-muted">

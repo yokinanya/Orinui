@@ -52,12 +52,13 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 | `remote-images.ts` / `remote-image-download.ts` | 用户操作中申请具体来源与响应头权限；注入网络/监听/锁/图片处理端口，逐跳下载、体积检查和跨来源确认 |
 | `backup-file.ts` | JSON/Blob 编解码及本地文件读写 |
 | `backup-download.ts` | 导出文件的浏览器下载与对象 URL 生命周期 |
+| `clipboard.ts` | 用户点击后写入系统剪贴板；能力缺失或写入拒绝直接报错，不读取剪贴板或自动复制 |
 
-已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。`platform/webdav-client`、`webdav-protocol`、`webdav-xml` 与 `webdav-store` 实现 HTTPS WebDAV 请求、PROPFIND 解析及强 ETag 条件存取；`webdav-settings` 管理精确来源权限和当前配置文件的本机凭据。自动触发与待删除到期调度位于同步应用层。Drive/Identity 仍未接入。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
+已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。`platform/webdav-client`、`webdav-protocol`、`webdav-xml` 与 `webdav-store` 实现 HTTPS WebDAV 请求、PROPFIND 解析、默认强 ETag 条件存取和坚果云专用 SHA-256 回读兼容模式；`webdav-settings` 管理精确来源权限和当前配置文件的本机凭据。自动触发与待删除到期调度位于同步应用层。Drive/Identity 仍未接入。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
 
 ## 本地数据与事务
 
-当前 Dexie schema 为版本 3：
+当前 Dexie schema 为版本 4：
 
 | 表 | 主键与索引 | 作用 |
 |---|---|---|
@@ -75,6 +76,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 - 未发生移动时返回 null，避免无意义写入。
 - 版本 1 → 2 迁移补齐外观字段并新增 assets，不重建现有网站和分组。
 - 版本 2 → 3 只新增同步表；没有配置同步库时不捕获业务记录。DBCore 中间件把本机版本与领域写入原子提交，接收事务暂停捕获防回声。
+- 版本 3 → 4 不改表/索引；将旧网站图标像素尺寸迁移为占比，并同步规范化本地同步寄存器中的图标值。
 - JSON 备份当前为版本 1，独立于 Dexie schema；没有旧 JSON 版本迁移器。
 
 完整规则与限额见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
@@ -110,7 +112,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 
 主页对象管理共用菜单内容，网站的右键菜单和编辑模式「⋯」调用同一套操作；分组仅保留标签右键/菜单键入口，去掉编辑态外框与三点。分组容器隐藏原生滚动条但保留横向滚动，编辑态标签接收触屏拖动。网站排序用 rectSortingStrategy，分组用 horizontalListSortingStrategy 并限制纵向移动。
 
-键盘拖放用空格拿起/放下、Escape 取消，Enter 保留给对象自身动作；菜单提供不依赖拖动的排序路径。编辑模式状态由 ShortcutsRegion 持有。删除分组先查询数量再确认。
+键盘拖放用空格拿起/放下、Escape 取消，Enter 保留给对象自身动作；菜单提供不依赖拖动的排序路径。编辑模式状态由主页组合层持有。删除分组先查询数量再确认。
 
 设置面板使用模态 Dialog，左侧为纵向标签、右侧为独立纵向滚动内容；半透明表面保留背景上下文。内边距位于滚动容器自身，避免 Switch 扩大的点击热区造成横向溢出。主页右下角的编辑与设置入口组成固定操作列；编辑模式状态由主页组合层持有，因此可从此入口控制分组与网站排序。当前有弹窗过渡；主页进入和分组内容切换通过 CSS/WAAPI 实现。数据桥用 loadedShortcutsGroupId 确认数组归属，丢弃过期请求；不重挂编辑区域，减少动态效果时只淡化。主页可读性与照片样式独立维护在 home-readability.css，由 globals.css 引入，避免全局样式文件超过工程规模限制。
 
@@ -133,12 +135,12 @@ components.json 手工维护，未通过 shadcn init 初始化。生成组件需
 
 Vitest 通过 fake-indexeddb 测试领域规则、持久化、事务回滚、资源和备份。每个数据库测试使用独立名称。scripts/run-tests.mjs 对整个单元测试进程设置 60 秒超时。
 
-Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它不是已加载的 Chrome 扩展。真实权限、EyeDropper 实际屏幕和 runtime manifest 等待扩展验收。
+Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它不是已加载的 Chrome 扩展。2026-10-14 用户确认当前 UI、现有功能扩展权限和 EyeDropper 验收完成；runtime manifest 已有真实扩展检查。用户确认与自动测试的范围分别记录在 VERIFICATION.md。
 
 当前构建有大代码块警告，首屏性能尚未验收；UI 有限背景组合已修复并复验，不表示全部照片达标。具体结果与包体积集中维护在 VERIFICATION.md。
 
 ## 同步实现边界
 
-提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器、WebDAV 提供方、连接界面与事件触发已接入；Google Drive 尚未接入。受控 localhost HTTPS 的真实扩展审计通过，第三方 WebDAV 与实际权限弹窗仍待验收。基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md，WebDAV 边界见 SYNC-WEBDAV.md。
+提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器、WebDAV 提供方、连接界面与事件触发已接入；Google Drive 尚未接入且按用户决定延期。受控 localhost HTTPS 的真实扩展审计通过，第三方 WebDAV 服务及其来源权限与同步组合、真实用户设备仍待验收。基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md，WebDAV 边界见 SYNC-WEBDAV.md。
 
-domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/条件发布，后续新编辑保留更高代次并返回 pending。运行身份与基线独立于发布成功，集成测试不代表云端验收。
+domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/远端发布，后续新编辑保留更高代次并返回 pending。发布保护由提供方模式决定；运行身份与基线独立于发布成功，集成测试不代表云端验收。

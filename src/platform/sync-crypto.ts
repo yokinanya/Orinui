@@ -7,6 +7,14 @@ import type { SyncCrypto } from '@/platform/sync-crypto-types';
 export type { SyncCrypto, SyncKeyMaterial, SyncObjectContext } from '@/platform/sync-crypto-types';
 type CryptoRuntime = Pick<Crypto, 'getRandomValues' | 'subtle'>;
 const AES_KEY_BITS = SYNC_KEY_BYTES * SYNC_BITS_PER_BYTE;
+const RECOVERY_KEY_ALPHANUMERIC_PREFIX = /^[A-Za-z0-9]/;
+
+function generateRecoveryKeyBytes(runtime: CryptoRuntime): Uint8Array<ArrayBuffer> {
+  while (true) {
+    const bytes = runtime.getRandomValues(new Uint8Array(SYNC_KEY_BYTES));
+    if (RECOVERY_KEY_ALPHANUMERIC_PREFIX.test(encodeRecoveryKey(bytes))) return bytes;
+  }
+}
 
 function assertKey(key: CryptoKey): void {
   const algorithm = key.algorithm as AesKeyAlgorithm;
@@ -38,7 +46,7 @@ async function decryptObject(runtime: CryptoRuntime, input: Parameters<SyncCrypt
 export function createSyncCrypto(runtime: CryptoRuntime): SyncCrypto {
   return {
     async createKey() {
-      const bytes = runtime.getRandomValues(new Uint8Array(SYNC_KEY_BYTES));
+      const bytes = generateRecoveryKeyBytes(runtime);
       return { recoveryKey: encodeRecoveryKey(bytes), key: await importSecret(runtime, bytes) };
     },
     async importKey(recoveryKey) {

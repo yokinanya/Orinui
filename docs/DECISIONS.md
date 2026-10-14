@@ -1,6 +1,6 @@
 # 已定产品范围
 
-决策日期：2026-10-11。本文件记录产品范围与高层设计取舍；实现进度见 [TASKS.md](./TASKS.md)，验证证据见 [VERIFICATION.md](./VERIFICATION.md)。
+决策日期：2026-10-11；优先级与验收状态更新于 2026-10-14。本文件记录产品范围与高层设计取舍；实现进度见 [TASKS.md](./TASKS.md)，验证证据见 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 默认背景：使用本地中性渐变
 
@@ -16,15 +16,15 @@ MVP 不随包提供第三方摄影图片。主页仍支持本地照片上传和�
 
 ## 跨设备同步：使用外部存储并强制端到端加密
 
-用户确认同步照片和图标，并接受外部存储。提供方选择 Google Drive appDataFolder（默认推荐）或 WebDAV；一个同步库一次使用一个提供方。不创建 Orinui 账号或自营后端，也不使用 Chrome storage.sync 承载数据。
+用户确认同步照片和图标，并接受外部存储。提供方方案为 Google Drive appDataFolder 或 WebDAV；一个同步库一次使用一个提供方。2026-10-14 用户决定 Google Drive 适配器延后，当前推进 WebDAV；Drive 方案保留，不作为当前阶段的阻塞项。不创建 Orinui 账号或自营后端，也不使用 Chrome storage.sync 承载数据。
 
 同步数据使用每设备独立快照和字段级逻辑版本，避免设备争写同一文件；相同字段冲突按逻辑时钟和设备 ID 确定结果，删除通过墓碑传播。快照与图片使用 AES-256-GCM 端到端加密，恢复密钥由用户保存，不上传或写入普通备份。首次连接先合并数据，不静默覆盖本地状态。
 
-同步是可选功能：用户启用后，数据变更及扩展打开时异步同步，并可手动触发；删除撤销期限到达时另设单次计时触发，不做定时轮询或自动重试。页面关闭可能中断任务，下一次打开或手动操作恢复。详细规则见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)。基础协议、本地合并/加密/接收、WebDAV 适配器及连接界面已实现；受控 localhost HTTPS 的真实扩展审计通过。Drive、第三方 WebDAV 服务兼容性与真实权限弹窗尚未完成。基础细节见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 和 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。
+同步是可选功能：用户启用后，数据变更及扩展打开时异步同步，并可手动触发；删除撤销期限到达时另设单次计时触发，不做定时轮询或自动重试。页面关闭可能中断任务，下一次打开或手动操作恢复。详细规则见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)。基础协议、本地合并/加密/接收、WebDAV 适配器及连接界面已实现；受控 localhost HTTPS 的真实扩展审计通过。第三方 WebDAV 服务及真实设备仍待验收，Drive 适配器和 OAuth 延期。基础细节见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 和 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)。
 
 ## 真实扩展验证
 
-已记录的网页预览检查覆盖本地图片和 IndexedDB 流程；单元测试覆盖图片/URL 等领域校验。它们没有验证 Chrome 权限对话框或真实屏幕取色。图片来源权限、拒绝路径、屏幕吸管与扩展自身信息仍需真实扩展验收，详见 [VERIFICATION.md](./VERIFICATION.md)。
+已记录的网页预览检查覆盖本地图片和 IndexedDB 流程；单元测试覆盖图片/URL 等领域校验，不能替代 Chrome 权限对话框或真实屏幕取色。2026-10-14 用户确认当前 UI、现有功能扩展权限和屏幕吸管验收完成；扩展名称/版本另有历史真实扩展检查。用户确认与自动检查、受控审计分别记录，详见 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 网站图标占比与编辑入口（2026-10-13）
 

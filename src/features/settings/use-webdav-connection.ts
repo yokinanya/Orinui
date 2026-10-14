@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { useWebDavSync } from '@/app/webdav-sync-context';
+import { getWebDavTemplate, type WebDavTemplate } from '@/features/settings/webdav-templates';
+
+const DEFAULT_TEMPLATE = getWebDavTemplate('jianguoyun');
 
 export function useWebDavConnection() {
   const sync = useWebDavSync();
-  const [url, setUrl] = useState('');
+  const [templateId, setTemplateId] = useState<WebDavTemplate['id']>(DEFAULT_TEMPLATE.id);
+  const [url, setUrl] = useState<string>(DEFAULT_TEMPLATE.url);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [recoveryKey, setRecoveryKey] = useState('');
@@ -11,7 +15,8 @@ export function useWebDavConnection() {
 
   const prepare = async () => {
     setKeyAcknowledged(false);
-    const prepared = await sync.prepare({ credentials: { url, username, password }, ...(recoveryKey ? { recoveryKey } : {}) });
+    const prepared = await sync.prepare({ credentials: { url, username, password },
+      consistencyMode: getWebDavTemplate(templateId).consistencyMode, ...(recoveryKey ? { recoveryKey } : {}) });
     if (!prepared) return false;
     setRecoveryKey('');
     return true;
@@ -32,8 +37,18 @@ export function useWebDavConnection() {
     setKeyAcknowledged(false);
   };
 
+  const selectTemplate = (template: WebDavTemplate) => {
+    if (template.id === templateId) return;
+    cancel();
+    setTemplateId(template.id);
+    setUrl(template.url);
+    setUsername('');
+    setPassword('');
+  };
+
   return {
     ...sync,
+    template: getWebDavTemplate(templateId), selectTemplate,
     url, setUrl,
     username, setUsername,
     password, setPassword,

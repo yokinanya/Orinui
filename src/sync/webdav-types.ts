@@ -1,5 +1,5 @@
 import type { WebDavCredentials } from '@/domain/webdav';
-import type { WebDavConfiguration } from '@/domain/webdav/configuration';
+import type { WebDavConfiguration, WebDavConsistencyMode } from '@/domain/webdav/configuration';
 export type { WebDavConfiguration } from '@/domain/webdav/configuration';
 import type { SyncStateRow } from '@/storage/sync/types';
 import type { SyncCrypto } from '@/platform/sync-crypto-types';
@@ -16,6 +16,7 @@ export interface WebDavCounts {
 
 export interface WebDavConnectionPlan {
   readonly mode: 'create' | 'join';
+  readonly consistencyMode: WebDavConsistencyMode;
   readonly url: string;
   readonly username: string;
   readonly recoveryKey?: string;
@@ -50,6 +51,7 @@ export interface WebDavConfigurationStore {
 
 export interface WebDavPrepareInput {
   readonly credentials: WebDavCredentials;
+  readonly consistencyMode: WebDavConsistencyMode;
   readonly recoveryKey?: string;
 }
 
@@ -61,7 +63,7 @@ export interface WebDavConnectionDependencies {
   readonly lock: SyncLock;
   readonly requestPermission: (url: string) => Promise<void>;
   readonly checkPermission: (url: string) => Promise<void>;
-  readonly remote: (credentials: WebDavCredentials) => WebDavRemote;
+  readonly remote: (credentials: WebDavCredentials, consistencyMode: WebDavConsistencyMode) => WebDavRemote;
   readonly synchronize: (objects: SyncObjectStore, identity: { readonly vaultId: string; readonly deviceId: string }) => Promise<SyncRunResult>;
   readonly createId: () => string;
 }

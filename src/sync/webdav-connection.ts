@@ -28,29 +28,33 @@ async function prepareConnection(deps: WebDavConnectionDependencies, input: WebD
   const credentials = parseWebDavCredentials(input.credentials);
   // This call must remain before the first await, within the user's click gesture.
   const permission = deps.requestPermission(credentials.url);
-  await permission;
-  if (await deps.local.read() || await deps.settings.read()) throw new Error('请先断开当前同步库');
-  const remote = deps.remote(credentials);
+  const [localConnection, storedConfiguration] = await Promise.all([
+    deps.local.read(), deps.settings.read(), permission,
+  ]).then(([local, settings]) => [local, settings] as const);
+  if (localConnection || storedConfiguration) throw new Error('请先断开当前同步库');
+  const remote = deps.remote(credentials, input.consistencyMode);
+  const localCountsPromise = deps.local.count();
   const vault = await remote.readVault();
   const material = await prepareKey(deps, { existing: vault !== null, recoveryKey: input.recoveryKey });
   const vaultId = vault?.vaultId ?? deps.createId();
   const ciphertext = vault?.ciphertext ?? await sealWebDavVault({ crypto: deps.crypto, key: material.key, vaultId });
   await verifyWebDavVault({ crypto: deps.crypto, key: material.key, vaultId, ciphertext });
-  const remoteCounts = vault ? await countWebDavData({ remote, crypto: deps.crypto, key: material.key, vaultId, decodeSnapshot: deps.decodeSnapshot })
-    : { groups: 0, shortcuts: 0, assets: 0 };
+  const [remoteCounts, localCounts] = await Promise.all([
+    vault ? countWebDavData({ remote, crypto: deps.crypto, key: material.key, vaultId, decodeSnapshot: deps.decodeSnapshot })
+      : Promise.resolve({ groups: 0, shortcuts: 0, assets: 0 }),
+    localCountsPromise,
+  ]);
   return { remote, key: material.key, ciphertext,
-    configuration: { schemaVersion: WEBDAV_CONFIGURATION_VERSION, credentials, vaultId, deviceId: deps.createId() },
-    plan: { mode: vault ? 'join' : 'create', url: credentials.url, username: credentials.username,
-      recoveryKey: material.recoveryKey, local: await deps.local.count(), remote: remoteCounts } };
+    configuration: { schemaVersion: WEBDAV_CONFIGURATION_VERSION, consistencyMode: input.consistencyMode,
+      credentials, vaultId, deviceId: deps.createId() },
+    plan: { mode: vault ? 'join' : 'create', consistencyMode: input.consistencyMode,
+      url: credentials.url, username: credentials.username,
+      recoveryKey: material.recoveryKey, local: localCounts, remote: remoteCounts } };
 }
 
 async function checkPreparedVault(deps: WebDavConnectionDependencies, prepared: PreparedConnection): Promise<void> {
   const { configuration, remote, key } = prepared;
   const observed = await remote.readVault();
-  if (prepared.plan.mode === 'create') {
-    if (observed) throw new Error('该文件夹刚被另一设备创建，请使用其恢复密钥重新连接');
-    return;
-  }
   if (!observed || observed.vaultId !== configuration.vaultId) throw new Error('远端同步库在确认期间已变化，请重新检查');
   await verifyWebDavVault({ crypto: deps.crypto, key, ...observed });
 }
@@ -59,14 +63,12 @@ async function connectPrepared(deps: WebDavConnectionDependencies, prepared: Pre
   const { configuration, key, remote } = prepared;
   await deps.checkPermission(configuration.credentials.url);
   await deps.lock.runExclusive(deps.local.scope, async () => {
-    if (await deps.local.read() || await deps.settings.read()) throw new Error('本机连接在确认期间已变化，请重新检查');
-    await checkPreparedVault(deps, prepared);
+    const [localConnection, storedConfiguration] = await Promise.all([deps.local.read(), deps.settings.read()]);
+    if (localConnection || storedConfiguration) throw new Error('本机连接在确认期间已变化，请重新检查');
+    if (prepared.plan.mode === 'join') await checkPreparedVault(deps, prepared);
     await remote.prepareCollections(configuration);
     await remote.verifyConditions(configuration);
     if (prepared.plan.mode === 'create') await remote.createVault({ vaultId: configuration.vaultId, ciphertext: prepared.ciphertext });
-    const published = await remote.readVault();
-    if (!published || published.vaultId !== configuration.vaultId) throw new Error('远端同步库创建结果无法确认');
-    await verifyWebDavVault({ crypto: deps.crypto, key, ...published });
     await deps.local.initialize({ vaultId: configuration.vaultId, deviceId: configuration.deviceId, key });
     await deps.settings.write(configuration);
   });
@@ -101,7 +103,7 @@ export function createWebDavSyncService(deps: WebDavConnectionDependencies): Web
       if (!local || local.vaultId !== configuration.vaultId || local.deviceId !== configuration.deviceId) {
         throw new Error('本机同步连接身份不一致，请断开后重新连接');
       }
-      const remote = deps.remote(configuration.credentials);
+      const remote = deps.remote(configuration.credentials, configuration.consistencyMode);
       const vault = await remote.readVault();
       if (!vault || vault.vaultId !== configuration.vaultId) throw new Error('远端同步库已删除或身份变化，请重新检查连接');
       await verifyWebDavVault({ crypto: deps.crypto, key: await deps.local.readKey(local.vaultId), ...vault });

@@ -20,7 +20,7 @@ export function createWebDavRuntime(db: Database) {
     decodeSnapshot: decodeSyncSnapshot,
     requestPermission: requestWebDavPermission, checkPermission: checkWebDavPermission,
     createId: () => crypto.randomUUID(),
-    remote: (credentials) => createWebDavRemote({ credentials, fetch: (url, init) => fetch(url, init),
+    remote: (credentials, consistencyMode) => createWebDavRemote({ credentials, consistencyMode, fetch: (url, init) => fetch(url, init),
       parseXml: (source) => new DOMParser().parseFromString(source, 'application/xml') }),
     synchronize: (objects, identity) => createSyncCoordinator({
       local: createWebDavSyncLocal({ db, identity, dependencies: { crypto: cipher, validateImage: validateSyncImageAsset } }), objects, lock, crypto: cipher,

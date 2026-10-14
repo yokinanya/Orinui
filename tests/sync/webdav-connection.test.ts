@@ -31,7 +31,7 @@ function remoteHarness() {
     async readVault() { return vault && { ...vault, ciphertext: vault.ciphertext.slice() }; },
     async createVault(input) {
       events.push('createVault');
-      if (vault) throw new Error('vault already exists');
+      if (vault) throw new Error('WebDAV 同步库描述已存在，拒绝覆盖');
       vault = { vaultId: input.vaultId, ciphertext: input.ciphertext.slice() };
     },
     async prepareCollections() { events.push('prepareCollections'); },
@@ -71,7 +71,7 @@ async function encryptedVault(vaultId: string, recoveryKey?: string) {
 
 it('creates a vault only after confirmation and remains pending until synchronization succeeds', async () => {
     const h = await harness();
-    const plan = await h.service.prepare({ credentials });
+    const plan = await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
     expect(plan.mode).toBe('create');
     expect(plan.recoveryKey).toBeTruthy();
     expect(await h.db.sync_state.count()).toBe(0);
@@ -86,10 +86,10 @@ it('rejects a wrong recovery key without local writes, then accepts the correct 
     const existing = await encryptedVault('vault-remote');
     const h = await harness();
     h.provider.vault = existing.vault;
-    await expect(h.service.prepare({ credentials, recoveryKey: 'invalid recovery key' })).rejects.toThrow();
+    await expect(h.service.prepare({ credentials, consistencyMode: 'strong-etag', recoveryKey: 'invalid recovery key' })).rejects.toThrow();
     expect(await h.db.sync_state.count()).toBe(0);
     expect(h.settings.value).toBeNull();
-    const plan = await h.service.prepare({ credentials, recoveryKey: existing.recoveryKey });
+    const plan = await h.service.prepare({ credentials, consistencyMode: 'strong-etag', recoveryKey: existing.recoveryKey });
     expect(plan.mode).toBe('join');
     expect(await h.db.sync_keys.count()).toBe(0);
     expect(h.settings.value).toBeNull();
@@ -99,15 +99,15 @@ it('rejects a wrong recovery key without local writes, then accepts the correct 
 
 it('detects vault creation races and remote identity changes during confirmation', async () => {
     const h = await harness();
-    await h.service.prepare({ credentials });
+    await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
     h.provider.vault = (await encryptedVault('racing-vault')).vault;
-    await expect(h.service.connect()).rejects.toThrow('刚被另一设备创建');
+    await expect(h.service.connect()).rejects.toThrow('拒绝覆盖');
     expect(await h.db.sync_state.count()).toBe(0);
     expect(h.settings.value).toBeNull();
 
     const joined = await encryptedVault('vault-remote');
     h.provider.vault = joined.vault;
-    await h.service.prepare({ credentials, recoveryKey: joined.recoveryKey });
+    await h.service.prepare({ credentials, consistencyMode: 'strong-etag', recoveryKey: joined.recoveryKey });
     h.provider.vault = (await encryptedVault('changed-vault')).vault;
     await expect(h.service.connect()).rejects.toThrow('确认期间已变化');
     expect(await h.db.sync_state.count()).toBe(0);
@@ -115,19 +115,19 @@ it('detects vault creation races and remote identity changes during confirmation
 
 it('propagates publication failure and does not report the connection as synced', async () => {
     const h = await harness({ synchronize: async () => { throw new Error('snapshot publication failed'); } });
-    await h.service.prepare({ credentials });
+    await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
     await expect(h.service.connect()).rejects.toThrow('snapshot publication failed');
     expect((await h.service.read())?.state).toBe('pending');
 });
 
 it('reports orphaned configuration and disconnect preserves domain rows', async () => {
     const settings = memorySettings();
-    settings.value = { schemaVersion: 1, vaultId: 'orphan-vault', deviceId: 'orphan-device', credentials };
+    settings.value = { schemaVersion: 2, consistencyMode: 'strong-etag', vaultId: 'orphan-vault', deviceId: 'orphan-device', credentials };
     const h = await harness({ settings });
     expect((await h.service.read())?.state).toBe('error');
     await expect(h.service.syncNow()).rejects.toThrow('身份不一致');
     settings.value = null;
-    await h.service.prepare({ credentials });
+    await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
     await h.service.connect();
     const groupsBefore = await h.db.groups.toArray();
     await h.service.disconnect();
@@ -142,7 +142,7 @@ it('does not restore a prepared plan after cancellation during preparation', asy
   let permissionRequested = false;
   const permission = new Promise<void>((resolve) => { finishPermission = resolve; });
   const h = await harness({ requestPermission: () => { permissionRequested = true; return permission; } });
-  const preparing = h.service.prepare({ credentials });
+  const preparing = h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
   expect(permissionRequested).toBe(true);
   h.service.cancelPlan();
   finishPermission();

@@ -6,6 +6,7 @@ export const WEBDAV_HTTP_STATUS = {
   redirectMin: 300,
   redirectMax: 400,
   notFound: 404,
+  conflict: 409,
   methodNotAllowed: 405,
   preconditionFailed: 412,
   successMin: 200,

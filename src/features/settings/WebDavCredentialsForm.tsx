@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import type { useWebDavConnection } from '@/features/settings/use-webdav-connection';
+import { WebDavTemplateSelector } from '@/features/settings/WebDavTemplateSelector';
 
 type Connection = ReturnType<typeof useWebDavConnection>;
 
@@ -15,29 +16,28 @@ export function WebDavCredentialsForm({ connection }: WebDavCredentialsFormProps
 
   return (
     <FieldGroup className="gap-4">
+      <WebDavTemplateSelector template={connection.template} disabled={disabled} onSelect={connection.selectTemplate} />
       <Field>
         <FieldLabel htmlFor="webdav-url">WebDAV 地址</FieldLabel>
-        <Input id="webdav-url" type="url" inputMode="url" autoComplete="url" placeholder="https://dav.example.com/orinui" value={connection.url}
+        <Input id="webdav-url" type="url" inputMode="url" autoComplete="url" placeholder={connection.template.urlPlaceholder} value={connection.url}
           disabled={disabled}
           onChange={(event) => connection.setUrl(event.target.value)} />
-        <FieldDescription>填写 HTTPS 地址和服务器上已存在的文件夹。云端只保存加密数据。</FieldDescription>
       </Field>
       <Field>
         <FieldLabel htmlFor="webdav-username">账号</FieldLabel>
-        <Input id="webdav-username" autoComplete="username" value={connection.username} disabled={disabled}
+        <Input id="webdav-username" autoComplete="username" placeholder={connection.template.usernamePlaceholder} value={connection.username} disabled={disabled}
           onChange={(event) => connection.setUsername(event.target.value)} />
       </Field>
       <Field>
-        <FieldLabel htmlFor="webdav-password">应用密码</FieldLabel>
+        <FieldLabel htmlFor="webdav-password">{connection.template.passwordLabel}</FieldLabel>
         <Input id="webdav-password" type="password" autoComplete="current-password" value={connection.password} disabled={disabled}
           onChange={(event) => connection.setPassword(event.target.value)} />
-        <FieldDescription>账号信息只保存在本机，用来连接此服务。</FieldDescription>
       </Field>
       <Field>
         <FieldLabel htmlFor="webdav-recovery-key">恢复密钥（可选）</FieldLabel>
         <Input id="webdav-recovery-key" autoComplete="off" spellCheck={false} value={connection.recoveryKey} disabled={disabled}
           onChange={(event) => connection.setRecoveryKey(event.target.value)} />
-        <FieldDescription>连接已有同步库时填写；创建新库时留空。</FieldDescription>
+        <FieldDescription>已有同步库才填写；新建时留空。</FieldDescription>
       </Field>
       {connection.error && !connection.plan && <FieldError role="alert">{connection.error}</FieldError>}
       <Button type="button" variant="outline" disabled={disabled || !connection.url || !connection.username || !connection.password}

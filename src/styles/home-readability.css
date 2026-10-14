@@ -75,10 +75,6 @@
   color: var(--home-readable-role-color, var(--home-readable-accent, var(--primary)));
 }
 
-[data-home-readable='true']:not([data-home-photo]) .home-readable-group-list {
-  background-color: var(--home-readable-surface);
-}
-
 [data-home-photo] .home-readable-group {
   color: #fff !important;
   text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);

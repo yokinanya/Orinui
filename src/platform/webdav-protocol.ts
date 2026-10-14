@@ -5,12 +5,22 @@ import { WEBDAV_HTTP_STATUS } from '@/platform/webdav-http';
 
 const PROPFIND_BODY = '<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getetag/></d:prop></d:propfind>';
 
-export async function propfind(client: WebDavClient, url: URL, depth: '0' | '1'): Promise<readonly WebDavEntry[]> {
+export async function propfindIfPresent(client: WebDavClient, url: URL,
+  depth: '0' | '1'): Promise<readonly WebDavEntry[] | null> {
   const response = await client.request(url, { method: 'PROPFIND', headers: {
     Depth: depth, 'Content-Type': 'application/xml; charset=utf-8', Accept: 'application/xml, text/xml',
   }, body: PROPFIND_BODY });
-  if (response.status !== WEBDAV_HTTP_STATUS.multiStatus) throw new Error(`WebDAV PROPFIND 失败（HTTP ${response.status}）`);
+  if (response.status === WEBDAV_HTTP_STATUS.notFound) return null;
+  if (response.status !== WEBDAV_HTTP_STATUS.multiStatus) {
+    throw new Error(`WebDAV PROPFIND 失败（HTTP ${response.status}）：${url.pathname}`);
+  }
   return parseWebDavMultiStatus(client.parseXml(await response.text()));
+}
+
+export async function propfind(client: WebDavClient, url: URL, depth: '0' | '1'): Promise<readonly WebDavEntry[]> {
+  const entries = await propfindIfPresent(client, url, depth);
+  if (entries === null) throw new Error(`WebDAV PROPFIND 失败（HTTP ${WEBDAV_HTTP_STATUS.notFound}）：${url.pathname}`);
+  return entries;
 }
 
 export function hrefUrl(href: string, parent: URL): URL {
