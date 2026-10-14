@@ -4,11 +4,11 @@ import type { SyncObjectStore } from '@/sync/objects';
 import { createWebDavClient, type WebDavInput, type WebDavClient } from '@/platform/webdav-client';
 import { base64, childIdentity, fromBase64, propfind, requireCollection, propfindIfPresent } from '@/platform/webdav-protocol';
 import { bytesBody, equalBytes, exactWebDavEntry, readObject, readResourceRevision, writeReceiptRevision } from '@/platform/webdav-resource';
-import { WEBDAV_HTTP_STATUS } from '@/platform/webdav-http';
+import { WEBDAV_HTTP_STATUS, isMissingWebDavDescriptor } from '@/platform/webdav-http';
+import { deleteWebDavVault } from '@/platform/webdav-delete';
 
 export type WebDavRemoteInput = WebDavInput;
 
-const NUTSTORE_ANCESTORS_NOT_FOUND = /<(?:[A-Za-z_][\w.-]*:)?exception\b[^>]*>\s*AncestorsNotFound\s*<\/(?:[A-Za-z_][\w.-]*:)?exception\s*>/;
 
 export interface WebDavRemote {
   readonly objects: SyncObjectStore;
@@ -16,6 +16,7 @@ export interface WebDavRemote {
   createVault(input: { readonly vaultId: string; readonly ciphertext: Uint8Array }): Promise<void>;
   prepareCollections(input: { readonly vaultId: string; readonly deviceId: string }): Promise<void>;
   verifyConditions(input: { readonly vaultId: string; readonly deviceId: string }): Promise<void>;
+  deleteVault(vaultId: string): Promise<void>;
 }
 
 function collectionUrl(client: WebDavClient, ...segments: readonly string[]): URL {
@@ -230,9 +231,7 @@ function createObjectStore(client: WebDavClient): SyncObjectStore {
 
 async function readVault(client: WebDavClient): Promise<{ readonly vaultId: string; readonly ciphertext: Uint8Array } | null> {
   const response = await client.request(client.url('vault.json'), { method: 'GET', headers: { Accept: 'application/json' } });
-  if (response.status === WEBDAV_HTTP_STATUS.notFound) return null;
-  if (client.isNutstore && response.status === WEBDAV_HTTP_STATUS.conflict
-    && NUTSTORE_ANCESTORS_NOT_FOUND.test(await response.text())) return null;
+  if (await isMissingWebDavDescriptor(response, client.isNutstore)) return null;
   if (response.status !== WEBDAV_HTTP_STATUS.ok) throw new Error(`WebDAV 读取同步库描述失败（HTTP ${response.status}）`);
   const manifest = parseWebDavVaultManifest(await response.json());
   return { vaultId: manifest.vaultId, ciphertext: fromBase64(manifest.ciphertext) };
@@ -270,5 +269,6 @@ export function createWebDavRemote(input: WebDavRemoteInput): WebDavRemote {
     createVault: (vault) => createVault(client, vault),
     prepareCollections: (collections) => prepareCollections(client, collections),
     verifyConditions: (conditions) => verifyConditions(client, conditions),
+    deleteVault: (vaultId) => deleteWebDavVault(client, vaultId),
   };
 }

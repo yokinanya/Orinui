@@ -74,5 +74,7 @@ export interface WebDavSyncService {
   connect(): Promise<void>;
   cancelPlan(): void;
   syncNow(): Promise<SyncRunResult>;
+  deleteRemote(): Promise<void>;
+  resetRemote(): Promise<void>;
   disconnect(): Promise<void>;
 }

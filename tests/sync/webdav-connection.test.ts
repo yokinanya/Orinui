@@ -9,6 +9,7 @@ import { createWebDavLocalConnection } from '@/storage/webdav-local';
 import type { WebDavConfiguration, WebDavConfigurationStore } from '@/sync/webdav-types';
 import { createWebDavSyncService } from '@/sync/webdav-connection';
 import { sealWebDavVault } from '@/sync/webdav-vault';
+import { WebDavRecoveryRequiredError } from '@/sync/webdav-recovery-required';
 
 const crypto = createSyncCrypto(webcrypto as unknown as Crypto);
 const credentials = { url: 'https://dav.example.test/orinui/', username: 'user', password: 'pass' };
@@ -36,6 +37,10 @@ function remoteHarness() {
     },
     async prepareCollections() { events.push('prepareCollections'); },
     async verifyConditions() { events.push('verifyConditions'); },
+    async deleteVault(vaultId) {
+      if (vault && vault.vaultId !== vaultId) throw new Error('身份已变化');
+      events.push('deleteVault'); vault = null;
+    },
   };
   return { remote, events, get vault() { return vault; }, set vault(value) { vault = value; } };
 }
@@ -150,4 +155,73 @@ it('does not restore a prepared plan after cancellation during preparation', asy
   await expect(h.service.connect()).rejects.toThrow('请先检查 WebDAV 连接');
   expect(await h.db.sync_state.count()).toBe(0);
   expect(h.settings.value).toBeNull();
+});
+
+it('deletes the remote vault and disconnects while preserving local domain data', async () => {
+  const h = await harness();
+  await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
+  await h.service.connect();
+  const before = await Promise.all([h.db.groups.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()]);
+  await h.service.deleteRemote();
+  expect(h.provider.vault).toBeNull();
+  expect(h.settings.value).toBeNull();
+  expect(await h.db.sync_keys.count()).toBe(0);
+  expect(await h.db.sync_state.count()).toBe(0);
+  expect(await Promise.all([h.db.groups.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()])).toEqual(before);
+});
+
+it('preserves connection and key if remote deletion fails, then permits retry', async () => {
+  const h = await harness();
+  await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
+  await h.service.connect();
+  const deletion = h.provider.remote.deleteVault;
+  h.provider.remote.deleteVault = async () => { throw new Error('HTTP 403'); };
+  await expect(h.service.deleteRemote()).rejects.toThrow('HTTP 403');
+  expect(h.settings.value).not.toBeNull();
+  expect(await h.db.sync_keys.count()).toBe(1);
+  h.provider.remote.deleteVault = deletion;
+  await h.service.deleteRemote();
+  expect(await h.service.read()).toBeNull();
+});
+
+it('permits an explicitly confirmed reset without a recovery key and preserves local groups', async () => {
+  const h = await harness();
+  h.provider.vault = (await encryptedVault('remote-vault')).vault;
+  const before = await h.db.groups.toArray();
+  await expect(h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).rejects.toBeInstanceOf(WebDavRecoveryRequiredError);
+  expect(h.provider.vault).not.toBeNull();
+  await h.service.resetRemote();
+  expect(h.provider.vault).toBeNull();
+  expect(await h.db.groups.toArray()).toEqual(before);
+  expect(await h.db.sync_state.count()).toBe(0);
+  expect(h.settings.value).toBeNull();
+  expect((await h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).mode).toBe('create');
+});
+
+it('rejects forgotten-key reset if the remote identity or key changed after inspection', async () => {
+  const h = await harness();
+  h.provider.vault = (await encryptedVault('remote-vault')).vault;
+  await expect(h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).rejects.toBeInstanceOf(WebDavRecoveryRequiredError);
+  h.provider.vault = (await encryptedVault('remote-vault')).vault;
+  await expect(h.service.resetRemote()).rejects.toThrow('确认期间已变化');
+  expect(h.provider.events).not.toContain('deleteVault');
+});
+
+it('invalidates forgotten-key deletion when the inspection is cancelled', async () => {
+  const h = await harness();
+  h.provider.vault = (await encryptedVault('remote-vault')).vault;
+  await expect(h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).rejects.toBeInstanceOf(WebDavRecoveryRequiredError);
+  h.service.cancelPlan();
+  await expect(h.service.resetRemote()).rejects.toThrow('重新检查连接');
+  expect(h.provider.vault).not.toBeNull();
+});
+
+it('rejects deletion of a connected vault whose remote identity changed', async () => {
+  const h = await harness();
+  await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
+  await h.service.connect();
+  h.provider.vault = (await encryptedVault('other-vault')).vault;
+  await expect(h.service.deleteRemote()).rejects.toThrow('身份已变化');
+  expect(h.provider.events).not.toContain('deleteVault');
+  expect(h.settings.value).not.toBeNull();
 });

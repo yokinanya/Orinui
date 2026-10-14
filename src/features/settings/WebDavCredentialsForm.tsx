@@ -3,11 +3,20 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input';
 import type { useWebDavConnection } from '@/features/settings/use-webdav-connection';
 import { WebDavTemplateSelector } from '@/features/settings/WebDavTemplateSelector';
+import { WebDavDeleteDialog } from '@/features/settings/WebDavDeleteDialog';
 
 type Connection = ReturnType<typeof useWebDavConnection>;
 
 interface WebDavCredentialsFormProps {
   readonly connection: Connection;
+}
+
+function ConnectionFeedback({ connection }: WebDavCredentialsFormProps) {
+  if (connection.plan || (!connection.error && !connection.recoveryRequired)) return null;
+  return <div className="flex flex-wrap items-center gap-1">
+    {connection.error && <FieldError role="alert">{connection.error}</FieldError>}
+    {connection.recoveryRequired && <WebDavDeleteDialog connection={connection} forgotten />}
+  </div>;
 }
 
 export function WebDavCredentialsForm({ connection }: WebDavCredentialsFormProps) {
@@ -39,7 +48,7 @@ export function WebDavCredentialsForm({ connection }: WebDavCredentialsFormProps
           onChange={(event) => connection.setRecoveryKey(event.target.value)} />
         <FieldDescription>已有同步库才填写；新建时留空。</FieldDescription>
       </Field>
-      {connection.error && !connection.plan && <FieldError role="alert">{connection.error}</FieldError>}
+      <ConnectionFeedback connection={connection} />
       <Button type="button" variant="outline" disabled={disabled || !connection.url || !connection.username || !connection.password}
         onClick={() => void connection.prepare()}>
         {busy ? '正在检查…' : '检查连接'}

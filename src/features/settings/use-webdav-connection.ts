@@ -36,6 +36,7 @@ export function useWebDavConnection() {
     setRecoveryKey('');
     setKeyAcknowledged(false);
   };
+  const invalidatePlan = () => { sync.cancelPlan(); setKeyAcknowledged(false); };
 
   const selectTemplate = (template: WebDavTemplate) => {
     if (template.id === templateId) return;
@@ -49,10 +50,10 @@ export function useWebDavConnection() {
   return {
     ...sync,
     template: getWebDavTemplate(templateId), selectTemplate,
-    url, setUrl,
-    username, setUsername,
-    password, setPassword,
-    recoveryKey, setRecoveryKey,
+    url, setUrl: (value: string) => { invalidatePlan(); setUrl(value); },
+    username, setUsername: (value: string) => { invalidatePlan(); setUsername(value); },
+    password, setPassword: (value: string) => { invalidatePlan(); setPassword(value); },
+    recoveryKey, setRecoveryKey: (value: string) => { invalidatePlan(); setRecoveryKey(value); },
     keyAcknowledged, setKeyAcknowledged,
     prepare, connect, cancel,
   };

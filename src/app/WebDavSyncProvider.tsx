@@ -25,6 +25,11 @@ export function WebDavSyncProvider({ children, db, refreshData }: ProviderProps)
   const value: WebDavSyncContextValue = { status: visibleStatus, loading, busy: actions.busy || visibleStatus?.state === 'syncing',
     error: actions.error, plan: actions.plan, prepare: actions.prepare, connect: actions.connect,
     cancelPlan: actions.cancelPlan, disconnect: actions.disconnect,
+    recoveryRequired: actions.recoveryRequired, resetRemote: actions.resetRemote,
+    deleteRemote: () => {
+      const permission = status ? requestWebDavPermission(status.url) : Promise.reject(new Error('尚未连接 WebDAV 同步'));
+      return actions.run(async () => { await permission; await service.deleteRemote(); });
+    },
     syncNow: () => {
       const permission = status ? requestWebDavPermission(status.url) : Promise.reject(new Error('尚未连接 WebDAV 同步'));
       return actions.run(async () => { await permission; await service.syncNow(); });

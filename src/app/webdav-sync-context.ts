@@ -12,6 +12,9 @@ export interface WebDavSyncContextValue {
   cancelPlan(): void;
   syncNow(): Promise<boolean>;
   disconnect(): Promise<boolean>;
+  deleteRemote(): Promise<boolean>;
+  readonly recoveryRequired: boolean;
+  resetRemote(): Promise<boolean>;
 }
 
 export const WebDavSyncContext = createContext<WebDavSyncContextValue | null>(null);
