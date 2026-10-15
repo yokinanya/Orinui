@@ -5,7 +5,7 @@ import { planSyncJoin } from '@/storage/sync/join-plan';
 import { mergeSyncSnapshots } from '@/domain/sync';
 import { createSyncCrypto } from '@/platform/sync-crypto';
 import { decodeSyncSnapshot, encodeSyncSnapshot, openSyncImage } from '@/platform/sync-codec';
-import { validateSyncImageAsset } from '@/platform/sync-images';
+import { validateStoredMediaAsset } from '@/platform/media';
 import { createBrowserSyncLock } from '@/platform/sync-lock';
 import { createWebDavRemote } from '@/platform/webdav-store';
 import { checkWebDavPermission, createWebDavConfigurationStore, requestWebDavPermission } from '@/platform/webdav-settings';
@@ -23,7 +23,7 @@ export function createWebDavRuntime(db: Database) {
     remote: (credentials, consistencyMode) => createWebDavRemote({ credentials, consistencyMode, fetch: (url, init) => fetch(url, init),
       parseXml: (source) => new DOMParser().parseFromString(source, 'application/xml') }),
     synchronize: (objects, identity) => createSyncCoordinator({
-      local: createWebDavSyncLocal({ db, identity, dependencies: { crypto: cipher, validateImage: validateSyncImageAsset } }), objects, lock, crypto: cipher,
+      local: createWebDavSyncLocal({ db, identity, dependencies: { crypto: cipher, validateStoredMediaAsset } }), objects, lock, crypto: cipher,
       codec: { encode: encodeSyncSnapshot, decode: decodeSyncSnapshot, openImage: openSyncImage },
       algorithms: { merge: mergeSyncSnapshots, join: planSyncJoin }, now: Date.now, createRunId: () => crypto.randomUUID(),
     }).syncNow(),

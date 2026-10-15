@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { mergeSyncSnapshots, type SyncSnapshotV1 } from '@/domain/sync';
 import { createSyncCrypto } from '@/platform/sync-crypto';
-import { validateSyncImageAsset } from '@/platform/sync-images';
+import { validateStoredMediaAsset } from '@/platform/sync-images';
 import { createDatabase, type Database } from '@/storage/db';
 import { createShortcut, deleteShortcut } from '@/storage/shortcuts';
 import { applySyncSnapshot } from '@/storage/sync/apply';
@@ -44,7 +44,8 @@ async function addImageShortcut(database: Database, title: string) {
 }
 
 function dependencies(hash?: (bytes: Uint8Array) => Promise<string>) {
-  return { crypto: { hash: hash ?? createSyncCrypto(globalThis.crypto).hash }, validateImage: vi.fn(async (_asset: ImageAsset) => {}) };
+  return { crypto: { hash: hash ?? createSyncCrypto(globalThis.crypto).hash },
+    validateStoredMediaAsset: vi.fn(async (asset: MediaAsset) => asset) };
 }
 
 function remoteSnapshot(local: SyncSnapshotV1, changes: Partial<SyncSnapshotV1>): SyncSnapshotV1 {
@@ -142,16 +143,16 @@ it('validates media hashes before the transaction and applies verified bytes', a
   const database = await freshDatabase(() => 10_000);
   await addImageShortcut(database, '图片校验');
   const before = await exported(database);
-  const verifier = vi.fn(async (_asset: ImageAsset) => {});
+  const verifier = vi.fn(async (asset: MediaAsset) => asset);
   const wrongHash = dependencies(async () => '0'.repeat(64));
 
   await expect(applySyncSnapshot(database, { snapshot: before.snapshot, assets: before.assets,
     expectedGeneration: before.localGeneration }, wrongHash)).rejects.toThrow(/SHA-256 校验失败/);
-  expect(wrongHash.validateImage).not.toHaveBeenCalled();
+  expect(wrongHash.validateStoredMediaAsset).not.toHaveBeenCalled();
   expect((await database.sync_state.get('app'))?.generation).toBe(before.localGeneration);
 
   await applySyncSnapshot(database, { snapshot: before.snapshot, assets: before.assets,
-    expectedGeneration: before.localGeneration }, { crypto: createSyncCrypto(globalThis.crypto), validateImage: verifier });
+    expectedGeneration: before.localGeneration }, { crypto: createSyncCrypto(globalThis.crypto), validateStoredMediaAsset: verifier });
 
   expect(verifier).toHaveBeenCalledTimes(1);
   expect(await database.assets.count()).toBe(1);
@@ -179,13 +180,13 @@ it('checks real image bytes and decoded dimensions at the production verifier bo
   const close = vi.fn();
   const decode = vi.fn(async () => ({ width: 1, height: 1, close }));
   vi.stubGlobal('createImageBitmap', decode);
-  const asset: ImageAsset = { id: 'image-1', kind: 'icon', mime: 'image/png', width: 1, height: 1,
+  const asset: MediaAsset = { id: 'image-1', kind: 'icon', mime: 'image/png', width: 1, height: 1,
     blob: new Blob([TEST_PNG], { type: 'image/png' }), sourceUrl: null };
 
-  await validateSyncImageAsset(asset);
+  await validateStoredMediaAsset(asset);
 
   expect(decode).toHaveBeenCalledOnce();
   expect(close).toHaveBeenCalledOnce();
-  await expect(validateSyncImageAsset({ ...asset,
+  await expect(validateStoredMediaAsset({ ...asset,
     blob: new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/png' }) })).rejects.toThrow(/文件签名/);
 });

@@ -75,7 +75,9 @@ function mergeSettings(snapshots: readonly SyncSnapshotV1[]): SyncSettings {
 
 function mergeAsset(left: SyncAsset, right: SyncAsset): SyncAsset {
   if (left.kind !== right.kind || left.mime !== right.mime || left.width !== right.width || left.height !== right.height ||
-    left.byteLength !== right.byteLength || left.sha256 !== right.sha256) fail(`同一图片标识对应不同内容：${left.id}`);
+    left.byteLength !== right.byteLength || left.sha256 !== right.sha256 || JSON.stringify(left.motion) !== JSON.stringify(right.motion)) {
+    fail(`同一媒体标识对应不同内容：${left.id}`);
+  }
   return { ...left, sourceUrl: choose(left.sourceUrl, right.sourceUrl) };
 }
 
@@ -87,7 +89,7 @@ function mergeAssets(snapshots: readonly SyncSnapshotV1[], tombstones: ReadonlyS
 function referencedAssets(shortcuts: readonly SyncShortcut[], settings: SyncSettings): Set<string> {
   const references = new Set(shortcuts.flatMap(({ icon }) => icon.value.kind === 'asset' ? [icon.value.assetId] : []));
   const background = settings.appearance.value.background;
-  if (background.kind === 'photo') references.add(background.assetId);
+  if (background.kind === 'photo' || background.kind === 'motion') references.add(background.assetId);
   return references;
 }
 

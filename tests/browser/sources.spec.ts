@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readZipFixture } from './zip-fixtures';
 import {
   clearFixtureSource,
   clearPhotoSource,
@@ -17,6 +17,7 @@ test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
 
 test('已保存的图片直链在重新打开时回填，包括资源保留来源的网站旧记录', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '图片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -35,6 +36,7 @@ test('已保存的图片直链在重新打开时回填，包括资源保留来�
 
 test('图片来源异步读取完成时不会覆盖用户已输入的地址', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '图片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -53,8 +55,9 @@ test('图片来源异步读取完成时不会覆盖用户已输入的地址', as
   await expect(input).toHaveValue('https://typed.example.test/photo.png');
 });
 
-test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留并写入JSON备份', async ({ page }) => {
+test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留并写入ZIP备份', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '图片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -82,20 +85,18 @@ test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留�
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
-    page.waitForEvent('download'), page.getByRole('button', { name: /导出 JSON/ }).click(),
+    page.waitForEvent('download'), page.getByRole('button', { name: /导出 ZIP/ }).click(),
   ]);
   const path = await download.path();
-  if (!path) throw new Error('JSON 备份没有落盘');
-  const backup = JSON.parse(await readFile(path, 'utf8')) as {
-    assets: Array<{ id: string; sourceUrl: string | null }>;
-    shortcuts: Array<{ id: string; iconSourceUrl: string | null }>;
-  };
+  if (!path) throw new Error('ZIP 备份没有落盘');
+  const { manifest: backup } = await readZipFixture(path);
   expect(backup.assets.filter(({ id }) => id === ids.photoId || id === ids.iconId).map(({ sourceUrl }) => sourceUrl)).toEqual([null, null]);
   expect(backup.shortcuts.find(({ id }) => id === ids.shortcutId)?.iconSourceUrl).toBeNull();
 });
 
 test('来源已被外部清除时显示错误且仍可重试', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '图片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   const ids = await page.evaluate(async (sourceUrl) => {

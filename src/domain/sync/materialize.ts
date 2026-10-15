@@ -1,6 +1,6 @@
 import { fail } from '@/domain/errors';
 import type { Group } from '@/domain/group';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { SyncRegister, SyncSnapshotV1 } from '@/domain/sync/types';
@@ -10,7 +10,7 @@ export interface MaterializedSyncData {
   readonly groups: readonly Group[];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
-  readonly assets: readonly Omit<ImageAsset, 'blob'>[];
+  readonly assets: readonly Omit<MediaAsset, 'blob'>[];
   readonly defaultGroupId: string;
 }
 
@@ -59,6 +59,7 @@ export function materializeSyncSnapshot(input: SyncSnapshotV1): MaterializedSync
     shortcuts: snapshot.settings.shortcutPreferences.value,
     layout: snapshot.settings.layout.value, clock: snapshot.settings.clock.value,
   };
-  const assets = snapshot.assets.map(({ id, kind, mime, width, height, sourceUrl }) => ({ id, kind, mime, width, height, sourceUrl: sourceUrl.value }));
+  const assets = snapshot.assets.map(({ id, kind, mime, width, height, sourceUrl, motion }) => ({ id, kind, mime, width, height,
+    sourceUrl: sourceUrl.value, ...(motion ? { motion } : {}) }));
   return { groups, shortcuts, settings, assets, defaultGroupId };
 }

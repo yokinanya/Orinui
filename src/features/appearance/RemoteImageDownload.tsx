@@ -3,19 +3,19 @@ import type { ReactNode } from 'react';
 import { ArrowUpRightIcon, LoaderCircleIcon, SaveIcon } from 'lucide-react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
-import type { ImageAssetKind } from '@/domain/asset';
+import type { MediaAssetKind } from '@/domain/asset';
 import { RedirectConfirmationRequiredError } from '@/domain/remote-image-errors';
 import { downloadRemoteImage } from '@/platform/remote-images';
-import type { NewImageAsset } from '@/storage/assets';
+import type { NewMediaAsset } from '@/storage/assets';
 import { useImageSource } from '@/features/appearance/use-image-source';
 
 interface RemoteImageDownloadProps {
   readonly id: string;
-  readonly kind: ImageAssetKind;
+  readonly kind: MediaAssetKind;
   readonly initialSourceUrl?: string | null;
   readonly headerAction?: ReactNode;
   readonly disabled?: boolean;
-  readonly onReady: (image: NewImageAsset) => Promise<void> | void;
+  readonly onReady: (image: NewMediaAsset) => Promise<void> | void;
   readonly onBusyChange?: (busy: boolean) => void;
 }
 

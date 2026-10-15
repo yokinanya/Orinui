@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { SyncAsset, SyncEntityType, SyncGroup, SyncRegister, SyncSettings, SyncShortcut, SyncTombstone } from '@/domain/sync/types';
 import type { SyncRunRecord, SyncSuccessRecord } from '@/sync/types';
@@ -24,7 +24,7 @@ interface SyncRecordBase<K extends SyncRecordKind, V> {
   readonly entityId: string;
   readonly value: V;
   readonly pendingDeleteUntil?: number;
-  readonly retainedAsset?: ImageAsset;
+  readonly retainedAsset?: MediaAsset;
 }
 
 export type SyncEntityRecordRow =

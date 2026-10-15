@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { visibleSubmitButton } from './form-helpers';
 
 export const PHOTO_SOURCE = 'https://images.example.test/photo.jpg';
 export const ICON_SOURCE = 'https://icons.example.test/icon.png';
@@ -158,7 +159,7 @@ export async function createImageShortcut(page: Page) {
   await page.getByLabel('网址', { exact: true }).fill('example.com');
   await page.getByLabel('选择图标文件').setInputFiles(await rasterFile(page, 'icon.png'));
   await expect(page.getByRole('img', { name: '图标预览' })).toBeVisible();
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const link = page.getByRole('link', { name: '本地图标网站', exact: true });
   await expect(link.locator('img')).toHaveAttribute('src', /^blob:/);
   return link;
@@ -169,7 +170,7 @@ export async function clearPhotoSource(page: Page, ids: { photoId: string; iconI
   const photoClear = page.getByRole('button', { name: '清除来源', exact: true });
   await expect(photoClear).toBeVisible();
   await holdAssetSourceWriteLock(page, ids.photoId);
-  const photoClearResult = page.getByRole('button', { name: '正在清除…', exact: true });
+  const photoClearResult = page.getByRole('button', { name: '正在清除来源', exact: true });
   const photoClick = photoClear.click();
   await expect(photoClearResult).toBeDisabled();
   await page.evaluate(() => window.__releaseAssetSourceLock?.());

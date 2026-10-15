@@ -6,7 +6,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 /** 动态配色的来源：跟随当前背景，或使用用户锁定的种子色。 */
 export type DynamicColorMode = 'follow' | 'locked';
 
-export type BackgroundKind = 'default' | 'photo' | 'solid' | 'gradient';
+export type BackgroundKind = 'default' | 'photo' | 'motion' | 'solid' | 'gradient';
 
 export interface DefaultBackground {
   kind: 'default';
@@ -17,6 +17,12 @@ export interface PhotoBackground {
   /** 本地图片资源标识；图片只保存在本机，不上传 */
   assetId: string;
   /** 遮罩强度 0–1，仅照片背景使用 */
+  maskStrength: number;
+}
+
+export interface MotionBackground {
+  kind: 'motion';
+  assetId: string;
   maskStrength: number;
 }
 
@@ -36,6 +42,7 @@ export interface GradientBackground {
 export type Background =
   | DefaultBackground
   | PhotoBackground
+  | MotionBackground
   | SolidBackground
   | GradientBackground;
 
@@ -75,47 +82,39 @@ function normalizeHexColor(value: unknown, label: string): string {
   return value.toLowerCase();
 }
 
+function validateMaskStrength(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < MASK_RANGE.min || value > MASK_RANGE.max) {
+    fail(`遮罩强度需要在 ${MASK_RANGE.min} 到 ${MASK_RANGE.max} 之间`);
+  }
+  return value;
+}
+
+function validatePhotoBackground(raw: Record<string, unknown>): PhotoBackground {
+  if (typeof raw.assetId !== 'string' || raw.assetId === '') fail('照片背景缺少图片标识');
+  return { kind: 'photo', assetId: raw.assetId, maskStrength: validateMaskStrength(raw.maskStrength) };
+}
+
+function validateMotionBackground(raw: Record<string, unknown>): MotionBackground {
+  if (typeof raw.assetId !== 'string' || raw.assetId === '') fail('动态背景缺少媒体标识');
+  return { kind: 'motion', assetId: raw.assetId, maskStrength: validateMaskStrength(raw.maskStrength) };
+}
+
+function validateGradientBackground(raw: Record<string, unknown>): GradientBackground {
+  const angle = raw.angle;
+  if (typeof angle !== 'number' || !Number.isFinite(angle) || angle < 0 || angle > 360) fail('渐变方向需要在 0 到 360 度之间');
+  return { kind: 'gradient', from: normalizeHexColor(raw.from, '渐变起始颜色'),
+    to: normalizeHexColor(raw.to, '渐变结束颜色'), angle };
+}
+
 function validateBackground(value: unknown): Background {
   const raw = asRecord(value, '背景设置');
-
   switch (raw.kind) {
-    case 'default':
-      return { kind: 'default' };
-
-    case 'photo': {
-      if (typeof raw.assetId !== 'string' || raw.assetId === '') {
-        fail('照片背景缺少图片标识');
-      }
-      const strength = raw.maskStrength;
-      if (
-        typeof strength !== 'number' ||
-        Number.isNaN(strength) ||
-        strength < MASK_RANGE.min ||
-        strength > MASK_RANGE.max
-      ) {
-        fail(`遮罩强度需要在 ${MASK_RANGE.min} 到 ${MASK_RANGE.max} 之间`);
-      }
-      return { kind: 'photo', assetId: raw.assetId, maskStrength: strength };
-    }
-
-    case 'solid':
-      return { kind: 'solid', color: normalizeHexColor(raw.color, '背景颜色') };
-
-    case 'gradient': {
-      const angle = raw.angle;
-      if (typeof angle !== 'number' || !Number.isFinite(angle) || angle < 0 || angle > 360) {
-        fail('渐变方向需要在 0 到 360 度之间');
-      }
-      return {
-        kind: 'gradient',
-        from: normalizeHexColor(raw.from, '渐变起始颜色'),
-        to: normalizeHexColor(raw.to, '渐变结束颜色'),
-        angle,
-      };
-    }
-
-    default:
-      fail('背景类型不正确');
+    case 'default': return { kind: 'default' };
+    case 'photo': return validatePhotoBackground(raw);
+    case 'motion': return validateMotionBackground(raw);
+    case 'solid': return { kind: 'solid', color: normalizeHexColor(raw.color, '背景颜色') };
+    case 'gradient': return validateGradientBackground(raw);
+    default: fail('背景类型不正确');
   }
 }
 

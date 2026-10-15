@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { fail } from '@/domain/errors';
 import { SVG_EDGE_LIMIT } from '@/domain/image';
 import { validateSvg } from '@/platform/svg';
@@ -51,7 +51,7 @@ export async function prepareSvgImage(blob: Blob): Promise<{ readonly blob: Blob
   return { width, height, blob: new Blob([new XMLSerializer().serializeToString(root)], { type: 'image/svg+xml' }) };
 }
 
-export async function validateSvgImageAsset(asset: ImageAsset): Promise<void> {
+export async function validateSvgImageAsset(asset: MediaAsset): Promise<void> {
   if (asset.kind !== 'icon' || asset.mime !== 'image/svg+xml') fail('SVG 资源只能用作网站图标');
   const root = validateSvg(await asset.blob.text());
   const size = svgDimensions(root);

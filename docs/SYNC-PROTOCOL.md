@@ -1,12 +1,10 @@
-# 同步基础协议（快照 schema 2）
+# 同步基础协议（快照 schema 3）
 
-状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。WebDAV 适配器、连接界面和事件触发已接入，并通过受控服务真实扩展审计；真实第三方 WebDAV 服务及用户设备仍待验收。现有功能扩展权限已有用户确认，Google Drive 适配器与 OAuth 延期，详见 [VERIFICATION.md](./VERIFICATION.md)。本文不把受控审计等同于发布可用性。
+状态：快照 schema 3、动态媒体原件逐文件加密、poster 本地重建和 ZIP-only 本地备份已实现。WebDAV 适配器、连接界面和事件触发已接入；用户已确认真实 WebDAV 服务验收完成。新增动态媒体同步组合和真实用户设备的验证范围见 [VERIFICATION.md](./VERIFICATION.md)。Google Drive 适配器与 OAuth 延期。本文不把实现或受控审计等同于发布验收。
 
 ## 版本与身份
 
-Dexie schema 5 保存本机数据和同步元数据，JSON 备份为版本 2；同步快照 schemaVersion 为 2，加密对象格式仍为 ORINUI01，其固定 AAD schemaVersion 仍为 1。这些版本独立升级，未知同步/加密版本明确拒绝。
-
-版本 1 同步快照由严格迁移器转换：既有外观、默认引擎、自定义引擎、布局和时钟寄存器保持原逻辑版本；搜索/网站新偏好寄存器以默认值、clock 0 和原 deviceId 初始化。新构建可读取版本 1 和 2；旧构建不保证读取版本 2。
+Dexie schema 5 保存本机数据和同步元数据；本地完整备份仅支持 ZIP `formatVersion: 1`，同步快照使用 `schemaVersion: 3`。加密 envelope 魔数仍为 ORINUI01，AAD 的固定 `schemaVersion` 仍为 1；这些版本各自独立。同步解析只接受 schema 3，开发期 schema 1、2 明确拒绝，不转换、不合并，也不因此删除远端或清空本机数据。
 
 vaultId 标识一个同步库，deviceId 标识一个 Chrome 配置文件。实体标识沿用已有稳定 ID，新实体使用 UUID。协议接受既有非空字符串标识，但拒绝首尾空白和控制字符；不能用永久删除的标识重新创建实体。
 
@@ -22,9 +20,11 @@ generation 是每设备快照代次，不跨设备比较。实际本地变更和
 | 网站 | title、url 独立；groupId 与 order 合为 placement；icon 引用为一个寄存器 |
 | 设置 | appearance、layout、clock、searchPreferences、shortcutPreferences 各为一个单元；defaultEngineId 独立；自定义引擎按 ID 保存 |
 | 默认组 | vault 级 defaultGroupId 寄存器，isDefault 从它派生 |
-| 图片 | id、kind、MIME、尺寸、byteLength、SHA-256 不可变；sourceUrl 单独版本化 |
+| 媒体 | id、kind、MIME、尺寸、byteLength、SHA-256、动态类型与时长不可变；sourceUrl 单独版本化。网站图标仍为静态图片 |
 
-图片来源 URL 随完整快照加密同步，包括已保存的查询参数；它也仍随普通 JSON 备份导出。清除来源会同步清空资源及相关网站的来源字段，保留 Blob 和引用。凭据、恢复密钥和 CryptoKey 不进入快照或普通备份。
+资源来源 URL 随完整快照加密同步，包括已保存的查询参数；它也随 ZIP manifest 导出。动态媒体仅本地上传，因此 sourceUrl 必须为空。清除静态图片来源会同步清空资源及相关网站的来源字段，保留媒体 Blob 和引用。凭据、恢复密钥和 CryptoKey 不进入快照或 ZIP。
+
+静态照片与图标保留既有图片校验规则。动态背景接受本地 MP4、WebM、GIF 和动画 WebP；快照记录原始字节长度、摘要、媒体类型和视频时长。上传、备份恢复和同步接收都校验媒体签名与浏览器解码能力，不自动转码。媒体原件逐文件 AES-256-GCM 加密并同步；从首帧生成的 PNG poster 只是本地缓存，不进入快照或远端对象，在同步接收时由通过校验的原件重建。
 
 排序合并后按位置、字段版本、设备 ID 和实体 ID 确定顺序，本机物化为连续 order。重编号不伪造用户修改；随后只改名称/标题时，未改动的位置寄存器仍保留原版本。
 
@@ -50,13 +50,13 @@ planSyncJoin 是无写入的首次合并计划。新设备使用独立 deviceId 
 - 有本机数据时保留其实体，远端默认组仍作为库的默认身份，本机额外默认组成为普通组。
 - 首次合并时，本机已有字段被视为一次新设备提交，其版本高于已观察远端版本；同 ID 的图片内容冲突仍拒绝，不丢弃本机数据。
 
-JSON 导入仍是用户确认的完整替换。已被该库登记过的导入 ID 会换成新 ID，并一起更新分组、网站、图片和引擎引用；被替换实体通过墓碑传播，避免旧删除身份复活。没有配置同步时，备份 ID 继续原样恢复。
+ZIP 导入是用户确认的完整替换。已被该库登记过的导入 ID 会换成新 ID，并一起更新分组、网站、媒体和引擎引用；被替换实体通过墓碑传播，避免旧删除身份复活。没有配置同步时，备份 ID 继续原样恢复。首个 Beta 不导入开发期 JSON，也不提供旧 ZIP 转换分支。
 
 本地重置仍恢复空默认数据；已配置同步时，其删除与新默认组同时进入版本记录。断开本机同步只清理本机同步状态/密钥，不删除本地网站或任何外部文件。
 
 ## 接收与冲突
 
-接收先严格校验字段、版本、域内规则、限额及全部引用，再验证媒体 MIME、大小、SHA-256、静态格式和实际解码尺寸。媒体校验在事务外完成，不静默重新编码/降质。
+接收先严格校验字段、schema 3、域内规则及全部引用，再验证每项媒体的 MIME、长度、SHA-256、静态图片规则或动态媒体签名和实际浏览器解码。poster 在验证通过后重建。校验在事务外完成，不静默重新编码/降质；失败时不修改本机数据。
 
 最终事务检查 vaultId、deviceId 与 expectedGeneration。准备期间本机发生新修改会明确失败并保留本机数据；不能直接应用未合并的其他设备快照。
 
@@ -72,7 +72,7 @@ JSON 导入仍是用户确认的完整替换。已被该库登记过的导入 ID
 
 ## 加密字节格式
 
-恢复密钥是 32 字节随机值，以规范 Base64url 编码为 43 字符且无 padding。新生成密钥会重新取随机值，直到首字符为 ASCII 字母或数字；导入仍接受全部规范 Base64url 编码，以兼容既有密钥。导入后为不可导出的 AES-256-GCM CryptoKey；密钥只留本机 IndexedDB，不写到云端、普通配置或 JSON 备份。
+恢复密钥是 32 字节随机值，以规范 Base64url 编码为 43 字符且无 padding。新生成密钥会重新取随机值，直到首字符为 ASCII 字母或数字；导入仍接受全部规范 Base64url 编码，以兼容既有密钥。导入后为不可导出的 AES-256-GCM CryptoKey；密钥只留本机 IndexedDB，不写到云端、普通配置或 ZIP 备份。
 
 加密对象为：
 
@@ -80,22 +80,22 @@ JSON 导入仍是用户确认的完整替换。已被该库登记过的导入 ID
 8 字节 UTF-8 魔数 ORINUI01 | 12 字节随机 IV | 密文及 16 字节认证 tag
 ```
 
-AAD 是按固定字段顺序 JSON 编码的 `{ schemaVersion: 1, vaultId, kind, objectId }`；kind 为 snapshot 或 asset。每次加密产生新随机 IV。快照正文是 UTF-8 JSON；媒体正文是已保存的原始静态图片字节。
+AAD 是按固定字段顺序 JSON 编码的 `{ schemaVersion: 1, vaultId, kind, objectId }`；kind 为 snapshot 或 asset。每次加密产生新随机 IV。快照正文是 UTF-8 JSON；媒体正文是已保存的原始静态图片或动态媒体字节。
 
 快照 objectId 是 deviceId，媒体 objectId 是 assetId。解密后的快照身份必须与 AAD 相同；媒体必须匹配已验证快照中的长度和 SHA-256。错误密钥、身份置换、篡改、未知格式和无效 UTF-8/JSON 都明确失败。
 
-恢复密钥和全部已解锁设备同时遗失时无法恢复加密副本；仍有本地数据时可继续使用普通 JSON 备份。跨设备密钥轮换尚需提供方原子发布和旧设备处理协议，本批没有宣称已经支持。
+恢复密钥和全部已解锁设备同时遗失时无法恢复加密副本；仍有本地数据时可用 ZIP 备份恢复。ZIP 本身默认不加密，且不包含恢复密钥或 poster。跨设备密钥轮换尚需提供方原子发布和旧设备处理协议，本批没有宣称已经支持。
 
 ## 已实现 API 与边界
 
 - storage/sync：initialize/disconnect、seed、捕获、finalize、export、seal、first join plan、apply。
 - domain/sync：严格快照解析、字段合并、确定性物化、时钟与可识别引用冲突。
-- platform/sync-crypto、sync-codec、sync-images：注入的原生 Web Crypto、字节格式与真实图片验证器。
+- platform/sync-crypto、sync-codec、media：注入的原生 Web Crypto、字节格式、静态图片/动态媒体验证和 poster 重建。
 - sync：公共对象端口、分阶段 syncNow、运行身份/失败与发布确认状态；本地适配器保存一次性基线，原生锁保证同源同 scope 串行。顺序与对象契约见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)。
 - 自动检查使用独立内存 IndexedDB 模拟设备，真实 Web Crypto 进行密钥和密文验证；不模拟提供方上传成功。
 
-手动协调先完整校验并事务提交本机候选，再上传媒体、按提供方一致性策略发布快照；强 ETag 服务使用原子条件发布，坚果云使用 SHA-256 写前比较和写后回读。发布失败保留已完整接收的结果与未同步新编辑，不跨本机和远端伪造回滚。运行记录与基线标记不进入快照或 JSON 备份。此适配器策略不改变本文件定义的快照/加密 schema。
+手动协调先完整校验并事务提交本机候选，再逐项上传媒体原件、按提供方一致性策略发布快照；强 ETag 服务使用原子条件发布，坚果云使用 SHA-256 写前比较和写后回读。动态 poster 在接收端本地重建。发布失败保留已完整接收的结果与未同步新编辑，不跨本机和远端伪造回滚。运行记录与基线标记不进入快照或 ZIP 备份。此适配器策略不改变本文件定义的快照/加密 schema。
 
-尚需实施或验收：第三方 WebDAV 服务兼容性及该来源上的权限与同步流程；设备集合/远端清理、完整密钥轮换的协议与 MVP 边界及真实用户设备验收。Google Drive 适配器及 OAuth 延期，不作为当前阶段阻塞项。受控服务审计范围见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)，进度见 [TASKS.md](./TASKS.md)。
+尚需实施或验收：动态媒体同步组合；设备集合/远端清理、完整密钥轮换的协议与 MVP 边界及真实用户设备验收。真实 WebDAV 服务验收由用户确认完成。Google Drive 适配器及 OAuth 延期，不作为当前阶段阻塞项。受控服务审计范围见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md)，进度见 [TASKS.md](./TASKS.md)。
 
 依据：[Dexie middleware](https://dexie.org/docs/Dexie/Dexie.use%28%29)、[Web Crypto importKey](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey)、[AES-GCM 参数](https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams)。

@@ -50,11 +50,12 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 | `svg.ts` / `svg-style.ts` / `svg-stylesheet.ts` / `svg-references.ts` | 静态 SVG 白名单、内联/简单内嵌 CSS 的级联转换、XML/XLink 归一化及内部资源引用/循环检查；未知或危险内容明确拒绝 |
 | `svg-image.ts` | SVG 输入校验后的图片归一化与 XML 序列化；为尺寸和缺失 viewBox 补齐规范值 |
 | `remote-images.ts` / `remote-image-download.ts` | 用户操作中申请具体来源与响应头权限；注入网络/监听/锁/图片处理端口，逐跳下载、体积检查和跨来源确认 |
-| `backup-file.ts` | JSON/Blob 编解码及本地文件读写 |
+| `backup-file.ts` | `fflate` 流式 ZIP 编解码、manifest/原始媒体校验及本地文件读写 |
 | `backup-download.ts` | 导出文件的浏览器下载与对象 URL 生命周期 |
+| `media.ts` / `media-frame.ts` | MP4/WebM/GIF/动画 WebP 内容识别与浏览器解码；动态封面生成及接收时重建 |
 | `clipboard.ts` | 用户点击后写入系统剪贴板；能力缺失或写入拒绝直接报错，不读取剪贴板或自动复制 |
 
-已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。`platform/webdav-client`、`webdav-protocol`、`webdav-xml` 与 `webdav-store` 实现 HTTPS WebDAV 请求、PROPFIND 解析、默认强 ETag 条件存取和坚果云专用 SHA-256 回读兼容模式；`webdav-settings` 管理精确来源权限和当前配置文件的本机凭据。自动触发与待删除到期调度位于同步应用层。Drive/Identity 仍未接入。关于页已另在真实扩展检查，普通网页套件不覆盖平台信息。
+已新增 sync-crypto、sync-codec、sync-images 平台模块，提供加密、字节格式与真实媒体校验；动态媒体同步保存原始 Blob 并逐文件 AES-GCM 加密，poster 由接收端重建为本地缓存。sync-lock 委托原生 Web Locks，content-motion 集中动态效果 API。`platform/webdav-client`、`webdav-protocol`、`webdav-xml` 与 `webdav-store` 实现 HTTPS WebDAV 请求、PROPFIND 解析、默认强 ETag 条件存取和坚果云专用 SHA-256 回读兼容模式；`webdav-settings` 管理精确来源权限和当前配置文件的本机凭据。自动触发与待删除到期调度位于同步应用层。Drive/Identity 仍未接入。WXT `build:publicAssets` hook 将根目录单一来源的 GPL `LICENSE` 复制到扩展输出目录；第三方许可清单由 public 资源随包输出。关于页需在真实扩展检查，普通网页套件不覆盖 runtime manifest。
 
 ## 本地数据与事务
 
@@ -65,7 +66,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 | groups | id；order、isDefault | 分组与唯一默认组 |
 | shortcuts | id；groupId、order | 网站及组内连续位置 |
 | settings | 固定主键 app | 外观、搜索、网站显示、布局、时钟设置 |
-| assets | id；kind | 图片 Blob、尺寸、MIME 与可选来源 URL |
+| assets | id；kind | 静态图片/图标或动态媒体 Blob、尺寸、MIME 与可选来源 URL；poster 为动态媒体的本地缓存 |
 | sync_state | 固定主键 app | 库/设备身份、时钟/代次、默认组、接收标记及可选本机基线/运行/成功记录 |
 | sync_records | id；kind、entityId | 字段寄存器、墓碑和短暂撤销图片缓存 |
 | sync_keys | vaultId | 本机不可导出的 CryptoKey |
@@ -78,7 +79,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 - 版本 2 → 3 只新增同步表；没有配置同步库时不捕获业务记录。DBCore 中间件把本机版本与领域写入原子提交，接收事务暂停捕获防回声。
 - 版本 3 → 4 不改表/索引；将旧网站图标像素尺寸迁移为占比，并同步规范化本地同步寄存器中的图标值。
 - 版本 4 → 5 不改表/索引；为时钟、布局、搜索和网站偏好补新增字段默认值，并为新同步寄存器使用零逻辑版本，保留既有逻辑版本。已连接同步的旧库在同一升级事务中暂时暂停变更捕获，迁移完成后恢复原暂停状态；失败则整笔回滚。旧设置仍经过领域校验，损坏数据会使迁移失败。
-- JSON 备份当前为版本 2，独立于 Dexie schema；严格验证版本 1 并转换为新设置默认值，未知版本拒绝。
+- Dexie schema 仍为版本 5。首个 Beta 使用 ZIP `formatVersion` 1 与同步 schema 3；开发期 JSON/旧同步快照不兼容，不做转换分支。
 
 完整规则与限额见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
 
@@ -98,12 +99,16 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 - 替换独占图片时在事务中释放旧资源再检查容量；失败恢复原引用及 Blob。共享图片仍有引用时保留。
 - 网站删除会返回当前会话的撤销快照，包括所需图片；撤销重新检查分组/容量并事务化恢复。
 - use-local-image 读取本地 Blob，管理对象 URL、异步取消和读取/取色错误。
-- 主页先发布本地照片对象 URL，再独立提取动态色；动态色关闭时跳过取色。取色只对保比例、最长边 128px 的采样图运行 Material 色彩量化，避免扫描整张高分辨率照片阻塞背景显示；取色失败单独显示错误。
+- MP4、WebM、GIF、动画 WebP 只从本地文件导入；平台按内容签名和真实浏览器解码校验，不因扩展名或错误 MIME 假定格式，不自动转码。动态视频静音循环，动图保留原始多帧数据。
+- 动态媒体封面由首帧生成，最长边不超过 1280px，保存在本地资产记录；备份和同步传原始二进制，恢复/接收后重新生成封面。动态播放不逐帧提取主题色。
+- 动态播放控制响应系统减少动态效果与页面可见性；后台暂停后仅恢复此前播放的媒体，手动暂停保持封面。播放、读取或解码错误向用户明确呈现。
+- 主页先发布本地照片或动态封面对象 URL，再独立提取动态色；动态色关闭时跳过取色。取色只对保比例、最长边 128px 的采样图运行 Material 色彩量化，避免扫描整张高分辨率照片阻塞背景显示；取色失败单独显示错误。
 - use-image-source 管理已保存来源回填与输入草稿；use-shortcut-icon-source 读取资源来源并同步网站草稿，显式处理来源清除。表单初始化只在打开或切换实体/分组时执行，元数据刷新不重置其他草稿字段。下载成功后来源与本地图片一起保存，不引入新的存储表或 schema 迁移。
-- SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、JSON 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
+- SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、ZIP 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
 - 图片链接下载只在用户主动操作中联网，使用 omit credentials/no-referrer，并对每一跳阻止浏览器自动重定向。临时 webRequest 观察读取响应头中的 Location，领域层严格校验目标；同来源继续，跨来源交回界面确认并重新请求具体来源权限。同一链接通过原生独占锁串行观察，请求结束后移除监听，不常驻收集网络信息。
 - Manifest 声明可选 HTTPS 与精确 localhost HTTP 来源，不安装时授予全部站点访问。私有 DNS 最终地址判定存在平台限制。
-- 备份由 platform 编解码、domain 严格校验、storage 事务化替换；导入不重新下载来源 URL。
+- ZIP 备份由 platform 流式逐资源编解码、domain 严格校验、storage 事务化替换；manifest formatVersion 为 1，媒体原件位于 `assets/<assetId>` 并带长度与 SHA-256。导入须整包验证后预览和确认，不重新下载来源 URL；旧开发期 JSON 不兼容。
+- 静态图片继续保留单文件 10 MiB 及既有像素/输出规则。取消 50 MiB 本地媒体总量和 70 MiB JSON 文件限制；不设动态视频应用级单文件大小或时长上限。实际浏览器配额、文件 API 或解码容量失败必须明确显示。
 
 ## 外观与交互实现注意事项
 
@@ -142,6 +147,6 @@ Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它�
 
 ## 同步实现边界
 
-提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器、WebDAV 提供方、连接界面与事件触发已接入；Google Drive 尚未接入且按用户决定延期。受控 localhost HTTPS 的真实扩展审计通过，第三方 WebDAV 服务及其来源权限与同步组合、真实用户设备仍待验收。基础 API 见 SYNC-PROTOCOL.md，公共端口/执行顺序见 SYNC-COORDINATOR.md，WebDAV 边界见 SYNC-WEBDAV.md。
+提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器、WebDAV 提供方、连接界面与事件触发已接入；Google Drive 按用户决定延期。既有真实 WebDAV 服务由用户确认验收；本轮动态媒体通过受控 localhost HTTPS 双配置检查，新增媒体的真实服务与用户设备组合仍需单独记录。后台可见性专项未验收，审计整体状态 partial，见 [Beta 发布记录](./BETA-0.1.0.md)。基础 API 见 SYNC-PROTOCOL.md，公共端口顺序见 SYNC-COORDINATOR.md，提供方边界见 SYNC-WEBDAV.md。
 
 domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/远端发布，后续新编辑保留更高代次并返回 pending。发布保护由提供方模式决定；运行身份与基线独立于发布成功，集成测试不代表云端验收。

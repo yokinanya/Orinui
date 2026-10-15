@@ -1,7 +1,8 @@
 {
   "name": "orinui",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0-beta.1",
+  "license": "GPL-3.0-only",
   "type": "module",
   "description": "设计精致、轻量、本地优先的 Chrome 新标签页扩展",
   "scripts": {
@@ -23,6 +24,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.6",
+    "fflate": "^0.8.3",
     "lucide-react": "^1.54.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

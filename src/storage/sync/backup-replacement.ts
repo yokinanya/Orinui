@@ -1,11 +1,11 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { BackupDocument } from '@/domain/backup';
 import type { AppearanceSettings } from '@/domain/appearance';
 import type { Database } from '@/storage/db';
 
 interface ReplacementData {
   readonly document: BackupDocument;
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
 }
 
 function replacementIds(input: {
@@ -20,7 +20,7 @@ function replacementIds(input: {
 
 function remapAppearance(appearance: AppearanceSettings, assets: ReadonlyMap<string, string>): AppearanceSettings {
   const background = appearance.background;
-  if (background.kind !== 'photo') return appearance;
+  if (background.kind !== 'photo' && background.kind !== 'motion') return appearance;
   return { ...appearance, background: { ...background, assetId: assets.get(background.assetId) ?? background.assetId } };
 }
 

@@ -6,8 +6,6 @@ import { shortcutIconOccupancy } from '@/domain/shortcut-icon';
 import { mergeSyncSnapshots, materializeSyncSnapshot, parseSyncSnapshot, SyncMergeConflictError, SYNC_SCHEMA_VERSION } from '@/domain/sync';
 import type { SyncRegister, SyncSnapshotV1 } from '@/domain/sync';
 
-const IMAGE_TOTAL_LIMIT_BYTES = 50 * 1024 * 1024;
-
 function register<T>(value: T, clock = 1, deviceId = 'device-a'): SyncRegister<T> {
   return { value, clock, deviceId };
 }
@@ -58,28 +56,10 @@ it('merges independent shortcut fields while same-field conflicts use clock then
   expect(tied.shortcuts[0]?.title.value).toBe('Later device');
 });
 
-it('upgrades schema 1 snapshots with default preference registers', () => {
+it('rejects the pre-beta sync schema without migrating it', () => {
   const current = snapshot('device-a');
-  const legacy = {
-    ...current, schemaVersion: 1,
-    settings: {
-      appearance: current.settings.appearance,
-      defaultEngineId: current.settings.defaultEngineId,
-      layout: { ...current.settings.layout, value: { order: ['shortcuts', 'clock', 'search'], hidden: ['search'] } },
-      clock: { ...current.settings.clock, value: { format: '24h' } },
-      customEngines: [],
-    },
-  };
-  const migrated = parseSyncSnapshot(legacy);
-  expect(migrated.schemaVersion).toBe(SYNC_SCHEMA_VERSION);
-  expect(migrated.settings.clock).toMatchObject({ value: { format: '24h', size: 'standard' }, clock: 1 });
-  expect(migrated.settings.layout.value).toMatchObject({ columns: 6, hidden: ['search'] });
-  expect(migrated.settings.searchPreferences.clock).toBe(0);
-  expect(migrated.settings.shortcutPreferences.clock).toBe(0);
-  expect(materializeSyncSnapshot(migrated).settings).toMatchObject({
-    clock: { format: '24h' }, layout: { order: ['shortcuts', 'clock', 'search'], hidden: ['search'] },
-    search: { width: 'standard', autoFocus: false }, shortcuts: { showNames: true },
-  });
+  expect(() => parseSyncSnapshot({ ...current, schemaVersion: 1 })).toThrow(/版本不受支持/);
+  expect(() => parseSyncSnapshot({ ...current, schemaVersion: 2 })).toThrow(/版本不受支持/);
 });
 
 it('merges new preference registers independently', () => {
@@ -151,28 +131,47 @@ it('rejects unknown versions, unknown fields, excess entities and broken referen
 
 it('rejects conflicting immutable metadata for the same asset id', () => {
   const asset = { id: 'asset-1', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null) };
+    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
   const local = snapshot('device-a', { assets: [asset], shortcuts: [{ ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: 'asset-1' }) }] });
   const remote = snapshot('device-b', { assets: [{ ...asset, sha256: 'b'.repeat(64) }], shortcuts: local.shortcuts });
   expect(() => mergeSyncSnapshots({ local, remotes: [remote] })).toThrow(/对应不同内容/);
 });
 
-it('rejects absent media references and media totals above the data contract limit', () => {
+it('validates motion metadata and requires motion backgrounds to reference dynamic media', () => {
+  const dynamic = { id: 'video-1', kind: 'background' as const, mime: 'video/mp4' as const, width: 1920, height: 1080,
+    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null),
+    motion: { kind: 'video' as const, duration: 8 } };
+  const base = snapshot('device-a');
+  const withMotion = { ...base,
+    settings: { ...base.settings, appearance: register({ ...createDefaultAppearance(),
+      background: { kind: 'motion' as const, assetId: dynamic.id, maskStrength: 0.55 } }) },
+    assets: [dynamic] };
+  expect(parseSyncSnapshot(withMotion).assets[0]?.motion).toEqual({ kind: 'video', duration: 8 });
+  expect(() => parseSyncSnapshot({ ...withMotion, assets: [{ ...dynamic, motion: null }] }))
+    .toThrow(/动态媒体缺少动态元数据/);
+  expect(() => parseSyncSnapshot({ ...withMotion, settings: { ...withMotion.settings,
+    appearance: register({ ...createDefaultAppearance(),
+      background: { kind: 'photo' as const, assetId: dynamic.id, maskStrength: 0.55 } }) } }))
+    .toThrow(/背景类型与媒体动态属性不匹配/);
+  expect(() => parseSyncSnapshot({ ...withMotion, assets: [{ ...dynamic, motion: { ...dynamic.motion, poster: 'not allowed' } }] }))
+    .toThrow(/字段不正确/);
+});
+
+it('rejects absent media references and accepts large assets without a total cap', () => {
   const missingImage = { ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: 'missing' }) };
   expect(() => parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [missingImage] })).toThrow(/图标资源引用不存在/);
   const asset = { id: 'asset-1', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: IMAGE_TOTAL_LIMIT_BYTES + 1, sha256: 'a'.repeat(64), sourceUrl: register(null) };
+    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
   const shortcutWithAsset = { ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: 'asset-1' }) };
-  expect(() => parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithAsset], assets: [asset] }))
-    .toThrow(/图片资源总量超过/);
+  expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithAsset], assets: [asset] }).assets).toHaveLength(1);
 });
 
 it('accepts SVG icon colors only for SVG icon assets in snapshots', () => {
   const asset = { id: 'svg-1', kind: 'icon' as const, mime: 'image/svg+xml' as const, width: 512, height: 512,
-    byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null) };
+    byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
   const shortcutWithSvg = { ...shortcut({ title: 'SVG', url: 'https://svg.example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id, color: '#12abef', occupancy: 75 }) };
   const restoredIcon = parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg], assets: [asset] })
@@ -202,7 +201,7 @@ it('reports a typed conflict when a concurrently deleted custom engine remains s
 
 it('reports a typed conflict when a concurrently deleted asset remains referenced', () => {
   const asset = { id: 'asset-e', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null) };
+    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
   const shortcutWithAsset = { ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id }) };
   const local = snapshot('device-a', { shortcuts: [shortcutWithAsset], assets: [asset] });

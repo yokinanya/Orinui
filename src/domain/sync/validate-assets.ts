@@ -10,22 +10,66 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 function parseKind(value: unknown): SyncAsset['kind'] {
   if (value !== 'background' && value !== 'icon') fail('图片资源类型不正确');
-  return value;
+  return value as SyncAsset['kind'];
 }
 
 function parseMime(value: unknown): SyncAsset['mime'] {
-  if (value !== 'image/png' && value !== 'image/jpeg' && value !== 'image/webp' && value !== 'image/svg+xml') fail('图片资源格式不正确');
-  return value;
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'video/mp4', 'video/webm'].includes(String(value))) fail('媒体资源格式不正确');
+  return value as SyncAsset['mime'];
+}
+
+function motionKind(mime: SyncAsset['mime']): 'video' | 'animation' {
+  if (mime === 'video/mp4' || mime === 'video/webm') return 'video';
+  if (mime === 'image/gif' || mime === 'image/webp') return 'animation';
+  return fail('静态媒体不能包含动态元数据');
+}
+
+function validateDuration(kind: 'video' | 'animation', value: unknown): number | null {
+  if (kind === 'video') {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) fail('视频时长不正确');
+    return value;
+  }
+  if (value !== null) fail('动图不保存视频时长');
+  return null;
+}
+
+function parseMotion(value: unknown, mime: SyncAsset['mime'], kind: SyncAsset['kind']): SyncAsset['motion'] {
+  if (value === null) return noMotion(mime);
+  const raw = asRecord(value, '动态媒体元数据');
+  exactKeys(raw, ['kind', 'duration'], '动态媒体元数据');
+  if (kind !== 'background') fail('网站图标不能包含动态媒体');
+  const expectedKind = motionKind(mime);
+  if (raw.kind !== expectedKind) fail('动态媒体类型与格式不匹配');
+  return { kind: expectedKind, duration: validateDuration(expectedKind, raw.duration) };
+}
+
+function noMotion(mime: SyncAsset['mime']): null {
+  if (mime === 'video/mp4' || mime === 'video/webm' || mime === 'image/gif') fail('动态媒体缺少动态元数据');
+  return null;
+}
+
+function validateDynamicDimensions(input: { readonly kind: SyncAsset['kind']; readonly width: number; readonly height: number }): void {
+  if (input.kind !== 'background') fail('动态媒体只能用作背景');
+  if (!Number.isSafeInteger(input.width) || !Number.isSafeInteger(input.height) || input.width <= 0 || input.height <= 0) {
+    fail('动态媒体尺寸不正确');
+  }
+}
+
+function validateStaticDimensions(input: { readonly kind: SyncAsset['kind']; readonly mime: SyncAsset['mime'];
+  readonly width: number; readonly height: number }): void {
+  if (input.kind === 'icon' && input.mime !== 'image/png' && input.mime !== 'image/svg+xml') fail('网站图标必须是 PNG 或 SVG');
+  if (input.kind === 'background' && input.mime === 'image/svg+xml') fail('SVG 不能作为背景图片');
+  imageOutputSize(input);
+  const edgeLimit = input.kind === 'icon' ? ICON_EDGE_PIXELS : BACKGROUND_EDGE_PIXELS;
+  if (Math.max(input.width, input.height) > edgeLimit) fail('图片最长边超出限制');
 }
 
 function parseDimensions(input: { readonly kind: SyncAsset['kind']; readonly mime: SyncAsset['mime'];
-  readonly width: unknown; readonly height: unknown }): { readonly width: number; readonly height: number } {
-  if (typeof input.width !== 'number' || typeof input.height !== 'number') fail('图片尺寸不正确');
-  if (input.kind === 'icon' && input.mime !== 'image/png' && input.mime !== 'image/svg+xml') fail('网站图标必须是 PNG 或 SVG');
-  if (input.kind === 'background' && input.mime === 'image/svg+xml') fail('SVG 不能作为背景图片');
-  imageOutputSize({ width: input.width, height: input.height, kind: input.kind });
-  const edgeLimit = input.kind === 'icon' ? ICON_EDGE_PIXELS : BACKGROUND_EDGE_PIXELS;
-  if (Math.max(input.width, input.height) > edgeLimit) fail('图片最长边超出限制');
+  readonly width: unknown; readonly height: unknown; readonly motion: unknown }): { readonly width: number; readonly height: number } {
+  if (typeof input.width !== 'number' || typeof input.height !== 'number') fail('媒体尺寸不正确');
+  const dimensions = { kind: input.kind, mime: input.mime, width: input.width, height: input.height };
+  if (input.motion === null) validateStaticDimensions(dimensions);
+  else validateDynamicDimensions(dimensions);
   return { width: input.width, height: input.height };
 }
 
@@ -44,12 +88,14 @@ function parseSourceUrl(value: unknown): string | null {
 
 export function parseSyncAsset(value: unknown): SyncAsset {
   const raw = asRecord(value, '同步图片资源');
-  exactKeys(raw, ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl'], '同步图片资源');
+  exactKeys(raw, ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl', 'motion'], '同步媒体资源');
   const kind = parseKind(raw.kind);
   const mime = parseMime(raw.mime);
-  const { width, height } = parseDimensions({ kind, mime, width: raw.width, height: raw.height });
-  const byteLength = integer(raw.byteLength, '图片大小');
-  if (byteLength === 0) fail('图片大小必须大于零');
-  return { id: identifier(raw.id, '图片标识'), kind, mime, width, height, byteLength, sha256: parseHash(raw.sha256),
-    sourceUrl: validateRegister(raw.sourceUrl, '图片来源', parseSourceUrl) };
+  const motion = parseMotion(raw.motion, mime, kind);
+  const { width, height } = parseDimensions({ kind, mime, width: raw.width, height: raw.height, motion });
+  const byteLength = integer(raw.byteLength, '媒体大小');
+  if (byteLength === 0) fail('媒体大小必须大于零');
+  const sourceUrl = validateRegister(raw.sourceUrl, '图片来源', parseSourceUrl);
+  if (motion && sourceUrl.value !== null) fail('动态媒体来源必须为空');
+  return { id: identifier(raw.id, '媒体标识'), kind, mime, width, height, byteLength, sha256: parseHash(raw.sha256), sourceUrl, motion };
 }

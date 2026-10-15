@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { setPhotoMask } from './contrast-helpers';
 import { readFile } from 'node:fs/promises';
+import { readZipFixture } from './zip-fixtures';
+import { visibleSubmitButton } from './form-helpers';
 
 const svg = (content = '<rect width="40" height="20" fill="#37a1b2"/>') => ({
   name: 'image.svg', mimeType: 'image/svg+xml',
@@ -8,6 +10,10 @@ const svg = (content = '<rect width="40" height="20" fill="#37a1b2"/>') => ({
 });
 
 test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
+
+async function selectPhotoBackground(page: Page) {
+  await page.getByRole('button', { name: '图片', exact: true }).click();
+}
 
 async function rasterFile(page: Page, input: { readonly mime: string; readonly width: number; readonly height: number }) {
   const data = await page.evaluate(({ mime, width, height }) => {
@@ -27,6 +33,7 @@ async function rasterFile(page: Page, input: { readonly mime: string; readonly w
 
 test('照片上传、动态色、遮罩与刷新持久化', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('55%');
   await setPhotoMask(page, 80);
@@ -41,6 +48,7 @@ test('照片上传、动态色、遮罩与刷新持久化', async ({ page }) => 
 
 test('危险 SVG 被明确拒绝，不修改现有照片', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
@@ -62,8 +70,8 @@ test('图标草稿取消、保存、刷新、删除撤销', async ({ page }) => 
   await page.getByLabel('名称', { exact: true }).fill('图片站点');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
   await page.getByLabel('选择图标文件').setInputFiles(svg());
-  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(visibleSubmitButton(page)).toBeEnabled();
+  await visibleSubmitButton(page).click();
   const link = page.getByRole('link', { name: '图片站点' });
   await expect(link.locator('img')).toHaveAttribute('src', /^blob:/);
   await page.reload();
@@ -85,6 +93,7 @@ for (const content of [
 ]) {
   test(`拒绝 SVG 危险或未支持内容：${content.slice(0, 30)}`, async ({ page }) => {
     await page.getByRole('button', { name: '设置', exact: true }).click();
+    await selectPhotoBackground(page);
     await page.getByLabel('上传照片').setInputFiles(svg(content));
     await expect(page.getByText(/SVG (含不支持|不允许)/)).toBeVisible();
     await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toHaveCount(0);
@@ -96,6 +105,7 @@ for (const mime of ['image/png', 'image/jpeg', 'image/webp']) {
     const requests: string[] = [];
     page.on('request', (request) => { requests.push(request.url()); });
     await page.getByRole('button', { name: '设置', exact: true }).click();
+    await selectPhotoBackground(page);
     await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, { mime, width: 80, height: 40 }));
     await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
     await page.reload();
@@ -137,11 +147,12 @@ test('主页全部隐藏后可从主页一键恢复', async ({ page }) => {
   for (const slot of ['时钟', '搜索', '快捷方式']) {
     await page.getByRole('switch', { name: `显示${slot}` }).click();
   }
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: '恢复主页内容' })).toBeVisible();
+  await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: '关闭' }).click();
+  const homepageRestore = page.getByRole('main').getByRole('button', { name: '恢复主页内容' });
+  await expect(homepageRestore).toBeVisible();
   await expect(page.locator('time')).toHaveCount(0);
   await expect(page.getByRole('search')).toHaveCount(0);
-  await page.getByRole('button', { name: '恢复主页内容' }).click();
+  await homepageRestore.click();
   await expect(page.locator('time')).toBeVisible();
   await expect(page.getByRole('search')).toBeVisible();
 });
@@ -157,29 +168,30 @@ test('时钟格式在设置和重新打开页面后保持', async ({ page }) => 
   await expect(page.getByRole('button', { name: '24 小时', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('JSON 可导出、预览导入并在确认后完整替换本地数据', async ({ page }) => {
+test('ZIP 可导出、预览导入并在确认后完整替换本地数据', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: '导出 JSON' }).click(),
+    page.getByRole('button', { name: '导出 ZIP' }).click(),
   ]);
-  expect(download.suggestedFilename()).toMatch(/^orinui-.*\.json$/);
+  expect(download.suggestedFilename()).toMatch(/^orinui-.*\.zip$/);
   const path = await download.path();
-  if (!path) throw new Error('导出的 JSON 文件没有落盘');
-  const content = JSON.parse(await readFile(path, 'utf8')) as { version: number; groups: unknown[]; settings: { clock: { format: string } } };
-  expect(content).toMatchObject({ version: 2, groups: [{ name: '常用', isDefault: true }], settings: { clock: { format: 'system' } } });
+  if (!path) throw new Error('导出的 ZIP 文件没有落盘');
+  const { manifest } = await readZipFixture(path);
+  expect(manifest).toMatchObject({ formatVersion: 1, groups: [{ name: '常用', isDefault: true }], settings: { clock: { format: 'system' } } });
   await page.getByRole('tab', { name: '布局' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   await page.getByLabel('名称', { exact: true }).fill('将被覆盖的网站');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await expect(page.getByRole('link', { name: '将被覆盖的网站' })).toBeVisible();
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
-  await page.getByLabel('导入 JSON').setInputFiles(path);
-  await expect(page.getByRole('alertdialog')).toContainText('备份包含 1 个分组、0 个网站、0 张图片');
+  await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({ name: download.suggestedFilename(),
+    mimeType: 'application/zip', buffer: await readFile(path) });
+  await expect(page.getByRole('alertdialog')).toContainText('备份包含 1 个分组、0 个网站、0 个媒体文件');
   await page.getByRole('button', { name: '确认替换' }).click();
   await expect(page.getByRole('link', { name: '将被覆盖的网站' })).toHaveCount(0);
 });
@@ -188,7 +200,7 @@ test('本地重置需要确认并恢复初始空组', async ({ page }) => {
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   await page.getByLabel('名称', { exact: true }).fill('要删除的网站');
   await page.getByLabel('网址', { exact: true }).fill('example.com');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   await page.getByRole('button', { name: '重置本地数据' }).click();
@@ -204,7 +216,7 @@ test('新建网站可选择内置图形并保存在本地', async ({ page }) => 
   await page.getByLabel('网址', { exact: true }).fill('example.com');
   await page.getByRole('button', { name: '选择内置图标' }).click();
   await page.getByRole('button', { name: '使用爱心图标' }).click();
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const link = page.getByRole('link', { name: '图形站点' });
   await expect(link.locator('svg')).toBeVisible();
   await page.reload();
@@ -227,23 +239,27 @@ test('分组颜色菜单写入对应语义角色', async ({ page }) => {
   await expect(restoredGroup).toHaveAttribute('data-color-role', 'tertiary');
 });
 
-test('带照片的 JSON 备份可恢复本地图片与外观设置', async ({ page }) => {
+test('带照片的 ZIP 备份可恢复本地图片与外观设置', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await setPhotoMask(page, 70);
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
-    page.waitForEvent('download'), page.getByRole('button', { name: '导出 JSON' }).click(),
+    page.waitForEvent('download'), page.getByRole('button', { name: '导出 ZIP' }).click(),
   ]);
   const path = await download.path();
   if (!path) throw new Error('带照片的备份没有落盘');
-  const exported = JSON.parse(await readFile(path, 'utf8')) as { assets: Array<{ data: string; kind: string }>; settings: { appearance: { background: { kind: string; maskStrength: number } } } };
-  expect(exported.assets).toHaveLength(1);
-  expect(exported.assets[0]?.data).not.toBe('');
-  expect(exported.settings.appearance.background).toMatchObject({ kind: 'photo', maskStrength: 0.7 });
-  await page.getByLabel('导入 JSON').setInputFiles(path);
-  await expect(page.getByRole('alertdialog')).toContainText('1 张图片');
+  const exported = await readZipFixture(path);
+  expect(exported.manifest.assets).toHaveLength(1);
+  const exportedAsset = exported.manifest.assets[0];
+  if (!exportedAsset) throw new Error('ZIP 清单缺少媒体条目');
+  expect(Object.keys(exported.assets)).toContain(`assets/${exportedAsset.id}`);
+  expect(exported.manifest.settings.appearance.background).toMatchObject({ kind: 'photo', maskStrength: 0.7 });
+  await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({ name: download.suggestedFilename(),
+    mimeType: 'application/zip', buffer: await readFile(path) });
+  await expect(page.getByRole('alertdialog')).toContainText('1 个媒体文件');
   await page.getByRole('button', { name: '确认替换' }).click();
   await expect(page.getByRole('img')).toHaveCount(0);
   await page.reload();

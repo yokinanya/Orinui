@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { visibleSubmitButton } from './form-helpers';
 
 const BILIBILI_FILE = new URL('../fixtures/bilibili-color.svg', import.meta.url);
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -36,7 +37,7 @@ test('用户的 bilibili SVG 支持根布局 style 和 em 尺寸，保存后刷�
   expect(preview.source).toContain('width="24"');
   await page.getByLabel('名称', { exact: true }).fill('哔哩哔哩SVG');
   await page.getByLabel('网址', { exact: true }).fill('https://www.bilibili.com');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await page.reload();
   const image = page.getByRole('link', { name: '哔哩哔哩SVG', exact: true }).locator('img');
   await expect(image).toBeVisible();
@@ -106,7 +107,10 @@ rect{fill:blue}.shape{fill:green}rect.shape{fill:yellow}#icon{fill:red!important
   expect(preview.source).not.toContain('<style');
   expect(preview.source).not.toContain('style=');
   await expectSamePixels(page, source, preview.source);
+  const image = page.getByRole('img', { name: '图标预览', exact: true });
+  const previousUrl = await image.getAttribute('src');
   await upload(page, source.replace('fill:cyan', 'fill:cyan!important'));
+  await expect(image).not.toHaveAttribute('src', previousUrl!);
   expect((await readPreview(page)).source).toContain('fill="cyan"');
 });
 

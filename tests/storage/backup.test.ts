@@ -25,7 +25,7 @@ describe('备份导出与原子替换', () => {
   });
   it('原子替换数据并支持空图片备份', async () => {
     const content: BackupDocument = {
-      version: BACKUP_VERSION, exportedAt: new Date().toISOString(),
+      formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
       groups: [{ id: 'imported', name: '导入组', colorRole: 'primary', order: 0, isDefault: true }],
       shortcuts: [], settings: { ...createDefaultSettings(), clock: { ...createDefaultSettings().clock, format: '12h' } }, assets: [],
     };
@@ -39,7 +39,7 @@ describe('替换失败保护与数据重置', () => {
   it('替换失败时保留原数据库', async () => {
     const old = await createGroup(db, '旧组');
     const invalid: BackupDocument = {
-      version: BACKUP_VERSION, exportedAt: new Date().toISOString(),
+      formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
       groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: false }],
       shortcuts: [], settings: createDefaultSettings(), assets: [],
     };

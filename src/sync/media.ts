@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { SyncAsset, SyncSnapshotV1 } from '@/domain/sync';
 import type { SyncLocalExport } from '@/sync/ports';
 import type { SyncRunContext } from '@/sync/run-context';
@@ -6,11 +6,11 @@ import { parseAssetReceipt, parseObjectRead } from '@/domain/sync/object-validat
 
 export interface MissingSyncMedia {
   readonly metadata: SyncAsset;
-  readonly asset: ImageAsset;
+  readonly asset: MediaAsset;
 }
 
 export interface PreparedSyncMedia {
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
   readonly missing: readonly MissingSyncMedia[];
   readonly downloaded: number;
   readonly repairedAssetIds: readonly string[];
@@ -22,7 +22,7 @@ interface PrepareMediaInput {
   readonly remotes: readonly SyncSnapshotV1[];
 }
 
-async function readMedia(context: SyncRunContext, metadata: SyncAsset): Promise<ImageAsset | null> {
+async function readMedia(context: SyncRunContext, metadata: SyncAsset): Promise<MediaAsset | null> {
   await context.dependencies.local.assertCurrent(context.identity);
   const stored = await context.dependencies.objects.readAsset({ vaultId: context.identity.vaultId, objectId: metadata.id });
   if (stored === null) return null;
@@ -34,7 +34,7 @@ async function readMedia(context: SyncRunContext, metadata: SyncAsset): Promise<
 export async function prepareSyncMedia(context: SyncRunContext, input: PrepareMediaInput): Promise<PreparedSyncMedia> {
   const localMedia = new Map(input.local.assets.map((asset) => [asset.id, asset]));
   const remoteReferences = new Set(input.remotes.flatMap((snapshot) => snapshot.assets.map(({ id }) => id)));
-  const assets: ImageAsset[] = [];
+  const assets: MediaAsset[] = [];
   const missing: MissingSyncMedia[] = [];
   const repairedAssetIds: string[] = [];
   let downloaded = 0;

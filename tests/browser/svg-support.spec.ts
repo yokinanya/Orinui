@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import { readZipFixture } from './zip-fixtures';
+import { visibleSubmitButton } from './form-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SVG_FILE = new URL('../fixtures/x.svg', import.meta.url);
@@ -30,7 +32,7 @@ test('SVG 静态展示属性可用，非法 XML 属性被明确拒绝并保留�
   await expect(preview).toHaveAttribute('src', original!);
 });
 
-test('SVG 矢量内容与单色设置可通过真实 JSON 文件备份并恢复', async ({ page }) => {
+test('SVG 矢量内容与单色设置可通过真实 ZIP 文件备份并恢复', async ({ page }) => {
   await openIconForm(page);
   await page.getByLabel('名称', { exact: true }).fill(ICON_TITLE);
   await page.getByLabel('网址', { exact: true }).fill('example.com');
@@ -39,21 +41,25 @@ test('SVG 矢量内容与单色设置可通过真实 JSON 文件备份并恢复'
   await page.getByLabel('十六进制颜色').fill(ICON_COLOR);
   await page.getByLabel('十六进制颜色').press('Enter');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const shortcut = page.getByRole('link', { name: ICON_TITLE, exact: true });
   await expect(shortcut.locator('[role="img"]')).toHaveCSS('background-color', 'rgb(0, 204, 85)');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
-    page.waitForEvent('download'), page.getByRole('button', { name: '导出 JSON' }).click(),
+    page.waitForEvent('download'), page.getByRole('button', { name: '导出 ZIP' }).click(),
   ]);
   const path = await download.path();
-  if (!path) throw new Error('SVG JSON 备份未落盘');
-  const document = JSON.parse(await readFile(path, 'utf8'));
-  expect(document.shortcuts[0].icon.color).toBe(ICON_COLOR);
-  expect(document.assets[0].mime).toBe('image/svg+xml');
-  expect(Buffer.from(document.assets[0].data, 'base64').toString()).toContain('xml:space="preserve"');
-  await page.getByLabel('导入 JSON').setInputFiles(path);
+  if (!path) throw new Error('SVG ZIP 备份未落盘');
+  const { manifest, assets } = await readZipFixture(path);
+  const exportedShortcut = manifest.shortcuts[0];
+  const exportedAsset = manifest.assets[0];
+  if (!exportedShortcut || !exportedAsset) throw new Error('ZIP 清单缺少 SVG 网站或图标');
+  expect(exportedShortcut.icon.color).toBe(ICON_COLOR);
+  expect(exportedAsset.mime).toBe('image/svg+xml');
+  expect(Buffer.from(assets[`assets/${exportedAsset.id}`]!).toString()).toContain('xml:space="preserve"');
+  await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({ name: download.suggestedFilename(),
+    mimeType: 'application/zip', buffer: await readFile(path) });
   await page.getByRole('button', { name: '确认替换' }).click();
   await expect(page.getByRole('alertdialog')).toBeHidden();
   await page.keyboard.press('Escape');

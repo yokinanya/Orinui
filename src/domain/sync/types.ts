@@ -5,7 +5,7 @@ import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { ShortcutIcon } from '@/domain/shortcut';
 
-export const SYNC_SCHEMA_VERSION = 2 as const;
+export const SYNC_SCHEMA_VERSION = 3 as const;
 
 export interface SyncRegister<T> {
   readonly value: T;
@@ -40,12 +40,13 @@ export interface SyncShortcut {
 export interface SyncAsset {
   readonly id: string;
   readonly kind: 'background' | 'icon';
-  readonly mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml';
+  readonly mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'image/svg+xml' | 'video/mp4' | 'video/webm';
   readonly width: number;
   readonly height: number;
   readonly byteLength: number;
   readonly sha256: string;
   readonly sourceUrl: SyncRegister<string | null>;
+  readonly motion: { readonly kind: 'video' | 'animation'; readonly duration: number | null } | null;
 }
 
 export interface SyncSettings {

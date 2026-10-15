@@ -6,7 +6,7 @@ export function downloadBackupFile(blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `orinui-${new Date().toISOString().slice(0, ISO_DATE_CHARACTERS)}.json`;
+  anchor.download = `orinui-${new Date().toISOString().slice(0, ISO_DATE_CHARACTERS)}.zip`;
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), FILE_URL_REVOKE_MS);
 }

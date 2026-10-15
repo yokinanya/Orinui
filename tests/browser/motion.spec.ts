@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { visibleSubmitButton } from './form-helpers';
 
 interface MotionCall {
   target: string | null;
@@ -37,7 +38,7 @@ async function addShortcut(page: Page, name: string, options: AddShortcutOptions
   await page.getByRole('button', { name: first ? '添加第一个网站' : '添加网站', exact: true }).click();
   await page.getByLabel('名称', { exact: true }).fill(name);
   await page.getByLabel('网址', { exact: true }).fill(`${name.toLowerCase()}.example.com`);
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const shortcut = editing
     ? page.getByRole('button', { name: `${name} 的操作`, exact: true })
     : page.getByRole('link', { name, exact: true });

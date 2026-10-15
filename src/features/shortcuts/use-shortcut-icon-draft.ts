@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import type { Shortcut, ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon, shortcutIconOccupancy } from '@/domain/shortcut-icon';
-import type { NewImageAsset } from '@/storage/assets';
+import type { NewMediaAsset } from '@/storage/assets';
 
 export function useShortcutIconDraft(shortcut: Shortcut | undefined) {
   const [icon, setIcon] = useState<ShortcutIcon>(shortcut?.icon ?? { kind: 'letter' });
   const [svgColor, setSvgColor] = useState<string | null>(() => readSvgColor(shortcut?.icon));
   const [iconSourceUrl, setIconSourceUrl] = useState(shortcut?.iconSourceUrl ?? null);
-  const [image, setImage] = useState<NewImageAsset | null>(null);
+  const [image, setImage] = useState<NewMediaAsset | null>(null);
   const [imageBusy, setImageBusy] = useState(false);
   const initializeIcon = (current: Shortcut | undefined) => {
     setIcon(current?.icon ?? { kind: 'letter' });
@@ -22,12 +22,12 @@ export function useShortcutIconDraft(shortcut: Shortcut | undefined) {
     setIconSourceUrl(null);
     setIcon((current) => parseShortcutIcon({ ...next, occupancy: shortcutIconOccupancy(current) }));
   };
-  const selectLocalImage = (next: NewImageAsset) => {
+  const selectLocalImage = (next: NewMediaAsset) => {
     setImage(next);
     setIconSourceUrl(null);
     if (next.mime !== 'image/svg+xml') setSvgColor(null);
   };
-  const selectRemoteImage = (next: NewImageAsset) => {
+  const selectRemoteImage = (next: NewMediaAsset) => {
     setImage(next);
     setIconSourceUrl(next.sourceUrl ?? null);
     if (next.mime !== 'image/svg+xml') setSvgColor(null);

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { visibleSubmitButton } from './form-helpers';
 
 declare global {
   interface Window {
@@ -24,7 +25,7 @@ test('图标编辑以紧凑图标按钮选择上传并将图片URL操作收在�
   await expect(imageUrl).toBeVisible();
   const inputGroup = page.locator('[data-slot="input-group"]');
   await expect(inputGroup.locator('[data-slot="input-group-addon"][data-align="inline-end"]')).toBeVisible();
-  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+  await expect(inputGroup.locator('[data-slot="input-group-addon"] button')).toBeDisabled();
   await expect(page.getByText('图片和链接保存在本机及备份。', { exact: true })).toHaveCount(0);
 });
 
@@ -56,7 +57,7 @@ test('图标选择显示真实预览，上传与首字母切换后保存正确',
   await expect(page.getByRole('img', { name: '名称首字母预览' })).toHaveText('哔');
   await expect(page.getByRole('img', { name: '图标预览', exact: true })).toHaveCount(0);
   const dialog = page.getByRole('dialog', { name: '添加网站', exact: true });
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const shortcut = page.getByRole('link', { name: '哔哩哔哩', exact: true });
   await expect(dialog).toBeHidden();
   await expect(shortcut).toBeVisible();
@@ -84,7 +85,7 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await hex.press('Enter');
   const preview = page.getByRole('img', { name: '图标预览', exact: true });
   await expect(preview).toHaveCSS('background-color', 'rgb(192, 32, 32)');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   const shortcut = page.getByRole('link', { name: 'SVG站点', exact: true });
   await expect(shortcut).toBeVisible();
   await expect(shortcut.locator('[role="img"]')).toHaveCSS('background-color', 'rgb(192, 32, 32)');
@@ -97,7 +98,7 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'SVG 图标颜色，当前 #c02020' })).toBeVisible();
   await page.getByRole('button', { name: '恢复原色', exact: true }).click();
   await expect(page.getByRole('img', { name: '图标预览', exact: true })).toHaveAttribute('src', /^blob:/);
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await page.getByRole('button', { name: '完成编辑', exact: true }).click();
   await expect(shortcut.locator('img')).toBeVisible();
   await expect(shortcut.locator('[role="img"]')).toHaveCount(0);
@@ -131,7 +132,7 @@ test('SVG 图片处理中颜色预览控件暂时禁用', async ({ page }) => {
   const svg = await readFile(new URL('../fixtures/x.svg', import.meta.url));
   await page.getByLabel('选择图标文件').setInputFiles({ name: 'icon.svg', mimeType: 'image/svg+xml', buffer: svg });
   await expect(page.getByRole('button', { name: /^SVG 图标颜色/ })).toBeVisible();
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await page.getByRole('button', { name: '编辑分组与网站', exact: true }).click();
   await page.getByRole('button', { name: '忙碌中的SVG 的操作' }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
@@ -163,7 +164,7 @@ test('横屏编辑采用双列且保存可见，内置图标面板只有图形�
   const [box, title, preview, save] = await Promise.all([
     dialog.boundingBox(), page.getByLabel('名称', { exact: true }).boundingBox(),
     page.getByRole('img', { name: '名称首字母预览' }).boundingBox(),
-    page.getByRole('button', { name: '保存', exact: true }).boundingBox(),
+    visibleSubmitButton(page).boundingBox(),
   ]);
   if (!box || !title || !preview || !save) throw new Error('编辑表单未完整显示');
   expect(box.width).toBeGreaterThan(600);

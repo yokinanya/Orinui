@@ -4,8 +4,8 @@ import { assertRemoteImageRedirectIsNew, remoteImageRequestKey, resolveRemoteIma
 import { fail } from '@/domain/errors';
 import { IMAGE_FILE_LIMIT } from '@/domain/image';
 import { validateRemoteImageUrl, type RemoteImageLocation } from '@/domain/remote-image-url';
-import type { ImageAssetKind } from '@/domain/asset';
-import type { NewImageAsset } from '@/storage/assets';
+import type { MediaAssetKind } from '@/domain/asset';
+import type { NewMediaAsset } from '@/storage/assets';
 
 type HeadersReceivedEvent = typeof browser.webRequest.onHeadersReceived;
 type HeadersReceivedListener = Parameters<HeadersReceivedEvent['addListener']>[0];
@@ -19,7 +19,7 @@ interface RedirectResponse {
 
 type FetchAttempt = { readonly response: Response } | { readonly redirect: RedirectResponse };
 
-export type DownloadedImage = NewImageAsset & { readonly sourceUrl: string };
+export type DownloadedImage = NewMediaAsset & { readonly sourceUrl: string };
 
 export interface RemoteImageDownloadPorts {
   readonly requestPermissions: (origins: readonly string[]) => Promise<boolean>;
@@ -27,7 +27,7 @@ export interface RemoteImageDownloadPorts {
   readonly fetch: (url: URL, init: RequestInit) => Promise<Response>;
   readonly runExclusive: <T>(scope: string, operation: () => Promise<T>) => Promise<T>;
   readonly extensionOrigin: string;
-  readonly prepareImage: (input: { readonly blob: Blob; readonly kind: ImageAssetKind }) => Promise<NewImageAsset>;
+  readonly prepareImage: (input: { readonly blob: Blob; readonly kind: MediaAssetKind }) => Promise<NewMediaAsset>;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -128,7 +128,7 @@ async function readBoundedResponse(response: Response): Promise<Blob> {
 
 async function downloadPermittedImage(
   initialUrl: RemoteImageLocation,
-  kind: ImageAssetKind,
+  kind: MediaAssetKind,
   ports: RemoteImageDownloadPorts,
 ): Promise<DownloadedImage> {
   const visited = new Set([remoteImageRequestKey(initialUrl.url)]);
@@ -145,7 +145,7 @@ async function downloadPermittedImage(
 }
 
 export function createRemoteImageDownloader(ports: RemoteImageDownloadPorts) {
-  return async (source: string, kind: ImageAssetKind): Promise<DownloadedImage> => {
+  return async (source: string, kind: MediaAssetKind): Promise<DownloadedImage> => {
     const initialUrl = validateRemoteImageUrl(source);
     const granted = await ports.requestPermissions([initialUrl.originPattern]);
     if (!granted) fail('未获得图片下载所需的网站与网络观察权限');

@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { createSyncCrypto } from '@/platform/sync-crypto';
 import { createDatabase, type Database } from '@/storage/db';
 import { createShortcut } from '@/storage/shortcuts';
@@ -21,7 +21,7 @@ async function setup() {
   await initializeSyncVault(database, { vaultId: 'vault-local-store', deviceId: 'device-local-store', key });
   const local = createSyncLocalStore(database, {
     crypto: cryptoRuntime,
-    validateImage: async (_asset: ImageAsset) => {},
+    validateStoredMediaAsset: async (asset: MediaAsset) => asset,
   });
   return { database, local };
 }

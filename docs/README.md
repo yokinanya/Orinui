@@ -5,6 +5,8 @@
 | 文档 | 职责 |
 |---|---|
 | [根目录 README](../README.md) | 项目概览、当前状态摘要、开发命令 |
+| [Beta 发布记录](./BETA-0.1.0.md) | 首个 Beta 实现清单、验证范围、性能观测与发布状态 |
+| [Beta 发布说明](./RELEASE-NOTES-v0.1.0-beta.1.md) | GitHub Release 的功能摘要、安装说明和已知限制 |
 | [PROJECT.md](./PROJECT.md) | 产品定位、范围、实际技术栈和开发边界 |
 | [TASKS.md](./TASKS.md) | 实现与验收进度、下一阶段顺序与完成标准、延期项的主记录 |
 | [VERIFICATION.md](./VERIFICATION.md) | 用户验收确认、当前/历史检查结果、执行环境及验证范围 |
@@ -14,7 +16,7 @@
 | [DATA-CONTRACT.md](./DATA-CONTRACT.md) | 领域模型、校验、生命周期、资源及备份规则 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 当前实现的工具链、目录、平台/数据边界和工程注意事项 |
 | [SYNC-DESIGN.md](./SYNC-DESIGN.md) | 已定同步方向、当前实现边界和外部存储验收要求 |
-| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 已实现的同步 v1 字段、墓碑、加密字节格式与本地事务协议 |
+| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 同步 schema 3 字段、墓碑、加密字节格式与本地事务协议 |
 | [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md) | 公共对象端口、手动协调顺序、并发/失败状态及当前验证边界 |
 | [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) | HTTPS WebDAV 对象格式、连接流程、安全边界和受控真实扩展审计范围 |
 | [AGENTS.md](../AGENTS.md) | 开发代理的项目规则和必读入口 |

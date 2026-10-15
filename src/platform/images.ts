@@ -1,10 +1,10 @@
 import { argbFromRgb, hexFromArgb, QuantizerCelebi, Score } from '@material/material-color-utilities';
 
-import type { ImageAssetKind } from '@/domain/asset';
+import type { MediaAssetKind } from '@/domain/asset';
 import { fail } from '@/domain/errors';
 import { imageOutputSize, validateImageFile } from '@/domain/image';
 import { prepareSvgImage } from '@/platform/svg-image';
-import type { NewImageAsset } from '@/storage/assets';
+import type { NewMediaAsset } from '@/storage/assets';
 
 const IMAGE_QUALITY = 0.9;
 const ANIMATION_CHUNK = 'ANIM';
@@ -54,15 +54,15 @@ function encode(canvas: HTMLCanvasElement, mime: string): Promise<Blob> {
   });
 }
 
-async function imageOutputMime(blob: Blob, kind: ImageAssetKind): Promise<'image/png' | 'image/jpeg' | 'image/webp'> {
+async function imageOutputMime(blob: Blob, kind: MediaAssetKind): Promise<'image/png' | 'image/jpeg' | 'image/webp'> {
   if (kind === 'icon' || blob.type === 'image/svg+xml' || await animatedWebp(blob)) return 'image/png';
   return blob.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
 }
 
 export async function prepareImage(input: {
   readonly blob: Blob;
-  readonly kind: ImageAssetKind;
-}): Promise<NewImageAsset> {
+  readonly kind: MediaAssetKind;
+}): Promise<NewMediaAsset> {
   const { blob, kind } = input;
   validateImageFile(blob);
   const svg = blob.type === 'image/svg+xml';

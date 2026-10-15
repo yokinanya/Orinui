@@ -47,7 +47,7 @@ export function applyAppearance({
   root.style.setProperty('--wallpaper', wallpaper.wallpaper);
   root.style.setProperty('--wallpaper-color', wallpaper.wallpaperColor);
   root.style.setProperty('--wallpaper-mask', wallpaper.wallpaperMask);
-  root.toggleAttribute('data-home-photo', appearance.background.kind === 'photo');
+  root.toggleAttribute('data-home-photo', appearance.background.kind === 'photo' || appearance.background.kind === 'motion');
   applyHomeReadability(root, appearance, isDark);
 
   const seed = appearance.dynamicColor.enabled ? resolveSeed(appearance, photoSeed) : null;
@@ -79,7 +79,7 @@ function applyHomeReadability(
 
   root.setAttribute('data-home-readable', 'true');
   for (const [token, value] of Object.entries(homeReadabilityTokens(
-    isDark, appearance.background.kind === 'photo', backgroundSeed(appearance.background),
+    isDark, appearance.background.kind === 'photo' || appearance.background.kind === 'motion', backgroundSeed(appearance.background),
   ))) {
     root.style.setProperty(token, value);
   }

@@ -3,7 +3,7 @@ import { fail } from '@/domain/errors';
 import type { AppSettings } from '@/domain/settings';
 import type { Group } from '@/domain/group';
 import type { Shortcut } from '@/domain/shortcut';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow } from '@/storage/sync/types';
 import { buildAssetRecord, buildEngineRecord, buildGroupRecord, buildSettingsRecord, buildShortcutRecord,
   recordId, SyncClock } from '@/storage/sync/builders';
@@ -29,7 +29,7 @@ interface SeedRecordsInput {
   readonly groups: readonly Group[];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
   readonly prior: ReadonlyMap<string, SyncRecordRow>;
   readonly clock: SyncClock;
   readonly now: number;
@@ -53,7 +53,7 @@ function seedEntityRecords(input: SeedRecordsInput): Map<string, SyncRecordRow> 
 }
 
 function seedSettingsAndAssets(input: { readonly changes: Map<string, SyncRecordRow>; readonly settings: AppSettings;
-  readonly assets: readonly ImageAsset[]; readonly prior: ReadonlyMap<string, SyncRecordRow>; readonly clock: SyncClock }): Map<string, SyncRecordRow> {
+  readonly assets: readonly MediaAsset[]; readonly prior: ReadonlyMap<string, SyncRecordRow>; readonly clock: SyncClock }): Map<string, SyncRecordRow> {
   const { settings, assets, prior, clock } = input;
   let changes = input.changes;
   const previousSettings = prior.get(recordId('settings', 'app'));

@@ -1,8 +1,8 @@
 import type { DataContextValue } from '@/app/data-context';
-import { getImageAsset, pruneUnreferencedAssets } from '@/storage/assets';
+import { getMediaAsset, pruneUnreferencedAssets } from '@/storage/assets';
 import type { Database } from '@/storage/db';
 import * as groups from '@/storage/groups';
-import { setPhotoBackground } from '@/storage/image-operations';
+import { setPhotoBackground, setMotionBackground } from '@/storage/image-operations';
 import { clearImageSourceUrl } from '@/storage/source-metadata';
 import { readSettings, updateSettings } from '@/storage/settings';
 import * as shortcuts from '@/storage/shortcuts';
@@ -96,7 +96,7 @@ function groupCommands({ db, activeGroupId, loadGroups, setActiveGroupId }: Comm
   };
 }
 
-type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings' | 'updateSearchPreferences' | 'updateShortcutPreferences' | 'setPhotoBackground' | 'clearImageSourceUrl'>;
+type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings' | 'updateSearchPreferences' | 'updateShortcutPreferences' | 'setPhotoBackground' | 'setMotionBackground' | 'clearImageSourceUrl'>;
 
 function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: CommandDependencies): AppearanceCommands {
   return {
@@ -134,6 +134,10 @@ function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: C
     },
     async setPhotoBackground(image) {
       await setPhotoBackground(db, image);
+      setSettings(await readSettings(db));
+    },
+    async setMotionBackground(media) {
+      await setMotionBackground(db, media);
       setSettings(await readSettings(db));
     },
     async clearImageSourceUrl(assetId) {
@@ -202,7 +206,7 @@ function backupCommands({ db, setSettings, setActiveGroupId, loadGroups, loadSho
       return serializeBackup(await createBackupSnapshot(db));
     },
     async restoreBackup(backup: RestorableBackup) {
-      await replaceAllData(db, { document: backup.document, assets: backup.images });
+      await replaceAllData(db, { document: backup.document, assets: backup.assets });
       await activateDefaultGroup();
     },
     async resetLocalData() {
@@ -220,7 +224,7 @@ export function createDataCommands(dependencies: CommandDependencies) {
 
 export function imageReader(db: Database) {
   return async (id: string) => {
-    const asset = await getImageAsset(db, id);
+    const asset = await getMediaAsset(db, id);
     if (!asset) throw new Error('本地图片资源不存在');
     return asset;
   };

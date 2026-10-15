@@ -1,5 +1,4 @@
 import { fail } from '@/domain/errors';
-import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import { validateSettings, type AppSettings } from '@/domain/settings';
 
@@ -17,6 +16,7 @@ function exactKeys(value: Record<string, unknown>, allowed: readonly string[], l
 
 const BACKGROUND_FIELDS = new Map<unknown, readonly string[]>([
   ['photo', ['kind', 'assetId', 'maskStrength']],
+  ['motion', ['kind', 'assetId', 'maskStrength']],
   ['solid', ['kind', 'color']],
   ['gradient', ['kind', 'from', 'to', 'angle']],
 ]);
@@ -29,12 +29,9 @@ function validateAppearanceShape(value: unknown): void {
   exactKeys(record(appearance.dynamicColor, '动态配色'), ['enabled', 'mode', 'seed'], '动态配色');
 }
 
-function validateSearchShape(value: unknown, legacy: boolean): void {
+function validateSearchShape(value: unknown): void {
   const search = record(value, '搜索设置');
-  const keys = legacy
-    ? ['defaultEngineId', 'customEngines']
-    : ['defaultEngineId', 'customEngines', 'width', 'autoFocus', 'openTarget'];
-  exactKeys(search, keys, '搜索设置');
+  exactKeys(search, ['defaultEngineId', 'customEngines', 'width', 'autoFocus', 'openTarget'], '搜索设置');
   if (!Array.isArray(search.customEngines)) fail('自定义搜索引擎格式不正确');
   for (const item of search.customEngines) {
     const engine = record(item, '自定义搜索引擎');
@@ -45,42 +42,22 @@ function validateSearchShape(value: unknown, legacy: boolean): void {
   }
 }
 
-function validateLayoutShape(value: unknown, legacy: boolean): void {
+function validateLayoutShape(value: unknown): void {
   const layout = record(value, '布局设置');
-  const keys = legacy ? ['order', 'hidden'] : ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'];
-  exactKeys(layout, keys, '布局设置');
+  exactKeys(layout, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'], '布局设置');
 }
 
-function validateClockShape(value: unknown, legacy: boolean): void {
+function validateClockShape(value: unknown): void {
   const clock = record(value, '时钟设置');
-  const keys = legacy
-    ? ['format']
-    : ['format', 'size', 'showSeconds', 'showDate', 'showWeekday', 'dateFormat', 'weekdayFormat'];
-  exactKeys(clock, keys, '时钟设置');
+  exactKeys(clock, ['format', 'size', 'showSeconds', 'showDate', 'showWeekday', 'dateFormat', 'weekdayFormat'], '时钟设置');
 }
 
-export function validateBackupSettings(value: unknown, legacy: boolean): AppSettings {
+export function validateBackupSettings(value: unknown): AppSettings {
   const raw = record(value, '设置');
-  const keys = legacy
-    ? ['appearance', 'search', 'layout', 'clock']
-    : ['appearance', 'search', 'shortcuts', 'layout', 'clock'];
-  exactKeys(raw, keys, '设置');
+  exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock'], '设置');
   validateAppearanceShape(raw.appearance);
-  validateSearchShape(raw.search, legacy);
-  validateLayoutShape(raw.layout, legacy);
-  validateClockShape(raw.clock, legacy);
-  if (!legacy) return validateSettings(value);
-  const search = record(raw.search, '搜索设置');
-  const layout = record(raw.layout, '布局设置');
-  const clock = record(raw.clock, '时钟设置');
-  return validateSettings({
-    ...raw,
-    search: { ...search, width: 'standard', autoFocus: false, openTarget: 'current-tab' },
-    shortcuts: { showNames: true, openTarget: 'current-tab' },
-    layout: { ...DEFAULT_LAYOUT, ...layout },
-    clock: {
-      format: clock.format, size: 'standard', showSeconds: false, showDate: true, showWeekday: true,
-      dateFormat: 'month-day', weekdayFormat: 'long',
-    },
-  });
+  validateSearchShape(raw.search);
+  validateLayoutShape(raw.layout);
+  validateClockShape(raw.clock);
+  return validateSettings(value);
 }

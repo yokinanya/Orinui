@@ -14,6 +14,6 @@ export function getExtensionInfo(): ExtensionInfo {
   const manifest = browser.runtime.getManifest();
   return {
     name: manifest.name,
-    version: manifest.version,
+    version: manifest.version_name ?? manifest.version,
   };
 }

@@ -10,7 +10,7 @@ export function referencedSyncAssetIds(rows: readonly SyncRecordRow[]): Readonly
   if (!settings) throw new Error('同步设置记录不完整');
   const ids = new Set<string>();
   const background = settings.value.appearance.value.background;
-  if (background.kind === 'photo') ids.add(background.assetId);
+  if (background.kind === 'photo' || background.kind === 'motion') ids.add(background.assetId);
   for (const row of liveKind(rows, 'shortcut')) {
     const icon = row.value.icon.value;
     if (icon.kind === 'asset') ids.add(icon.assetId);

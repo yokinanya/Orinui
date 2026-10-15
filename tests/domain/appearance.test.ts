@@ -37,7 +37,9 @@ describe('validateAppearance', () => {
       validateAppearance(appearance({ background: { kind: 'solid', color: 'red' } as never })),
     ).toThrowError(/需要 #RRGGBB/);
   });
+});
 
+describe('background validation', () => {
   it('拒绝越界的遮罩强度', () => {
     expect(() =>
       validateAppearance(
@@ -52,6 +54,13 @@ describe('validateAppearance', () => {
     ).toThrowError(/缺少图片标识/);
   });
 
+  it('接受动态背景并校验媒体标识和遮罩', () => {
+    expect(validateAppearance(appearance({ background: { kind: 'motion', assetId: 'm1', maskStrength: 0.4 } })).background)
+      .toEqual({ kind: 'motion', assetId: 'm1', maskStrength: 0.4 });
+    expect(() => validateAppearance(appearance({ background: { kind: 'motion', assetId: '', maskStrength: 0.4 } })))
+      .toThrowError(/动态背景缺少媒体标识/);
+  });
+
   it('拒绝越界的渐变方向', () => {
     expect(() =>
       validateAppearance(
@@ -59,7 +68,9 @@ describe('validateAppearance', () => {
       ),
     ).toThrowError(/渐变方向/);
   });
+});
 
+describe('dynamic color validation', () => {
   it('锁定配色必须提供种子色', () => {
     expect(() =>
       validateAppearance(

@@ -51,7 +51,7 @@ function ImportConfirmation({ actions }: { readonly actions: BackupActions }) {
         <AlertDialogHeader>
           <AlertDialogTitle>替换本机数据？</AlertDialogTitle>
           <AlertDialogDescription>
-            {preview && `备份包含 ${preview.groupCount} 个分组、${preview.shortcutCount} 个网站、${preview.assetCount} 张图片。默认分组「${preview.defaultGroup}」，默认搜索引擎「${preview.engine}」。`}
+            {preview && `备份包含 ${preview.groupCount} 个分组、${preview.shortcutCount} 个网站、${preview.assetCount} 个媒体文件。默认分组「${preview.defaultGroup}」，默认搜索引擎「${preview.engine}」。`}
             {' '}继续后会覆盖当前数据；联网搜索建议仍保持关闭。
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -73,14 +73,14 @@ function BackupActionRow({ actions }: { readonly actions: BackupActions }) {
     <div className="flex flex-wrap items-center gap-2">
       <FieldTitle className="mr-auto">本地备份</FieldTitle>
       <Button type="button" variant="outline" size="sm" onClick={() => void actions.exportFile()}>
-        <DownloadIcon data-icon="inline-start" />导出 JSON
+        <DownloadIcon data-icon="inline-start" />导出 ZIP
       </Button>
       <Button type="button" variant="outline" size="sm" disabled={actions.busy}
         onClick={() => input.current?.click()}>
-        <UploadIcon data-icon="inline-start" />导入 JSON
+        <UploadIcon data-icon="inline-start" />导入 ZIP
       </Button>
-      <Input ref={input} id="backup-file" type="file" accept="application/json,.json" className="hidden"
-        aria-label="选择本地备份 JSON 文件" disabled={actions.busy}
+      <Input ref={input} id="backup-file" type="file" accept="application/zip,.zip" className="hidden"
+        aria-label="选择本地 ZIP 备份文件" disabled={actions.busy}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = '';

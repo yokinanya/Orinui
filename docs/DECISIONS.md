@@ -37,3 +37,11 @@ MVP 不随包提供第三方摄影图片。主页仍支持本地照片上传和�
 用户要求支持 SVG 图标及颜色调节，并可主动下载 `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/x.svg`。方向是严格白名单校验后将 SVG 图标以 `image/svg+xml` Blob 保存；背景 SVG 仍转为 PNG。图标可选择 `#rrggbb` 单色覆盖，通过本地 CSS mask 着色；不设置颜色显示源 SVG 原色，清除颜色恢复原色。颜色随图标原子字段保存/同步。已有 PNG 不可变成矢量，且不自动重下载，只有用户主动重选 SVG 才能调色。
 
 允许 SVG namespace 声明与 XML `xml:space="default|preserve"`；其他未显式列出的元素/属性和外部资源仍拒绝。JSON、snapshot、Dexie 版本保持不变，旧构建遇到新字段仍明确拒绝。实现与最终验证状态见 TASKS.md 和 VERIFICATION.md。
+
+## 首个 GitHub Beta 的数据基线（2026-10-15）
+
+- Beta 增加动态壁纸：接受真实可解码的 MP4、WebM、GIF 和动画 WebP；动态媒体只由用户本地上传，视频静音循环且不自动转码。保留现有静态照片/图标单文件 10 MiB 与图片尺寸输出规则；视频不套用静态图片上限，也不设应用级视频文件大小或时长上限。取消 50 MiB 媒体总量限制，实际浏览器文件、解码和 IndexedDB 配额错误明确呈现。
+- 动态视频/动图原件作为资源 Blob 保存，静态 poster 只做本地可重建缓存，不备份、不上传 poster。ZIP 备份和 WebDAV 同步都包含动态原件；远端每项媒体继续逐文件 AES-GCM 端到端加密。
+- 公开首个 Beta 采用 ZIP-only 完整备份，`formatVersion` 为 1：`manifest.json` 保存配置、媒体元数据和摘要，`assets/<assetId>` 保存原始字节。完整校验和预览通过后，由用户确认事务化替换。ZIP 默认不加密，排除 WebDAV 凭据、恢复密钥、CryptoKey、同步状态和派生 poster。
+- 首个 Beta 同步快照采用 schema 3。开发期 JSON 备份和旧同步快照都不兼容，不增加转换或兼容分支；旧格式必须明确拒绝，不自动删除远端或清除本机数据。此前关于开发期 JSON/snapshot 版本的记载描述的是当时实现，以上述 Beta 基线为准。
+- 构图编辑器、竖屏专项、计算器和命令面板不纳入本轮；搜索增强仍是候选。正式版渠道为 Chrome Web Store，Beta 通过 GitHub Pre-release 手动发布。

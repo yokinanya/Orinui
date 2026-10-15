@@ -1,5 +1,5 @@
 import { webcrypto } from 'node:crypto';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { mergeSyncSnapshots } from '@/domain/sync';
 import { createSyncCrypto } from '@/platform/sync-crypto';
 import { decodeSyncSnapshot, encodeSyncSnapshot, openSyncImage } from '@/platform/sync-codec';
@@ -83,7 +83,7 @@ function coordinatorDependencies(db: Database, input: {
   let localRun = 0;
   let runIdIndex = 0;
   const runIds = [...(input.runIds ?? [])];
-  const local = createSyncLocalStore(db, { crypto, validateImage: validateFixtureImage });
+  const local = createSyncLocalStore(db, { crypto, validateStoredMediaAsset: validateFixtureMedia });
   return {
     local, objects: input.server, lock: input.lock, crypto,
     codec: { encode: encodeSyncSnapshot, decode: decodeSyncSnapshot,
@@ -94,10 +94,11 @@ function coordinatorDependencies(db: Database, input: {
   };
 }
 
-async function validateFixtureImage(asset: ImageAsset): Promise<void> {
+async function validateFixtureMedia(asset: MediaAsset): Promise<MediaAsset> {
   const bytes = new Uint8Array(await asset.blob.arrayBuffer());
   if (asset.mime !== 'image/png' || asset.width !== 1 || asset.height !== 1
     || PNG_SIGNATURE.some((byte, index) => bytes[index] !== byte)) throw new Error('Invalid test PNG');
+  return asset;
 }
 
 export class SharedFifoLock implements SyncLock {

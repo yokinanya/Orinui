@@ -3,6 +3,7 @@ import { CheckIcon, PencilIcon, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SettingsPanel } from '@/features/settings/SettingsPanel';
+import { MotionPlaybackButton } from '@/features/appearance/MotionPlaybackButton';
 
 interface HomeActionsProps {
   readonly editing: boolean;
@@ -21,6 +22,7 @@ export function HomeActions({ editing, canEdit, onEditingChange }: HomeActionsPr
 
   return (
     <div className="fixed right-4 bottom-4 z-40 flex flex-col items-center gap-2 md:right-6 md:bottom-6">
+      <MotionPlaybackButton compact />
       {canEdit && (
         <Tooltip>
           <TooltipTrigger render={editButton} />

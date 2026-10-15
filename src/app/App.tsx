@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import { BackgroundLayer } from '@/app/BackgroundLayer';
+import { MotionPlaybackProvider, useMotionPlayback } from '@/app/MotionPlayback';
 import { HomeActions } from '@/app/HomeActions';
 import { useData } from '@/app/data-context';
 import { DataProvider } from '@/app/DataProvider';
@@ -55,12 +56,23 @@ function LoadingState() {
  * 数据契约 §4：按固定命名插槽的持久化顺序渲染，隐藏的区域不渲染。
  * 初始化失败时显示明确原因，而不是让页面停留在空白状态。
  */
+function BackgroundMessages({ photo }: { readonly photo: ReturnType<typeof useLocalImage> }) {
+  const motion = useMotionPlayback();
+  return <>
+    {photo.error && <Alert variant="destructive"><AlertTitle>壁纸无法读取</AlertTitle><AlertDescription>{photo.error}</AlertDescription></Alert>}
+    {photo.seedError && <Alert variant="destructive"><AlertTitle>壁纸取色失败</AlertTitle><AlertDescription>{photo.seedError}</AlertDescription></Alert>}
+    {motion.error && <Alert variant="destructive"><AlertTitle>动态壁纸播放失败</AlertTitle><AlertDescription>{motion.error}</AlertDescription></Alert>}
+  </>;
+}
+
 function HomePage({ editing, searchInputRef }: { readonly editing: boolean; readonly searchInputRef: RefObject<HTMLInputElement | null> }) {
   const { status, error, settings, updateLayout } = useData();
   const systemPrefersDark = useSystemPrefersDark();
   const background = settings.appearance.background;
-  const photo = useLocalImage(background.kind === 'photo' ? background.assetId : null,
+  const staticPhoto = useLocalImage(background.kind === 'photo' ? background.assetId : null,
     settings.appearance.dynamicColor.enabled);
+  const motion = useMotionPlayback();
+  const photo = background.kind === 'motion' ? motion.image : staticPhoto;
 
   useApplyAppearance({ appearance: settings.appearance, systemPrefersDark, photoUrl: photo.url, photoSeed: photo.seed });
 
@@ -90,8 +102,7 @@ function HomePage({ editing, searchInputRef }: { readonly editing: boolean; read
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6 py-16">
       <div className={`motion-home-enter flex w-full flex-col items-center ${REGION_SPACING_CLASSES[settings.layout.regionSpacing]} ${PAGE_WIDTH_CLASSES[settings.layout.pageWidth]}`}>
-        {photo.error && <Alert variant="destructive"><AlertTitle>照片无法读取</AlertTitle><AlertDescription>{photo.error}</AlertDescription></Alert>}
-        {photo.seedError && <Alert variant="destructive"><AlertTitle>照片取色失败</AlertTitle><AlertDescription>{photo.seedError}</AlertDescription></Alert>}
+        <BackgroundMessages photo={photo} />
         {visibleSlots(settings.layout).length === 0 && <Alert>
           <AlertTitle>主页内容已隐藏</AlertTitle>
           <AlertDescription>恢复默认布局以显示时钟、搜索和网站分组。</AlertDescription>
@@ -139,7 +150,7 @@ export function App() {
     <TooltipProvider>
       <Toaster>
         <DataProvider>
-          <HomeContent />
+          <MotionPlaybackProvider><HomeContent /></MotionPlaybackProvider>
         </DataProvider>
       </Toaster>
     </TooltipProvider>

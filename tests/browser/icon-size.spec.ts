@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { visibleSubmitButton } from './form-helpers';
 
 async function setOccupancy(page: Page, value: number) {
   const slider = page.getByRole('slider', { name: '图标占比' });
@@ -39,7 +40,7 @@ test('图标占比只改变框内内容，透明预览边框固定，保存与�
   await expect(previewFrame).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(previewFrame).toHaveCSS('border-top-width', '1px');
   await setOccupancy(page, 60);
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
   await expectTileFrame(page, '比例测试站点');
   const letter = page.getByRole('link', { name: '比例测试站点', exact: true }).locator('span[aria-hidden="true"]').first().locator('span');
   await expect(letter).toHaveCSS('font-size', '14.4px');
@@ -54,7 +55,7 @@ test('取消不写入占比，切换图标类型和替换 SVG 保留占比', asy
   await page.goto('/newtab.html');
   await openNewShortcut(page);
   await setOccupancy(page, 60);
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
 
   await openShortcutEditor(page);
   const slider = page.getByRole('slider', { name: '图标占比' });
@@ -74,7 +75,7 @@ test('取消不写入占比，切换图标类型和替换 SVG 保留占比', asy
   const preview = page.getByRole('img', { name: '图标预览', exact: true });
   await expectRenderedWidth(preview, 37.2);
   await expect(page.getByLabel('当前图标占比')).toHaveText('60%');
-  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await visibleSubmitButton(page).click();
 
   await expectTileFrame(page, '比例测试站点');
   const tileImage = page.getByRole('link', { name: '比例测试站点', exact: true }).locator('img');

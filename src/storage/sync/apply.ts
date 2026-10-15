@@ -1,5 +1,5 @@
 import { fail } from '@/domain/errors';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { materializeSyncSnapshot, maximumSyncClock, nextSyncCounter } from '@/domain/sync';
 import type { SyncSnapshotV1 } from '@/domain/sync';
 import type { Database, SettingsRow } from '@/storage/db';
@@ -10,7 +10,7 @@ import { validateSyncPayload, type SyncApplyDependencies, type ValidatedSyncPayl
 
 export interface ApplySyncSnapshotInput {
   readonly snapshot: SyncSnapshotV1;
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
   readonly expectedGeneration: number;
   readonly syncRun?: { readonly runId: string; readonly appliedAt: number };
 }

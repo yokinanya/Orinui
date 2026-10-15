@@ -6,14 +6,12 @@ import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEng
 import type { ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { createDefaultSettings, validateSettings } from '@/domain/settings';
-import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
 import { parseSyncAsset } from '@/domain/sync/validate-assets';
 import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncGroup, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshotV1, type SyncTombstone } from '@/domain/sync/types';
 
-const MAX_ASSET_BYTES = 50 * 1024 * 1024;
 const MAX_ASSET_COUNT = LIMITS.shortcuts + 1;
 interface SnapshotEnvelope extends RecordValue {
   readonly groups: unknown[];
@@ -73,7 +71,7 @@ function parseAppearance(value: unknown): SyncSettings['appearance']['value'] {
   const raw = asRecord(value, '外观设置');
   exactKeys(raw, ['theme', 'background', 'dynamicColor'], '外观设置');
   const background = asRecord(raw.background, '背景设置');
-  const keys = background.kind === 'photo' ? ['kind', 'assetId', 'maskStrength']
+  const keys = background.kind === 'photo' || background.kind === 'motion' ? ['kind', 'assetId', 'maskStrength']
     : background.kind === 'solid' ? ['kind', 'color']
       : background.kind === 'gradient' ? ['kind', 'from', 'to', 'angle'] : ['kind'];
   exactKeys(background, keys, '背景设置');
@@ -85,12 +83,6 @@ function parseLayout(value: unknown): SyncSettings['layout']['value'] {
   const raw = asRecord(value, '布局设置');
   exactKeys(raw, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'], '布局设置');
   return validateLayout(value);
-}
-
-function parseLegacyLayout(value: unknown): SyncSettings['layout']['value'] {
-  const raw = asRecord(value, '布局设置');
-  exactKeys(raw, ['order', 'hidden'], '布局设置');
-  return validateLayout({ ...DEFAULT_LAYOUT, ...raw });
 }
 
 function parseSettings(value: unknown): SyncSettings {
@@ -160,9 +152,10 @@ function validateSnapshotLimits(snapshot: SyncSnapshotV1): void {
 function requireAsset({ assets, id, kind, label }: {
   readonly assets: ReadonlyMap<string, SyncAsset>; readonly id: string;
   readonly kind: SyncAsset['kind']; readonly label: string;
-}): void {
+}): SyncAsset {
   const asset = assets.get(id);
   if (!asset || asset.kind !== kind) fail(`${label}资源引用不存在`);
+  return asset;
 }
 
 function collectShortcutAssetRefs({ snapshot, groupIds, assets }: {
@@ -184,16 +177,14 @@ function collectShortcutAssetRefs({ snapshot, groupIds, assets }: {
 
 function collectBackgroundAssetRef(snapshot: SyncSnapshotV1, assets: ReadonlyMap<string, SyncAsset>): string | null {
   const background = snapshot.settings.appearance.value.background;
-  if (background.kind !== 'photo') return null;
-  requireAsset({ assets, id: background.assetId, kind: 'background', label: '背景图片' });
+  if (background.kind !== 'photo' && background.kind !== 'motion') return null;
+  const asset = requireAsset({ assets, id: background.assetId, kind: 'background', label: '背景媒体' });
+  if ((background.kind === 'motion') !== (asset.motion !== null)) fail('背景类型与媒体动态属性不匹配');
   return background.assetId;
 }
 
 function validateAssetSet(snapshot: SyncSnapshotV1, refs: ReadonlySet<string>): void {
   if (refs.size !== snapshot.assets.length || snapshot.assets.some(({ id }) => !refs.has(id))) fail('存在未引用的图片资源');
-  let bytes = 0;
-  for (const asset of snapshot.assets) bytes += asset.byteLength;
-  if (bytes > MAX_ASSET_BYTES) fail('同步图片资源总量超过 50 MiB');
 }
 
 function validateSettingsReferences(snapshot: SyncSnapshotV1): void {
@@ -225,35 +216,6 @@ function validateSnapshotEnvelope(raw: RecordValue): asserts raw is SnapshotEnve
   if (raw.assets.length > MAX_ASSET_COUNT) fail('图片资源数量超限');
 }
 
-function migrateSnapshotV1(value: unknown): unknown {
-  const raw = asRecord(value, '同步快照');
-  if (raw.schemaVersion !== 1) return value;
-  exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'defaultGroupId', 'groups', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
-  const settings = asRecord(raw.settings, '同步设置');
-  exactKeys(settings, ['appearance', 'defaultEngineId', 'layout', 'clock', 'customEngines'], '同步设置');
-  const defaults = createDefaultSettings();
-  const layout = validateRegister(settings.layout, '布局设置', parseLegacyLayout);
-  const clock = validateRegister(settings.clock, '时钟设置', (item) => {
-    const old = asRecord(item, '时钟设置');
-    exactKeys(old, ['format'], '时钟设置');
-    return { ...defaults.clock, ...validateSettings({ ...defaults, clock: { ...defaults.clock, ...old } }).clock };
-  });
-  const deviceId = identifier(raw.deviceId, '设备标识');
-  return {
-    ...raw,
-    schemaVersion: SYNC_SCHEMA_VERSION,
-    settings: {
-      ...settings,
-      layout,
-      clock,
-      searchPreferences: { value: {
-        width: defaults.search.width, autoFocus: defaults.search.autoFocus, openTarget: defaults.search.openTarget,
-      }, clock: 0, deviceId },
-      shortcutPreferences: { value: defaults.shortcuts, clock: 0, deviceId },
-    },
-  };
-}
-
 function parseSnapshotFields(raw: SnapshotEnvelope): SyncSnapshotV1 {
   return {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: identifier(raw.vaultId, '同步库标识'), deviceId: identifier(raw.deviceId, '设备标识'),
@@ -281,7 +243,7 @@ function validateSnapshotEntities(snapshot: SyncSnapshotV1): void {
 }
 
 export function parseSyncSnapshot(value: unknown): SyncSnapshotV1 {
-  const raw = asRecord(migrateSnapshotV1(value), '同步快照');
+  const raw = asRecord(value, '同步快照');
   validateSnapshotEnvelope(raw);
   const snapshot = parseSnapshotFields(raw);
   validateSnapshotEntities(snapshot);

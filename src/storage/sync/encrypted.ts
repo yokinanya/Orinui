@@ -29,12 +29,13 @@ export async function sealSyncExport(db: Database, dependencies: {
     key, context: { vaultId: snapshot.vaultId, kind: 'snapshot', objectId: snapshot.deviceId },
     plaintext: dependencies.encodeSnapshot(snapshot),
   });
-  const assets = await Promise.all(prepared.assets.map(async (asset) => ({
-    id: asset.id, ciphertext: await crypto.encrypt({
+  const assets: SealedSyncObject[] = [];
+  for (const asset of prepared.assets) {
+    assets.push({ id: asset.id, ciphertext: await crypto.encrypt({
       key, context: { vaultId: snapshot.vaultId, kind: 'asset', objectId: asset.id },
       plaintext: new Uint8Array(await asset.blob.arrayBuffer()),
-    }),
-  })));
+    }) });
+  }
   return { vaultId: snapshot.vaultId, localGeneration: prepared.localGeneration,
     snapshot: { id: snapshot.deviceId, ciphertext: sealedSnapshot }, assets };
 }

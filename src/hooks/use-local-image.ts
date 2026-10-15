@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 
 import { useData } from '@/app/data-context';
 import { photoSeed } from '@/platform/images';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 
 interface LocalImageState {
   readonly id: string | null;
   readonly url: string | null;
+  readonly mediaUrl: string | null;
+  readonly motionKind: 'video' | 'animation' | null;
   readonly mime: string | null;
   readonly seed: string | null;
   readonly seedError: string | null;
@@ -14,12 +16,12 @@ interface LocalImageState {
   readonly error: string | null;
 }
 
-const EMPTY_IMAGE: LocalImageState = { id: null, url: null, mime: null, seed: null, seedError: null, sourceUrl: null, error: null };
+const EMPTY_IMAGE: LocalImageState = { id: null, url: null, mediaUrl: null, motionKind: null, mime: null,
+  seed: null, seedError: null, sourceUrl: null, error: null };
 
-type PhotoAsset = Pick<ImageAsset, 'id' | 'blob' | 'width' | 'height'>;
+type PhotoAsset = Pick<MediaAsset, 'id' | 'blob' | 'width' | 'height'>;
 
-export function useLocalImage(id: string | null, extractSeed = false): LocalImageState {
-  const { readImageAsset } = useData();
+function useImageResource(id: string | null, readMediaAsset: (id: string) => Promise<MediaAsset>) {
   const [state, setState] = useState<LocalImageState>(EMPTY_IMAGE);
   const [asset, setAsset] = useState<PhotoAsset | null>(null);
 
@@ -27,26 +29,37 @@ export function useLocalImage(id: string | null, extractSeed = false): LocalImag
     if (!id) { setAsset(null); setState(EMPTY_IMAGE); return; }
     let cancelled = false;
     let objectUrl: string | null = null;
+    let mediaUrl: string | null = null;
     void (async () => {
       try {
-        const image = await readImageAsset(id);
+        const image = await readMediaAsset(id);
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(image.blob);
-        setAsset({ id, blob: image.blob, width: image.width, height: image.height });
-        setState({ id, url: objectUrl, mime: image.mime, seed: null, seedError: null, sourceUrl: image.sourceUrl, error: null });
+        const poster = image.motion ? image.motion.poster : image.blob;
+        if (!poster) throw new Error('动态壁纸封面缺失，请重新上传此素材');
+        objectUrl = URL.createObjectURL(poster);
+        if (image.motion) mediaUrl = URL.createObjectURL(image.blob);
+        setAsset({ id, blob: poster, width: image.width, height: image.height });
+        setState({ id, url: objectUrl, mediaUrl, motionKind: image.motion?.kind ?? null, mime: image.mime,
+          seed: null, seedError: null, sourceUrl: image.sourceUrl, error: null });
       } catch (cause) {
         if (cancelled) return;
         setAsset(null);
-        setState({ id, url: null, mime: null, seed: null, seedError: null, sourceUrl: null,
+        setState({ ...EMPTY_IMAGE, id,
           error: cause instanceof Error ? cause.message : String(cause) });
       }
     })();
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
     };
-  }, [id, readImageAsset]);
+  }, [id, readMediaAsset]);
+  return { state, setState, asset };
+}
 
+export function useLocalImage(id: string | null, extractSeed = false): LocalImageState {
+  const { readMediaAsset } = useData();
+  const { state, setState, asset } = useImageResource(id, readMediaAsset);
   useEffect(() => {
     if (!id || asset?.id !== id) return;
     if (!extractSeed) {

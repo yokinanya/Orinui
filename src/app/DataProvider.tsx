@@ -12,7 +12,7 @@ import { WebDavSyncProvider } from '@/app/WebDavSyncProvider';
 export function DataProvider({ children }: { readonly children: ReactNode }) {
   const state = useDataState(db);
   const systemPrefersDark = useSystemPrefersDark();
-  const readImageAsset = useMemo(() => imageReader(db), []);
+  const readMediaAsset = useMemo(() => imageReader(db), []);
   const { status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId,
     loadGroups, loadShortcuts, setSettings } = state;
   const refreshData = useCallback(async () => {
@@ -25,10 +25,10 @@ export function DataProvider({ children }: { readonly children: ReactNode }) {
     await loadShortcuts(selected);
   }, [loadGroups, setSettings, activeGroupId, setActiveGroupId, loadShortcuts]);
   const value = useMemo<DataContextValue>(() => ({
-    status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId, readImageAsset,
+    status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId, readMediaAsset,
     isDark: isDarkActive(settings.appearance.theme, systemPrefersDark),
     ...createDataCommands({ db, activeGroupId, loadGroups, loadShortcuts, setActiveGroupId, setSettings }),
   }), [status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId,
-    readImageAsset, systemPrefersDark, loadGroups, loadShortcuts, setSettings]);
+    readMediaAsset, systemPrefersDark, loadGroups, loadShortcuts, setSettings]);
   return <DataContext value={value}><WebDavSyncProvider db={db} refreshData={refreshData}>{children}</WebDavSyncProvider></DataContext>;
 }

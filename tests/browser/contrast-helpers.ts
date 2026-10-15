@@ -1,4 +1,7 @@
 import { expect, type Page } from '@playwright/test';
+import { createDefaultSettings } from '@/domain/settings';
+import { BACKUP_VERSION } from '@/domain/backup';
+import { createZipFixture } from './zip-fixtures';
 
 export interface BackgroundCase {
   readonly name: string;
@@ -21,17 +24,14 @@ export async function setPhotoMask(page: Page, percent: number) {
 }
 
 function fixture(input: BackgroundCase) {
+  const defaults = createDefaultSettings();
   return {
-    version: 1, exportedAt: new Date().toISOString(), assets: [],
+    formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(), assets: [],
     groups: [{ id: 'contrast-group', name: '常用', order: 0, isDefault: true, colorRole: 'primary' }],
     shortcuts: [{ id: 'contrast-site', groupId: 'contrast-group', title: '对比度站点', url: 'https://example.com/',
       icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }],
-    settings: {
-      appearance: { theme: input.theme, background: input.background,
-        dynamicColor: { enabled: input.dynamic, mode: 'follow', seed: null } },
-      search: { defaultEngineId: 'google', customEngines: [] },
-      layout: { order: ['clock', 'search', 'shortcuts'], hidden: [] }, clock: { format: '24h' },
-    },
+    settings: { ...defaults, appearance: { ...defaults.appearance, theme: input.theme, background: input.background,
+      dynamicColor: { ...defaults.appearance.dynamicColor, enabled: input.dynamic } } },
   };
 }
 
@@ -39,8 +39,8 @@ export async function configureBackground(page: Page, input: BackgroundCase) {
   await page.goto('/newtab.html');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据', exact: true }).click();
-  await page.getByLabel('选择本地备份 JSON 文件').setInputFiles({
-    name: 'contrast.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture(input))),
+  await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({
+    name: 'contrast.zip', mimeType: 'application/zip', buffer: createZipFixture(fixture(input)),
   });
   await page.getByRole('button', { name: '确认替换', exact: true }).click();
   await expect(page.getByRole('alertdialog')).toBeHidden();

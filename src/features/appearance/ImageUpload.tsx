@@ -4,17 +4,17 @@ import { UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import type { ImageAssetKind } from '@/domain/asset';
+import type { MediaAssetKind } from '@/domain/asset';
 import { IMAGE_ACCEPT } from '@/domain/image';
 import { prepareImage } from '@/platform/images';
-import type { NewImageAsset } from '@/storage/assets';
+import type { NewMediaAsset } from '@/storage/assets';
 
 interface ImageUploadProps {
   readonly id: string;
-  readonly kind: ImageAssetKind;
+  readonly kind: MediaAssetKind;
   readonly compact?: boolean;
   readonly disabled?: boolean;
-  readonly onReady: (image: NewImageAsset) => Promise<void> | void;
+  readonly onReady: (image: NewMediaAsset) => Promise<void> | void;
   readonly onBusyChange?: (busy: boolean) => void;
 }
 

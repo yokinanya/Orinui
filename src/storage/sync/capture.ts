@@ -1,6 +1,6 @@
 import type { DBCore, DBCoreMutateRequest, DBCoreMutateResponse, DBCoreTable } from 'dexie';
 import type { Group } from '@/domain/group';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow } from '@/storage/sync/types';
@@ -14,7 +14,7 @@ export { seedSyncRecords } from '@/storage/sync/seed';
 export const SHORTCUT_UNDO_WINDOW_MS = 5_000;
 const TRACKED_TABLES = ['groups', 'shortcuts', 'settings', 'assets'] as const;
 type TrackedTable = (typeof TRACKED_TABLES)[number];
-type TableRow = Group | Shortcut | (AppSettings & { readonly id: 'app' }) | ImageAsset;
+type TableRow = Group | Shortcut | (AppSettings & { readonly id: 'app' }) | MediaAsset;
 
 export function isTrackedTable(name: string): name is TrackedTable {
   return TRACKED_TABLES.includes(name as TrackedTable);
@@ -110,7 +110,7 @@ async function captureEntity(input: CaptureEntityInput): Promise<{ defaultGroupI
   if (name === 'shortcuts') changes = await captureShortcut({ core, rows, id,
     before: before as Shortcut | undefined, after: after as Shortcut | undefined, now, clock, changes });
   if (name === 'assets') changes = await captureAsset({ core, rows, id,
-    before: before as ImageAsset | undefined, after: after as ImageAsset | undefined, clock, changes });
+    before: before as MediaAsset | undefined, after: after as MediaAsset | undefined, clock, changes });
   if (name === 'settings' && after) changes = await captureSettings({ core, rows, settings: after as AppSettings & { id: 'app' }, clock, changes });
   return { defaultGroupId, changes };
 }
@@ -172,7 +172,7 @@ async function captureShortcut(input: CaptureShortcutInput): Promise<Map<string,
 }
 
 interface CaptureAssetInput {
-  readonly core: DBCore; readonly rows: MutationRows; readonly id: string; readonly before?: ImageAsset; readonly after?: ImageAsset;
+  readonly core: DBCore; readonly rows: MutationRows; readonly id: string; readonly before?: MediaAsset; readonly after?: MediaAsset;
   readonly clock: SyncClock; readonly changes: Map<string, SyncRecordRow>;
 }
 

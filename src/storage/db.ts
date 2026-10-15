@@ -5,7 +5,7 @@ import { createDefaultSettings, validateSettings } from '@/domain/settings';
 import type { Group } from '@/domain/group';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import type { SyncRecordRow, SyncStateRow, SyncKeyRow } from '@/storage/sync/types';
 import { createSyncCaptureMiddleware } from '@/storage/sync/middleware';
@@ -117,7 +117,7 @@ export class OrinuiDatabase extends Dexie {
   groups!: EntityTable<Group, 'id'>;
   shortcuts!: EntityTable<Shortcut, 'id'>;
   settings!: EntityTable<SettingsRow, 'id'>;
-  assets!: EntityTable<ImageAsset, 'id'>;
+  assets!: EntityTable<MediaAsset, 'id'>;
   sync_state!: EntityTable<SyncStateRow, 'id'>;
   sync_records!: EntityTable<SyncRecordRow, 'id'>;
   sync_keys!: EntityTable<SyncKeyRow, 'id'>;

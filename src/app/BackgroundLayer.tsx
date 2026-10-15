@@ -1,3 +1,5 @@
+import { MotionVisual } from '@/features/appearance/MotionVisual';
+
 /**
  * 背景层。
  *
@@ -14,6 +16,7 @@ export function BackgroundLayer() {
           backgroundColor: 'var(--wallpaper-color)',
         }}
       />
+      <MotionVisual />
       <div
         className="absolute inset-0"
         style={{ backgroundColor: 'var(--wallpaper-mask)' }}

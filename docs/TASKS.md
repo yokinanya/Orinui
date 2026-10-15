@@ -2,9 +2,16 @@
 
 整理日期：2026-10-15。本文件是进度的主记录。规则见 [DATA-CONTRACT.md](./DATA-CONTRACT.md) 与 [VISUAL-SPEC.md](./VISUAL-SPEC.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
 
+当前优先交付为 [首个 GitHub Beta](./BETA-0.1.0.md)：动态壁纸、ZIP 完整备份、原始媒体加密同步与手动发布；实现、最终检查、已知限制和发布状态集中记于该页。下方保留既有批次记录。
+
 勾选表示该条所写的实现或验收已完成；“代码已实现”不等同于真实扩展环境通过。同步高层设计定稿也不代表同步功能已完成。UI 检查、修复与复验见 [UI-REVIEW.md](./UI-REVIEW.md)。
 
 2026-10-14 用户确认当前 UI、现有功能扩展权限和屏幕吸管验收完成。WebDAV 已接入并通过受控本机 HTTPS 服务上的真实扩展双配置文件审计；第三方服务兼容性和真实用户设备仍未验收。Google Drive 适配器延后，不作为当前 WebDAV 阶段的阻塞项。
+
+## 本地扩展构建更新（2026-10-15）
+
+- [x] 核对当前源码与旧构建：原 `.output/chrome-mv3/manifest.json` 仍为 0.0.0，现已按当前源码重新构建为 0.0.1。
+- [x] `pnpm compile`、限时 `pnpm test`（45 文件、396/396）与 `pnpm build` 通过；产物仍位于 `.output/chrome-mv3`，未生成 ZIP。本轮没有操作用户浏览器或新增真实扩展验收。
 
 ## 设置面板视觉统一（2026-10-15）
 

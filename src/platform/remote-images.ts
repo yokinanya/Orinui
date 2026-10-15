@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
 import { createBrowserSyncLock } from '@/platform/sync-lock';
 import { fail } from '@/domain/errors';
-import type { ImageAssetKind } from '@/domain/asset';
+import type { MediaAssetKind } from '@/domain/asset';
 import { prepareImage } from '@/platform/images';
 import { createRemoteImageDownloader, type DownloadedImage } from '@/platform/remote-image-download';
 
@@ -25,7 +25,7 @@ function getExtensionOrigin(): string {
   return browser.runtime.getURL('').replace(/\/$/, '');
 }
 
-export async function downloadRemoteImage(source: string, kind: ImageAssetKind): Promise<DownloadedImage> {
+export async function downloadRemoteImage(source: string, kind: MediaAssetKind): Promise<DownloadedImage> {
   return createRemoteImageDownloader({
     requestPermissions: requestRemoteImagePermissions,
     getHeadersReceived,

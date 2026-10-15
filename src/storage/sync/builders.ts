@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { Group } from '@/domain/group';
 import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
@@ -105,11 +105,12 @@ function registerAfterCompare<T>(input: { readonly value: T; readonly previous?:
   return clock.register(value, previous);
 }
 
-export function buildAssetRecord(asset: ImageAsset, previous: SyncRecordRow | undefined, clock: SyncClock): Extract<SyncRecordRow, { kind: 'asset' }> {
+export function buildAssetRecord(asset: MediaAsset, previous: SyncRecordRow | undefined, clock: SyncClock): Extract<SyncRecordRow, { kind: 'asset' }> {
   const old = livePrevious(previous, 'asset');
   const value: Omit<SyncAsset, 'sha256'> = {
     id: asset.id, kind: asset.kind, mime: asset.mime, width: asset.width, height: asset.height, byteLength: asset.blob.size,
     sourceUrl: clock.register(asset.sourceUrl, old?.value.sourceUrl),
+    motion: asset.motion ? { kind: asset.motion.kind, duration: asset.motion.duration } : null,
   };
   const row: Extract<SyncRecordRow, { kind: 'asset' }> = { id: recordId('asset', asset.id), kind: 'asset', entityId: asset.id, value };
   return old?.kind === 'asset' && old.sha256 ? { ...row, sha256: old.sha256 } : row;

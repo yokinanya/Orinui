@@ -26,13 +26,13 @@ async function setup() {
 }
 
 describe('local sync vault foundation', () => {
-  it('seeds stable IDs without including keys or metadata in ordinary JSON backups', async () => {
+  it('seeds stable IDs without including keys or sync metadata in ordinary ZIP backups', async () => {
     const { initial, shortcut } = await setup();
     const exported = await exportSyncSnapshot(db, cipher);
     expect(exported.snapshot.groups.map(({ id }) => id)).toContain(initial.defaultGroup.id);
     expect(exported.snapshot.shortcuts[0]?.id).toBe(shortcut.id);
     const backup = await createBackupSnapshot(db);
-    expect(Object.keys(backup)).toEqual(['version', 'exportedAt', 'groups', 'shortcuts', 'settings', 'assets']);
+    expect(Object.keys(backup)).toEqual(['formatVersion', 'exportedAt', 'groups', 'shortcuts', 'settings', 'assets']);
     expect(JSON.stringify(backup)).not.toContain('sync_records');
   });
 

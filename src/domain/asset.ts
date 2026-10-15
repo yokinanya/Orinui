@@ -1,19 +1,27 @@
 /**
- * 本地图片资源。
+ * 本地媒体资源。
  *
- * 数据契约 §1.4 与 §5：图片二进制与结构化配置分开保存，
- * 当前实现仅本地保存，配置只引用资源标识；新标签页渲染不联网获取图片。
- * 未来用户启用的加密同步按 SYNC-DESIGN.md 实施，当前尚无上传实现。
+ * 媒体二进制与结构化配置分开保存，配置只引用资源标识；新标签页渲染不联网获取媒体。
+ * 用户启用同步后，原始媒体逐项端到端加密同步；poster 仅作可再生的本地缓存。
  */
-export type ImageAssetKind = 'background' | 'icon';
+export type MediaAssetKind = 'background' | 'icon';
 
-export interface ImageAsset {
+export interface MediaAssetMotion {
+  readonly kind: 'video' | 'animation';
+  readonly duration: number | null;
+  /** 可重建的本机预览缓存，不进入备份或同步。 */
+  readonly poster?: Blob;
+}
+
+export interface MediaAsset {
   id: string;
-  kind: ImageAssetKind;
-  mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml';
+  kind: MediaAssetKind;
+  mime: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' | 'image/svg+xml' | 'video/mp4' | 'video/webm';
   width: number;
   height: number;
   blob: Blob;
   /** 外链下载的来源地址；本地上传为 null。不保存许可信息。 */
   sourceUrl: string | null;
+  /** 有此字段才是动态媒体；WebP 动图通过 animation 标识。 */
+  motion?: MediaAssetMotion;
 }

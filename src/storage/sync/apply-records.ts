@@ -1,5 +1,5 @@
 import type { AppSettings } from '@/domain/settings';
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { Shortcut } from '@/domain/shortcut';
 import type { SyncEntityType, SyncSnapshotV1, SyncTombstone } from '@/domain/sync';
 import type { MaterializedSyncData } from '@/domain/sync';
@@ -11,7 +11,7 @@ export interface AppliedRows {
   readonly groups: MaterializedSyncData['groups'];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
   readonly records: readonly SyncRecordRow[];
   readonly defaultGroupId: SyncStateRow['defaultGroupId'];
 }
@@ -44,7 +44,7 @@ function assertTombstonesRetained(records: readonly SyncRecordRow[], tombstones:
 function activeAssetIds(shortcuts: readonly Shortcut[], settings: AppSettings): Set<string> {
   const ids = new Set(shortcuts.flatMap(({ icon }) => icon.kind === 'asset' ? [icon.assetId] : []));
   const background = settings.appearance.background;
-  if (background.kind === 'photo') ids.add(background.assetId);
+  if (background.kind === 'photo' || background.kind === 'motion') ids.add(background.assetId);
   return ids;
 }
 
@@ -58,7 +58,7 @@ function pendingAssetIds(shortcuts: ReadonlyMap<string, Extract<SyncEntityRecord
 interface CreateLiveRecordsInput {
   readonly snapshot: SyncSnapshotV1;
   readonly pending: ReadonlyMap<string, Extract<SyncEntityRecordRow, { kind: 'shortcut' }>>;
-  readonly allAssets: ReadonlyMap<string, ImageAsset>;
+  readonly allAssets: ReadonlyMap<string, MediaAsset>;
   readonly cachedAssetIds: ReadonlySet<string>;
 }
 
@@ -91,7 +91,7 @@ export function buildAppliedRows(input: {
   readonly snapshot: SyncSnapshotV1;
   readonly materialized: MaterializedSyncData;
   readonly existingRecords: readonly SyncRecordRow[];
-  readonly incomingAssets: ReadonlyMap<string, ImageAsset>;
+  readonly incomingAssets: ReadonlyMap<string, MediaAsset>;
   readonly now: number;
 }): AppliedRows {
   const tombstones = tombstoneMap(input.snapshot);

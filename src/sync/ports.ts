@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import type { SyncSnapshotV1 } from '@/domain/sync';
 import type { SyncCrypto, SyncObjectContext } from '@/platform/sync-crypto-types';
 import type { SyncObjectStore } from '@/sync/objects';
@@ -6,7 +6,7 @@ import type { SyncFailureInfo, SyncPhase, SyncPublication } from '@/sync/types';
 
 export interface SyncLocalExport {
   readonly snapshot: SyncSnapshotV1;
-  readonly assets: readonly ImageAsset[];
+  readonly assets: readonly MediaAsset[];
   readonly localGeneration: number;
 }
 
@@ -29,7 +29,7 @@ export interface SyncLocalStore {
   export(input: SyncRunIdentity): Promise<SyncLocalExport>;
   assertCurrent(input: SyncRunIdentity & { readonly expectedGeneration?: number }): Promise<void>;
   markPhase(input: SyncRunIdentity & { readonly phase: SyncPhase; readonly publication: SyncPublication }): Promise<void>;
-  apply(input: SyncRunIdentity & { readonly snapshot: SyncSnapshotV1; readonly assets: readonly ImageAsset[];
+  apply(input: SyncRunIdentity & { readonly snapshot: SyncSnapshotV1; readonly assets: readonly MediaAsset[];
     readonly expectedGeneration: number; readonly appliedAt: number }): Promise<void>;
   finish(input: SyncRunIdentity & { readonly publishedGeneration: number; readonly revision: string;
     readonly completedAt: number }): Promise<{ readonly localGeneration: number; readonly pendingEdits: boolean }>;
@@ -46,7 +46,7 @@ export interface SyncCodec {
   encode(snapshot: SyncSnapshotV1): Uint8Array;
   decode(bytes: Uint8Array, context: SyncObjectContext): SyncSnapshotV1;
   openImage(input: { readonly crypto: SyncCrypto; readonly key: CryptoKey; readonly vaultId: string;
-    readonly asset: SyncSnapshotV1['assets'][number]; readonly ciphertext: Uint8Array }): Promise<ImageAsset>;
+    readonly asset: SyncSnapshotV1['assets'][number]; readonly ciphertext: Uint8Array }): Promise<MediaAsset>;
 }
 
 export interface SyncAlgorithms {

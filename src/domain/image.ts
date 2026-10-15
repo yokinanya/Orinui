@@ -1,4 +1,4 @@
-import type { ImageAssetKind } from '@/domain/asset';
+import type { MediaAssetKind } from '@/domain/asset';
 import { fail } from '@/domain/errors';
 
 export const IMAGE_FILE_LIMIT = 10 * 1024 * 1024;
@@ -21,7 +21,7 @@ export function validateImageFile(blob: Blob): void {
 export function imageOutputSize(input: {
   readonly width: number;
   readonly height: number;
-  readonly kind: ImageAssetKind;
+  readonly kind: MediaAssetKind;
   readonly svg?: boolean;
 }): { width: number; height: number } {
   const { width, height, kind, svg } = input;

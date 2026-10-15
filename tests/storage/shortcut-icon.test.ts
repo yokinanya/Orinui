@@ -1,11 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { shortcutIconOccupancy } from '@/domain/shortcut-icon';
-import { parseBackup } from '@/domain/backup';
-import { serializeBackup } from '@/platform/backup-file';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseShortcutIcon, shortcutIconOccupancy } from '@/domain/shortcut-icon';
+import { BACKUP_VERSION } from '@/domain/backup';
+import { readBackupFile, serializeBackup } from '@/platform/backup-file';
 import { createDatabase, type Database } from '@/storage/db';
 import { ensureInitialized } from '@/storage/init';
 import { createBackupSnapshot, replaceAllData } from '@/storage/backup';
 import { createShortcut, deleteShortcut, restoreShortcut, updateShortcut } from '@/storage/shortcuts';
+
+vi.mock('@/platform/media', () => ({ validateStoredMediaAsset: async (asset: unknown) => asset }));
 
 let db: Database;
 let groupId: string;
@@ -37,26 +39,18 @@ it('persists occupancy across icon variants, image replacement, and delete undo'
   expect(shortcutIconOccupancy((await db.shortcuts.get(uploaded.id))!.icon)).toBe(92);
 });
 
-it('restores icon occupancy through version 2 JSON backup', async () => {
+it('restores icon occupancy through the ZIP backup', async () => {
   await createShortcut(db, { groupId, title: '备份', url: 'backup.example', icon: { kind: 'built-in', iconId: 'book', occupancy: 75 } });
   const snapshot = await createBackupSnapshot(db);
   const serialized = await serializeBackup(snapshot);
-  const document = parseBackup(JSON.parse(await serialized.text())).document;
-  expect(document.version).toBe(2);
-  await replaceAllData(db, { document, assets: [] });
+  const imported = await readBackupFile(zipFile(serialized));
+  expect(imported.document.formatVersion).toBe(BACKUP_VERSION);
+  await replaceAllData(db, { document: imported.document, assets: imported.assets });
   expect(shortcutIconOccupancy((await db.shortcuts.toArray())[0]!.icon)).toBe(75);
 });
 
-it('normalizes the old size field while importing a version 1 JSON backup', async () => {
-  await createShortcut(db, { groupId, title: '旧备份', url: 'old-backup.example', icon: { kind: 'letter' } });
-  const snapshot = await createBackupSnapshot(db);
-  const serialized = await serializeBackup(snapshot);
-  const raw = JSON.parse(await serialized.text());
-  raw.shortcuts[0].icon = { kind: 'letter', size: 32 };
-  const document = parseBackup(raw).document;
-  expect(document.shortcuts[0]?.icon).toEqual({ kind: 'letter', occupancy: 67 });
-  await replaceAllData(db, { document, assets: [] });
-  expect((await db.shortcuts.toArray())[0]?.icon).toEqual({ kind: 'letter', occupancy: 67 });
+it('normalizes the previous stored shortcut icon size field', async () => {
+  expect(parseShortcutIcon({ kind: 'letter', size: 32 })).toEqual({ kind: 'letter', occupancy: 67 });
 });
 
 it('uses default occupancy for stored legacy shortcut records without either value', async () => {
@@ -81,14 +75,18 @@ it('stores SVG color on vector icons, preserves it when omitted, and clears it e
     .rejects.toThrow(/只能用于 SVG/);
 });
 
-it('exports and restores SVG media and icon color through JSON backup', async () => {
+it('exports and restores SVG media and icon color through ZIP backup', async () => {
   const shortcut = await createShortcut(db, { groupId, title: 'SVG备份', url: 'svg-backup.example',
     svgColor: '#abcdef', image: svgImage() });
   const snapshot = await createBackupSnapshot(db);
   const serialized = await serializeBackup(snapshot);
-  const document = parseBackup(JSON.parse(await serialized.text())).document;
-  expect(document.assets[0]?.mime).toBe('image/svg+xml');
-  expect(document.shortcuts.find(({ id }) => id === shortcut.id)?.icon).toMatchObject({ color: '#abcdef' });
-  await replaceAllData(db, { document, assets: snapshot.assets });
+  const imported = await readBackupFile(zipFile(serialized));
+  expect(imported.document.assets[0]?.mime).toBe('image/svg+xml');
+  expect(imported.document.shortcuts.find(({ id }) => id === shortcut.id)?.icon).toMatchObject({ color: '#abcdef' });
+  await replaceAllData(db, { document: imported.document, assets: imported.assets });
   expect(await db.shortcuts.get(shortcut.id)).toMatchObject({ icon: { kind: 'asset', color: '#abcdef' } });
 });
+
+function zipFile(blob: Blob): File {
+  return Object.assign(blob, { name: 'backup.zip' }) as File;
+}

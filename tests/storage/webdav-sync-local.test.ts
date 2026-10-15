@@ -27,7 +27,7 @@ describe('createWebDavSyncLocal', () => {
     const { db } = await setup();
     const before = await db.sync_state.get('app');
     const local = createWebDavSyncLocal({ db, identity,
-      dependencies: { crypto: { hash: (bytes) => cipher.hash(bytes) }, validateImage: async () => undefined } });
+      dependencies: { crypto: { hash: (bytes) => cipher.hash(bytes) }, validateStoredMediaAsset: async (asset) => asset } });
     await expect(local.begin({ runId: 'stale-run', startedAt: 10 })).rejects.toThrow('同步等待期间连接已变化');
     expect(await db.sync_state.get('app')).toEqual(before);
     expect((await db.sync_state.get('app'))?.lastSync).toBeUndefined();

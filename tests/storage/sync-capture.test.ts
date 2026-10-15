@@ -3,7 +3,7 @@ import { createDatabase, type Database } from '@/storage/db';
 import { ensureInitialized } from '@/storage/init';
 import { createGroup, deleteGroup, renameGroup } from '@/storage/groups';
 import { createShortcut, deleteShortcut, restoreShortcut, updateShortcut } from '@/storage/shortcuts';
-import { createImageAsset } from '@/storage/assets';
+import { createMediaAsset } from '@/storage/assets';
 import { readSettings, updateSettings } from '@/storage/settings';
 import { finalizePendingDeletes, seedSyncRecords } from '@/storage/sync';
 import type { SyncStateRow } from '@/storage/sync/types';
@@ -172,7 +172,7 @@ describe('网站删除与撤销', () => {
 
 describe('图片缓存回收', () => {
   it('到期的删除会释放暂存Blob并增加代次', async () => {
-    const asset = await createImageAsset(db, image());
+    const asset = await createMediaAsset(db, image());
     const shortcut = await createShortcut(db, { groupId: defaultGroupId, title: '图片', url: 'example.com',
       icon: { kind: 'asset', assetId: asset.id }, iconSourceUrl: asset.sourceUrl });
     await enableSync();

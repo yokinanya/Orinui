@@ -1,4 +1,4 @@
-import type { ImageAsset } from '@/domain/asset';
+import type { MediaAsset } from '@/domain/asset';
 import { parseSyncSnapshot, type SyncAsset, type SyncSnapshotV1 } from '@/domain/sync';
 import type { SyncCrypto, SyncObjectContext } from '@/platform/sync-crypto-types';
 
@@ -20,7 +20,7 @@ export async function openSyncImage(input: {
   readonly vaultId: string;
   readonly asset: SyncAsset;
   readonly ciphertext: Uint8Array;
-}): Promise<ImageAsset> {
+}): Promise<MediaAsset> {
   const { asset } = input;
   const bytes = await input.crypto.decrypt({
     key: input.key, context: { vaultId: input.vaultId, kind: 'asset', objectId: asset.id },
@@ -30,5 +30,6 @@ export async function openSyncImage(input: {
     throw new Error('同步图片校验失败');
   }
   return { id: asset.id, kind: asset.kind, mime: asset.mime, width: asset.width, height: asset.height,
-    sourceUrl: asset.sourceUrl.value, blob: new Blob([new Uint8Array(bytes)], { type: asset.mime }) };
+    sourceUrl: asset.sourceUrl.value, blob: new Blob([new Uint8Array(bytes)], { type: asset.mime }),
+    ...(asset.motion ? { motion: asset.motion } : {}) };
 }

@@ -44,6 +44,7 @@ export function wallpaperStyle({ background, isDark, photoUrl }: WallpaperInput)
         hasMask: false,
       };
 
+    case 'motion':
     case 'photo':
       return {
         wallpaper: photoUrl ? `url("${photoUrl}")` : 'none',

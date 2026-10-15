@@ -6,8 +6,8 @@ import type { LayoutConfig } from '@/domain/layout';
 import type { AppSettings, SearchPreferences, ShortcutPreferences } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { NewShortcut, RemovedShortcut, ShortcutPatch } from '@/storage/shortcuts';
-import type { ImageAsset } from '@/domain/asset';
-import type { NewImageAsset } from '@/storage/assets';
+import type { MediaAsset } from '@/domain/asset';
+import type { NewMediaAsset } from '@/storage/assets';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { ClockFormat } from '@/domain/settings';
 import type { RestorableBackup } from '@/platform/backup-file';
@@ -44,9 +44,10 @@ export interface DataContextValue {
   exportBackup: () => Promise<Blob>;
   restoreBackup: (backup: RestorableBackup) => Promise<void>;
   resetLocalData: () => Promise<void>;
-  setPhotoBackground: (image: NewImageAsset) => Promise<void>;
+  setPhotoBackground: (image: NewMediaAsset) => Promise<void>;
+  setMotionBackground: (media: NewMediaAsset) => Promise<void>;
   clearImageSourceUrl: (assetId: string) => Promise<void>;
-  readImageAsset: (id: string) => Promise<ImageAsset>;
+  readMediaAsset: (id: string) => Promise<MediaAsset>;
 
   createShortcut: (input: NewShortcut) => Promise<void>;
   updateShortcut: (id: string, patch: ShortcutPatch) => Promise<void>;
