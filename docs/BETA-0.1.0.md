@@ -14,7 +14,7 @@
 - [x] 取消 50 MiB 媒体总量及 70 MiB JSON 包体限制；保留静态图片既有规则，容量失败明确报告。
 - [x] GPL-3.0-only、完整随包许可、安装更新说明、权限隐私说明和发行 ZIP。
 - [x] 完整网页最终回归 87/87，单元与集成测试 413/413；干净副本安装、类型检查、测试和构建通过。
-- [x] 发行包、完整许可、发布说明与 SHA-256 文件已准备；公开状态和签名标签以 GitHub 发行页为准。
+- [x] GPG 签名提交及标签验证通过；GitHub Pre-release 已公开，附件回下载摘要与本机一致，解压加载和关于页检查通过。
 
 搜索框增强仍是候选；构图编辑器、竖屏专项、Google Drive 和 Chrome Web Store 提交不在本轮范围。
 
@@ -24,7 +24,7 @@
 
 干净验证使用独立临时源码副本和 `pnpm install --frozen-lockfile`，不引用当前工作区的 node_modules。工具链为 Node.js 24.11.1、pnpm 12.8.1、WXT 0.21.4、Vite 8.3.4。最后补丁后类型检查、413 项测试和构建再次通过；产物 SHA-256 与工作区逐文件比对。
 
-真实扩展使用 Chromium 155 的三个隔离配置文件及受控本机 HTTPS WebDAV：
+真实扩展使用 Chromium 153.0.8010.12 的三个隔离配置文件及受控本机 HTTPS WebDAV（普通网页回归使用 Chrome 155.0.8059.80，二者分别记录）：
 
 - A 创建加密库，B 输入恢复密钥加入。
 - WebM、GIF、35,709,002 字节的 12 秒 1080p MP4 完成加密发布、B 接收、封面重建及播放；核对解密快照和媒体内容。
@@ -59,3 +59,5 @@ ZIP 为 35,710,451 字节。操作期间观测到的 JS 堆峰值约 14.1 MiB，
 发行页：[v0.1.0-beta.1](https://github.com/yokinanya/Orinui/releases/tag/v0.1.0-beta.1)，按 Pre-release 分发，正式版随后通过 Chrome Web Store。本文记录发行源码的验证范围，公开状态、签名提交及标签可在 GitHub 核对。
 
 附件 SHA-256：`c3a3372263cd386bb56cd2e2b54324e57dcc02a8095ee51e8f880a7b0eba1cdc`。发行包中的 manifest、JS/CSS、图标和两份许可声明均已与构建目录逐文件核对；安装包不可被当成个人数据备份导入。
+
+2026-10-15 23:44:47（Asia/Hong_Kong）公开，`isDraft=false`、`isPrerelease=true`。标签指向签名提交 `b636cf13351830c0efd5ebbe4112e0426e21f159`，本机 `verify-commit` 与 `verify-tag` 均为 Good signature。回下载附件 354,097 字节，独立 Chromium 153.0.8010.12 加载为新标签页并显示 `0.1.0-beta.1`，无页面异常。结果位于 `.output/release-download/verification.json`；后续仅补充本文发布证据和环境版本，不移动发行标签或替换附件。
