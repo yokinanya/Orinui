@@ -10,6 +10,7 @@ export function maximumSyncClock(snapshot: SyncSnapshotV1): number {
     ]),
     snapshot.settings.appearance.clock, snapshot.settings.defaultEngineId.clock,
     snapshot.settings.layout.clock, snapshot.settings.clock.clock,
+    snapshot.settings.searchPreferences.clock, snapshot.settings.shortcutPreferences.clock,
     ...snapshot.settings.customEngines.map((engine) => engine.clock),
     ...snapshot.assets.map((asset) => asset.sourceUrl.clock),
     ...snapshot.tombstones.map((tombstone) => tombstone.clock),

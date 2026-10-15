@@ -11,7 +11,7 @@ export function EngineSelection({ engines, selected, onSelect }: {
   return (
     <Field>
       <FieldLabel>默认搜索引擎</FieldLabel>
-      <ToggleGroup value={[selected]} className="flex flex-wrap" onValueChange={(values) => {
+      <ToggleGroup value={[selected]} className="settings-segmented flex flex-wrap" onValueChange={(values) => {
         if (values[0] && [...BUILT_IN_ENGINES, ...engines].some((engine) => engine.id === values[0])) onSelect(values[0]);
       }}>
         {[...BUILT_IN_ENGINES, ...engines].map((engine) => <ToggleGroupItem key={engine.id} value={engine.id}>{engine.name}</ToggleGroupItem>)}

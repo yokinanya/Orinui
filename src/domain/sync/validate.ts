@@ -5,7 +5,8 @@ import { LIMITS } from '@/domain/limits';
 import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import type { ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
-import { validateSettings } from '@/domain/settings';
+import { createDefaultSettings, validateSettings } from '@/domain/settings';
+import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
@@ -82,13 +83,19 @@ function parseAppearance(value: unknown): SyncSettings['appearance']['value'] {
 
 function parseLayout(value: unknown): SyncSettings['layout']['value'] {
   const raw = asRecord(value, '布局设置');
-  exactKeys(raw, ['order', 'hidden'], '布局设置');
+  exactKeys(raw, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'], '布局设置');
   return validateLayout(value);
+}
+
+function parseLegacyLayout(value: unknown): SyncSettings['layout']['value'] {
+  const raw = asRecord(value, '布局设置');
+  exactKeys(raw, ['order', 'hidden'], '布局设置');
+  return validateLayout({ ...DEFAULT_LAYOUT, ...raw });
 }
 
 function parseSettings(value: unknown): SyncSettings {
   const raw = asRecord(value, '同步设置');
-  exactKeys(raw, ['appearance', 'defaultEngineId', 'layout', 'clock', 'customEngines'], '同步设置');
+  exactKeys(raw, ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'], '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
   if (raw.customEngines.length > LIMITS.customEngines) fail('自定义搜索引擎数量超限');
   const customEngines = raw.customEngines.map((item) => validateRegister(item, '自定义搜索引擎', parseEngine))
@@ -98,16 +105,28 @@ function parseSettings(value: unknown): SyncSettings {
   const appearance = validateRegister(raw.appearance, '外观设置', parseAppearance);
   const layout = validateRegister(raw.layout, '布局设置', parseLayout);
   const defaultEngineId = validateRegister(raw.defaultEngineId, '默认引擎', (item) => parseString(item, '默认引擎'));
-  const clock: SyncRegister<SyncSettings['clock']['value']> = validateRegister(raw.clock, '时钟设置', (item) => {
-    const clockRaw = asRecord(item, '时钟设置');
-    exactKeys(clockRaw, ['format'], '时钟设置');
-    if (clockRaw.format !== 'system' && clockRaw.format !== '12h' && clockRaw.format !== '24h') fail('时钟格式不正确');
-    if (clockRaw.format === 'system') return { format: 'system' };
-    if (clockRaw.format === '12h') return { format: '12h' };
-    return { format: '24h' };
+  const clock = validateRegister(raw.clock, '时钟设置', (item) => validateSettings({
+    ...createDefaultSettings(), clock: item,
+  }).clock);
+  const searchPreferences = validateRegister(raw.searchPreferences, '搜索偏好', (item) => {
+    const value = asRecord(item, '搜索偏好');
+    exactKeys(value, ['width', 'autoFocus', 'openTarget'], '搜索偏好');
+    const search = validateSettings({
+      ...createDefaultSettings(), search: { ...createDefaultSettings().search, ...value },
+    }).search;
+    return { width: search.width, autoFocus: search.autoFocus, openTarget: search.openTarget };
   });
-  const settings = { appearance, defaultEngineId, layout, clock, customEngines };
-  const rawSettings = { appearance: appearance.value, search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine) }, layout: layout.value, clock: clock.value };
+  const shortcutPreferences = validateRegister(raw.shortcutPreferences, '网站偏好', (item) => {
+    const value = asRecord(item, '网站偏好');
+    exactKeys(value, ['showNames', 'openTarget'], '网站偏好');
+    return validateSettings({ ...createDefaultSettings(), shortcuts: value }).shortcuts;
+  });
+  const settings = { appearance, defaultEngineId, layout, clock, searchPreferences, shortcutPreferences, customEngines };
+  const rawSettings = {
+    appearance: appearance.value,
+    search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine), ...searchPreferences.value },
+    shortcuts: shortcutPreferences.value, layout: layout.value, clock: clock.value,
+  };
   validateSettings(rawSettings);
   return settings;
 }
@@ -206,6 +225,35 @@ function validateSnapshotEnvelope(raw: RecordValue): asserts raw is SnapshotEnve
   if (raw.assets.length > MAX_ASSET_COUNT) fail('图片资源数量超限');
 }
 
+function migrateSnapshotV1(value: unknown): unknown {
+  const raw = asRecord(value, '同步快照');
+  if (raw.schemaVersion !== 1) return value;
+  exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'defaultGroupId', 'groups', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
+  const settings = asRecord(raw.settings, '同步设置');
+  exactKeys(settings, ['appearance', 'defaultEngineId', 'layout', 'clock', 'customEngines'], '同步设置');
+  const defaults = createDefaultSettings();
+  const layout = validateRegister(settings.layout, '布局设置', parseLegacyLayout);
+  const clock = validateRegister(settings.clock, '时钟设置', (item) => {
+    const old = asRecord(item, '时钟设置');
+    exactKeys(old, ['format'], '时钟设置');
+    return { ...defaults.clock, ...validateSettings({ ...defaults, clock: { ...defaults.clock, ...old } }).clock };
+  });
+  const deviceId = identifier(raw.deviceId, '设备标识');
+  return {
+    ...raw,
+    schemaVersion: SYNC_SCHEMA_VERSION,
+    settings: {
+      ...settings,
+      layout,
+      clock,
+      searchPreferences: { value: {
+        width: defaults.search.width, autoFocus: defaults.search.autoFocus, openTarget: defaults.search.openTarget,
+      }, clock: 0, deviceId },
+      shortcutPreferences: { value: defaults.shortcuts, clock: 0, deviceId },
+    },
+  };
+}
+
 function parseSnapshotFields(raw: SnapshotEnvelope): SyncSnapshotV1 {
   return {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: identifier(raw.vaultId, '同步库标识'), deviceId: identifier(raw.deviceId, '设备标识'),
@@ -233,7 +281,7 @@ function validateSnapshotEntities(snapshot: SyncSnapshotV1): void {
 }
 
 export function parseSyncSnapshot(value: unknown): SyncSnapshotV1 {
-  const raw = asRecord(value, '同步快照');
+  const raw = asRecord(migrateSnapshotV1(value), '同步快照');
   validateSnapshotEnvelope(raw);
   const snapshot = parseSnapshotFields(raw);
   validateSnapshotEntities(snapshot);

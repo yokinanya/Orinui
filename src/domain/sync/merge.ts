@@ -65,6 +65,8 @@ function mergeSettings(snapshots: readonly SyncSnapshotV1[]): SyncSettings {
       defaultEngineId: choose(merged.defaultEngineId, snapshot.settings.defaultEngineId),
       layout: choose(merged.layout, snapshot.settings.layout),
       clock: choose(merged.clock, snapshot.settings.clock),
+      searchPreferences: choose(merged.searchPreferences, snapshot.settings.searchPreferences),
+      shortcutPreferences: choose(merged.shortcutPreferences, snapshot.settings.shortcutPreferences),
       customEngines: mergeEngines([...merged.customEngines, ...snapshot.settings.customEngines]),
     };
   }

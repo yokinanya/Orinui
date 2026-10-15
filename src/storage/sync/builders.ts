@@ -122,6 +122,9 @@ export function buildSettingsRecord(settings: AppSettings, previous: SyncRecordR
     defaultEngineId: clock.register(settings.search.defaultEngineId, old?.value.defaultEngineId),
     layout: clock.register(settings.layout, old?.value.layout),
     clock: clock.register(settings.clock, old?.value.clock),
+    searchPreferences: clock.register({ width: settings.search.width, autoFocus: settings.search.autoFocus,
+      openTarget: settings.search.openTarget }, old?.value.searchPreferences),
+    shortcutPreferences: clock.register(settings.shortcuts, old?.value.shortcutPreferences),
     customEngines: [],
   };
   return { id: recordId('settings', 'app'), kind: 'settings', entityId: 'app', value };

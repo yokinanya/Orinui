@@ -1,10 +1,11 @@
 import type { AppearanceSettings } from '@/domain/appearance';
 import type { GroupColorRole } from '@/domain/group';
 import type { LayoutConfig } from '@/domain/layout';
+import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { ShortcutIcon } from '@/domain/shortcut';
 
-export const SYNC_SCHEMA_VERSION = 1 as const;
+export const SYNC_SCHEMA_VERSION = 2 as const;
 
 export interface SyncRegister<T> {
   readonly value: T;
@@ -51,7 +52,9 @@ export interface SyncSettings {
   readonly appearance: SyncRegister<AppearanceSettings>;
   readonly defaultEngineId: SyncRegister<string>;
   readonly layout: SyncRegister<LayoutConfig>;
-  readonly clock: SyncRegister<{ readonly format: 'system' | '12h' | '24h' }>;
+  readonly clock: SyncRegister<AppSettings['clock']>;
+  readonly searchPreferences: SyncRegister<Pick<AppSettings['search'], 'width' | 'autoFocus' | 'openTarget'>>;
+  readonly shortcutPreferences: SyncRegister<AppSettings['shortcuts']>;
   readonly customEngines: readonly SyncRegister<SearchEngine>[];
 }
 

@@ -40,7 +40,7 @@ function GroupTabButton(props: GroupTabButtonProps) {
     <button type="button" {...(editing ? { ...attributes, ...listeners } : {})}
       onClick={() => onSelect(group.id)} aria-current={active ? 'true' : undefined}
       data-color-role={color}
-      className={cn('home-readable-group home-readable-focus px-2 py-1.5 text-sm whitespace-nowrap transition-colors outline-none',
+      className={cn('home-readable-chip home-readable-group home-readable-focus px-2 py-1.5 text-sm whitespace-nowrap transition-colors outline-none',
         'focus-visible:ring-2 focus-visible:ring-ring/50', editing && 'touch-none', !active && 'text-glass-foreground-muted',
         active && 'font-semibold')}>
       {group.name}

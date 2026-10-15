@@ -1,9 +1,9 @@
 import { SearchIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { buildSearchUrl, resolveEngine } from '@/domain/search-engines';
-import { openInCurrentTab } from '@/platform/navigation';
+import { openUrl } from '@/platform/navigation';
 import { useData } from '@/app/data-context';
 import { notifyError } from '@/lib/notify';
 
@@ -19,9 +19,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * 视觉规格：宽而克制的半透明磨砂输入框，聚焦时保持表面，不添加底部线条。
  * 初始不自动聚焦，点击或按 `/` 聚焦；搜索建议默认关闭，因此本阶段不发起任何网络请求。
  */
-export function SearchField() {
+export function SearchField({ inputRef }: { readonly inputRef: RefObject<HTMLInputElement | null> }) {
   const { settings } = useData();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -42,7 +41,7 @@ export function SearchField() {
     if (trimmed === '') return;
     const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines);
     if (!engine) throw new Error('默认搜索引擎不存在');
-    try { openInCurrentTab(buildSearchUrl(engine, trimmed)); }
+    try { openUrl(buildSearchUrl(engine, trimmed), settings.search.openTarget); }
     catch (error) { notifyError(error); }
   };
 

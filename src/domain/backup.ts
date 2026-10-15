@@ -1,19 +1,19 @@
 import { fail } from '@/domain/errors';
 import { isGroupColorRole, type Group } from '@/domain/group';
-import { validateAppearance } from '@/domain/appearance';
 import { imageOutputSize } from '@/domain/image';
 import { validateLayout } from '@/domain/layout';
 import { LIMITS } from '@/domain/limits';
-import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
+import { resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
-import { validateSettings, type AppSettings } from '@/domain/settings';
+import type { AppSettings } from '@/domain/settings';
+import { validateBackupSettings } from '@/domain/backup-settings';
 import type { ImageAsset } from '@/domain/asset';
 import type { Shortcut } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { validateRemoteImageUrl } from '@/domain/remote-image-url';
 
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 export const BACKUP_JSON_LIMIT = 70 * 1024 * 1024;
 export const BACKUP_IMAGE_LIMIT = 50 * 1024 * 1024;
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -160,30 +160,6 @@ function validateSourceUrl(value: unknown, label: string): string | null {
   return value;
 }
 
-function validateSettingsShape(value: unknown): AppSettings {
-  const raw = record(value, '设置');
-  exactKeys(raw, ['appearance', 'search', 'layout', 'clock'], '设置');
-  const appearance = record(raw.appearance, '外观设置');
-  exactKeys(appearance, ['theme', 'background', 'dynamicColor'], '外观设置');
-  const bg = record(appearance.background, '背景设置');
-  exactKeys(bg, bg.kind === 'photo' ? ['kind', 'assetId', 'maskStrength'] : bg.kind === 'solid' ? ['kind', 'color'] : bg.kind === 'gradient' ? ['kind', 'from', 'to', 'angle'] : ['kind'], '背景设置');
-  const color = record(appearance.dynamicColor, '动态配色');
-  exactKeys(color, ['enabled', 'mode', 'seed'], '动态配色');
-  const search = record(raw.search, '搜索设置');
-  exactKeys(search, ['defaultEngineId', 'customEngines'], '搜索设置');
-  if (!Array.isArray(search.customEngines)) fail('自定义搜索引擎格式不正确');
-  for (const item of search.customEngines) {
-    const engine = record(item, '自定义搜索引擎');
-    exactKeys(engine, ['id', 'name', 'template', 'builtIn'], '自定义搜索引擎');
-    if (typeof engine.id === 'string' && BUILT_IN_ENGINES.some((builtIn) => builtIn.id === engine.id)) fail('自定义引擎不能使用内置标识');
-  }
-  const layout = record(raw.layout, '布局设置');
-  exactKeys(layout, ['order', 'hidden'], '布局设置');
-  const clock = record(raw.clock, '时钟设置');
-  exactKeys(clock, ['format'], '时钟设置');
-  return validateSettings(value);
-}
-
 interface AssetReferenceInput {
   readonly groups: readonly Group[];
   readonly shortcuts: readonly Shortcut[];
@@ -226,7 +202,7 @@ function validateAssetReferences(input: AssetReferenceInput): void {
 }
 
 function validateBackupHeader(version: unknown, exportedAt: unknown): string {
-  if (version !== BACKUP_VERSION) fail('备份版本不受支持');
+  if (version !== 1 && version !== BACKUP_VERSION) fail('备份版本不受支持');
   if (typeof exportedAt !== 'string' || !Number.isFinite(Date.parse(exportedAt))) fail('备份时间不正确');
   return exportedAt;
 }
@@ -251,7 +227,7 @@ export function parseBackup(value: unknown): BackupPreview {
   const exportedAt = validateBackupHeader(raw.version, raw.exportedAt);
   const groups = validateGroups(raw.groups);
   const shortcuts = validateShortcuts(raw.shortcuts, groups);
-  const settings = validateSettingsShape(raw.settings);
+  const settings = validateBackupSettings(raw.settings, raw.version === 1);
   const assets = validateBackupAssets(raw.assets);
   validateAssetReferences({ groups, shortcuts, settings, assets });
   const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines);

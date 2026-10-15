@@ -9,45 +9,6 @@ import { requiresHomeReadabilitySurface } from '@/features/appearance/background
 
 const HEX = /^#[0-9a-f]{6}$/;
 const RGBA = /^rgba\(\d+, \d+, \d+, [0-9.]+\)$/;
-type RGB = readonly [number, number, number];
-
-function rgbFromHex(hex: string): RGB {
-  return [
-    Number.parseInt(hex.slice(1, 3), 16),
-    Number.parseInt(hex.slice(3, 5), 16),
-    Number.parseInt(hex.slice(5, 7), 16),
-  ];
-}
-
-function rgbaParts(value: string): { rgb: RGB; alpha: number } {
-  const match = /^rgba\((\d+), (\d+), (\d+), ([0-9.]+)\)$/.exec(value);
-  if (!match) throw new Error(`Invalid rgba token: ${value}`);
-  return { rgb: [Number(match[1]), Number(match[2]), Number(match[3])], alpha: Number(match[4]) };
-}
-
-function composite(foreground: RGB, background: RGB, alpha: number): RGB {
-  return [
-    foreground[0] * alpha + background[0] * (1 - alpha),
-    foreground[1] * alpha + background[1] * (1 - alpha),
-    foreground[2] * alpha + background[2] * (1 - alpha),
-  ];
-}
-
-function luminance(rgb: RGB): number {
-  const linearChannel = (channel: number) => {
-    const value = channel / 255;
-    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linearChannel(rgb[0]) + 0.7152 * linearChannel(rgb[1]) + 0.0722 * linearChannel(rgb[2]);
-}
-
-function contrastRatio(first: RGB, second: RGB): number {
-  const firstLuminance = luminance(first);
-  const secondLuminance = luminance(second);
-  const lighter = Math.max(firstLuminance, secondLuminance);
-  const darker = Math.min(firstLuminance, secondLuminance);
-  return (lighter + 0.05) / (darker + 0.05);
-}
 
 describe('colorTokensFromSeed', () => {
   it('生成合法的令牌', () => {
@@ -92,25 +53,18 @@ describe('colorTokensFromSeed', () => {
 });
 
 describe('home readability tokens', () => {
-  it('文字和控件在最坏亮暗壁纸下仍达到 AA 对比', () => {
-    const backdrops: readonly RGB[] = [[0, 0, 0], [255, 255, 255]];
+  it('纯色背景按亮度选择阅读表面，并在主题反转时选择配对强调色', () => {
+    const lightSurface = homeReadabilityTokens(false, false, '#ffffff');
+    const darkSurface = homeReadabilityTokens(false, false, '#000000');
+    const inverseLightSurface = homeReadabilityTokens(true, false, '#ffffff');
 
-    for (const isDark of [false, true]) {
-      const tokens = homeReadabilityTokens(isDark);
-      const surface = rgbaParts(tokens['--home-readable-surface']!);
-      const foreground = rgbFromHex(tokens['--home-readable-foreground']!);
-      const muted = rgbFromHex(tokens['--home-readable-muted']!);
-      const border = rgbFromHex(tokens['--home-readable-border']!);
-      const focus = rgbFromHex(tokens['--home-readable-focus']!);
-
-      for (const backdrop of backdrops) {
-        const renderedSurface = composite(surface.rgb, backdrop, surface.alpha);
-        expect(contrastRatio(foreground, renderedSurface)).toBeGreaterThanOrEqual(4.5);
-        expect(contrastRatio(muted, renderedSurface)).toBeGreaterThanOrEqual(4.5);
-        expect(contrastRatio(border, renderedSurface)).toBeGreaterThanOrEqual(3);
-        expect(contrastRatio(focus, renderedSurface)).toBeGreaterThanOrEqual(3);
-      }
-    }
+    expect(lightSurface['--home-readable-surface']).toContain('color-mix(in oklch');
+    expect(darkSurface['--home-readable-surface']).toContain('color-mix(in oklch');
+    expect(lightSurface['--home-readable-surface']).not.toBe(darkSurface['--home-readable-surface']);
+    expect(lightSurface['--home-readable-foreground']).toBe(inverseLightSurface['--home-readable-foreground']);
+    expect(lightSurface['--home-readable-accent']).toBe('var(--primary)');
+    expect(darkSurface['--home-readable-accent']).toBe('var(--primary-foreground)');
+    expect(inverseLightSurface['--home-readable-accent']).toBe('var(--primary-foreground)');
   });
 
   it('跟随主题切换，不读取动态种子色', () => {

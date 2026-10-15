@@ -68,8 +68,8 @@ export function BackgroundPanel() {
     <FieldGroup>
       <Field>
         <FieldLabel id="background-kind-label">背景类型</FieldLabel>
-        <ToggleGroup aria-labelledby="background-kind-label" value={[selectedKind]} variant="outline" spacing={1}
-          disabled={photoBusy} className="w-full flex-wrap gap-2" onValueChange={selectKind}>
+        <ToggleGroup aria-labelledby="background-kind-label" value={[selectedKind]}
+          disabled={photoBusy} className="settings-segmented w-full flex-wrap gap-1" onValueChange={selectKind}>
           {BACKGROUND_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value} className="flex-1">
             {option.label}
           </ToggleGroupItem>)}

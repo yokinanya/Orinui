@@ -15,7 +15,7 @@ test('WebDAV 设置表单标注字段并将应用密码遮蔽', async ({ page })
   await expect(page.getByLabel('账号')).toBeVisible();
   await expect(page.getByLabel('应用密码')).toHaveAttribute('type', 'password');
   await expect(page.getByLabel('恢复密钥（可选）')).toBeVisible();
-  await expect(page.getByText(/专用文件夹/)).toBeVisible();
+  await expect(page.getByText('已有同步库才填写；新建时留空。')).toBeVisible();
 });
 
 test('普通网页预览的 WebDAV 检查明确报告缺少扩展环境', async ({ page }) => {

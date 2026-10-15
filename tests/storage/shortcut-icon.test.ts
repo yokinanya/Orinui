@@ -25,7 +25,7 @@ it('persists occupancy across icon variants, image replacement, and delete undo'
   const letter = await createShortcut(db, { groupId, title: '文字', url: 'letter.example', icon: { kind: 'letter', occupancy: 75 } });
   const builtIn = await createShortcut(db, { groupId, title: '内置', url: 'built-in.example', icon: { kind: 'built-in', iconId: 'heart', occupancy: 62 } });
   let uploaded = await createShortcut(db, { groupId, title: '上传', url: 'upload.example', icon: { kind: 'letter', occupancy: 80 }, image: image() });
-  expect(await db.shortcuts.get(letter.id)).toMatchObject({ icon: { kind: 'letter', occupancy: 75 } });
+  expect(shortcutIconOccupancy((await db.shortcuts.get(letter.id))!.icon)).toBe(75);
   expect(await db.shortcuts.get(builtIn.id)).toMatchObject({ icon: { kind: 'built-in', iconId: 'heart', occupancy: 62 } });
   expect(await db.shortcuts.get(uploaded.id)).toMatchObject({ icon: { kind: 'asset', occupancy: 80 } });
 
@@ -37,14 +37,14 @@ it('persists occupancy across icon variants, image replacement, and delete undo'
   expect(shortcutIconOccupancy((await db.shortcuts.get(uploaded.id))!.icon)).toBe(92);
 });
 
-it('restores icon occupancy through JSON backup without changing backup version', async () => {
+it('restores icon occupancy through version 2 JSON backup', async () => {
   await createShortcut(db, { groupId, title: '备份', url: 'backup.example', icon: { kind: 'built-in', iconId: 'book', occupancy: 75 } });
   const snapshot = await createBackupSnapshot(db);
   const serialized = await serializeBackup(snapshot);
   const document = parseBackup(JSON.parse(await serialized.text())).document;
-  expect(document.version).toBe(1);
+  expect(document.version).toBe(2);
   await replaceAllData(db, { document, assets: [] });
-  expect((await db.shortcuts.toArray())[0]?.icon).toEqual({ kind: 'built-in', iconId: 'book', occupancy: 75 });
+  expect(shortcutIconOccupancy((await db.shortcuts.toArray())[0]!.icon)).toBe(75);
 });
 
 it('normalizes the old size field while importing a version 1 JSON backup', async () => {
@@ -62,7 +62,7 @@ it('normalizes the old size field while importing a version 1 JSON backup', asyn
 it('uses default occupancy for stored legacy shortcut records without either value', async () => {
   await db.shortcuts.add({ id: 'legacy', groupId, title: '旧记录', url: 'legacy.example',
     icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 });
-  expect(shortcutIconOccupancy((await db.shortcuts.get('legacy'))!.icon)).toBe(100);
+  expect(shortcutIconOccupancy((await db.shortcuts.get('legacy'))!.icon)).toBe(75);
 });
 
 it('stores SVG color on vector icons, preserves it when omitted, and clears it explicitly', async () => {

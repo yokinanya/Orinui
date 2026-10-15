@@ -8,6 +8,7 @@ import { readSettings, updateSettings } from '@/storage/settings';
 import * as shortcuts from '@/storage/shortcuts';
 import type { Group } from '@/domain/group';
 import type { AppSettings } from '@/domain/settings';
+import { DEFAULT_LAYOUT } from '@/domain/layout';
 import type { ClockFormat } from '@/domain/settings';
 import { newId } from '@/domain/id';
 import { validateEngineTemplate } from '@/domain/search-engines';
@@ -95,7 +96,7 @@ function groupCommands({ db, activeGroupId, loadGroups, setActiveGroupId }: Comm
   };
 }
 
-type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'updateClockFormat' | 'setPhotoBackground' | 'clearImageSourceUrl'>;
+type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings' | 'updateSearchPreferences' | 'updateShortcutPreferences' | 'setPhotoBackground' | 'clearImageSourceUrl'>;
 
 function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: CommandDependencies): AppearanceCommands {
   return {
@@ -108,11 +109,28 @@ function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: C
       });
       setSettings(await readSettings(db));
     },
-    async updateLayout(layout) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, layout })));
+    async updateLayout(patch) {
+      setSettings(await updateSettings(db, (current) => ({
+        ...current, layout: { ...current.layout, ...patch },
+      })));
+    },
+    async resetLayout() {
+      setSettings(await updateSettings(db, (current) => ({
+        ...current, layout: { ...DEFAULT_LAYOUT, order: [...DEFAULT_LAYOUT.order], hidden: [] },
+        shortcuts: { ...current.shortcuts, showNames: true },
+      })));
     },
     async updateClockFormat(format: ClockFormat) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, clock: { format } })));
+      setSettings(await updateSettings(db, (current) => ({ ...current, clock: { ...current.clock, format } })));
+    },
+    async updateClockSettings(patch) {
+      setSettings(await updateSettings(db, (current) => ({ ...current, clock: { ...current.clock, ...patch } })));
+    },
+    async updateSearchPreferences(patch) {
+      setSettings(await updateSettings(db, (current) => ({ ...current, search: { ...current.search, ...patch } })));
+    },
+    async updateShortcutPreferences(patch) {
+      setSettings(await updateSettings(db, (current) => ({ ...current, shortcuts: { ...current.shortcuts, ...patch } })));
     },
     async setPhotoBackground(image) {
       await setPhotoBackground(db, image);

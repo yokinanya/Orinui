@@ -48,7 +48,8 @@ export async function prepareSyncReplacement(db: Database, input: ReplacementDat
     })),
     assets: input.document.assets.map((asset) => ({ ...asset, id: maps.assets.get(asset.id) ?? asset.id })),
     settings: { ...settings, appearance: remapAppearance(settings.appearance, maps.assets),
-      search: { defaultEngineId: maps.engines.get(settings.search.defaultEngineId) ?? settings.search.defaultEngineId,
+      search: { ...settings.search,
+        defaultEngineId: maps.engines.get(settings.search.defaultEngineId) ?? settings.search.defaultEngineId,
         customEngines: settings.search.customEngines.map((engine) => ({ ...engine, id: maps.engines.get(engine.id) ?? engine.id })) } },
   };
   return { document, assets: input.assets.map((asset) => ({ ...asset, id: maps.assets.get(asset.id) ?? asset.id })) };

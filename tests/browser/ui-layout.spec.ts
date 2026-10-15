@@ -13,6 +13,19 @@ async function openSettings(page: import('@playwright/test').Page) {
   return page.getByRole('dialog', { name: '设置' });
 }
 
+async function openSettingsPanel(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  return page.getByRole('dialog', { name: '设置' });
+}
+
+async function chooseLayoutOption(page: import('@playwright/test').Page, option: string) {
+  await openSettingsPanel(page);
+  await page.getByRole('tab', { name: '布局', exact: true }).click();
+  await page.getByRole('tabpanel', { name: '布局', exact: true })
+    .getByRole('button', { name: option, exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
 test('主页搜索聚焦不显示底部线，当前分组用下划线区分', async ({ page }) => {
   await page.goto('/newtab.html');
 
@@ -113,7 +126,7 @@ async function waitForGroupLayout(page: import('@playwright/test').Page) {
 }
 
 test('分组标签保持无外框与三点，溢出时隐藏滚动条且菜单键可用', async ({ page }) => {
-  await page.setViewportSize({ width: 440, height: 800 });
+  await page.setViewportSize(NARROW_VIEWPORT);
   await page.goto('/newtab.html');
   await page.getByRole('button', { name: '编辑分组与网站', exact: true }).click();
   for (const name of ['工作', '阅读', '工具', '生活', '收藏', '临时']) await createGroup(page, name);
@@ -220,7 +233,7 @@ test('设置关闭按钮有中文名称，Escape 恢复焦点且网站保存可�
   await expect(dialog.locator('[data-slot="dialog-close"]')).toHaveAccessibleName('关闭');
   await page.getByLabel('名称', { exact: true }).fill('键盘可达站点');
   await page.getByLabel('网址', { exact: true }).fill('keyboard.example.com');
-  const save = dialog.getByRole('button', { name: '保存', exact: true });
+  const save = dialog.locator('button[type="submit"]');
   for (let index = 0; index < MAX_DIALOG_TAB_STOPS; index += 1) {
     if (await save.evaluate((element) => element === document.activeElement)) break;
     await page.keyboard.press('Tab');

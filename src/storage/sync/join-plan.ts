@@ -51,6 +51,8 @@ function promoteLocal(input: {
     settings: {
       appearance: register(local.settings.appearance), defaultEngineId: register(local.settings.defaultEngineId),
       layout: register(local.settings.layout), clock: register(local.settings.clock),
+      searchPreferences: register(local.settings.searchPreferences),
+      shortcutPreferences: register(local.settings.shortcutPreferences),
       customEngines: local.settings.customEngines.map(register),
     },
   });

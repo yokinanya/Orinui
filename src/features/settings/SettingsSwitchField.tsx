@@ -1,0 +1,17 @@
+import { Field, FieldLabel } from '@/components/ui/field';
+import { Switch } from '@/components/ui/switch';
+
+interface SettingsSwitchFieldProps {
+  readonly label: string;
+  readonly checked: boolean;
+  readonly onChange: (checked: boolean) => void;
+}
+
+export function SettingsSwitchField({ label, checked, onChange }: SettingsSwitchFieldProps) {
+  return (
+    <Field className="flex-row items-center justify-between rounded-xl px-2 py-2">
+      <FieldLabel>{label}</FieldLabel>
+      <Switch aria-label={label} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+    </Field>
+  );
+}

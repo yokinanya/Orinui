@@ -14,7 +14,7 @@ export function ThemePanel() {
   return (
     <Field>
       <FieldLabel>主题</FieldLabel>
-      <ToggleGroup value={[appearance.theme]} onValueChange={(value) => {
+      <ToggleGroup className="settings-segmented" value={[appearance.theme]} onValueChange={(value) => {
         const next = value[0];
         if (next === 'system' || next === 'light' || next === 'dark') update({ theme: next });
       }}>

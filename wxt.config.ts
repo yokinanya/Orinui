@@ -11,7 +11,7 @@ export default defineConfig({
   manifest: {
     name: 'Orinui',
     description: '设计精致、轻量、本地优先的新标签页',
-    version: '0.0.0',
+    version: '0.0.1',
     permissions: ['storage'],
     optional_host_permissions: ['https://*/*', 'http://localhost/*'],
     optional_permissions: ['webRequest'],

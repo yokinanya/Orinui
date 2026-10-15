@@ -1,6 +1,38 @@
 # 验证记录
 
-记录日期：2026-10-14。记录按批次区分本地功能初始复核、WebDAV 最终 compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+记录日期：2026-10-15。记录按批次区分本地功能初始复核、WebDAV 最终 compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+
+## 设置面板视觉统一（2026-10-15）
+
+设置弹窗高度从 52rem 收紧为 44rem，上限仍受视口高度约束；表面提高不透明度。左侧导航去掉竖线选中态，改用柔和圆角底；外观、布局和搜索页的分段选项统一低对比容器与选中态，区域列表降低底色与边框强度。修正 FieldSet 的最小宽度，并缩小窄屏区域行的开关与间距，使 320px 下列表不溢出且“快捷方式”完整显示。普通网页预览检查了深浅主题、320px 与桌面宽度；主题切换后等待令牌更新再判断最终颜色。设置相关 Chrome 浏览器回归 12/12 通过，其中包含布局、取色弹层、WebDAV 数据页的窄屏溢出检查。原有三处浏览器测试假设（分组溢出视口、两个“保存”按钮定位和 WebDAV 说明文案）已与当前界面同步。
+
+`pnpm compile`、`timeout 60s pnpm test`（45 文件、396/396）、`pnpm build` 与 `git diff --check` 通过。构建位于 `.output/chrome-mv3`；保留大于 500 kB 的 JS chunk 提示，未生成 ZIP。这些是普通网页与本机构建结果，不代表真实扩展中的新一轮人工验收。
+
+## 布局设置页排版优化（2026-10-15）
+
+主页区域新增独立拖动手柄：鼠标／触屏可拖动三个固定区域，手柄聚焦后可用上下方向键调整；原上移／下移按钮与显隐开关仍独立工作。普通 Chrome 网页预览的 320px 自动回归验证了拖动、方向键、显隐、按钮移动、无水平溢出及刷新后的保存。`pnpm compile`、`timeout 60s pnpm test`（45 文件、396/396）、`pnpm build` 和 `tests/browser/personalization.spec.ts`（4/4）通过。构建位于 `.output/chrome-mv3`，未生成 ZIP；此回归并非真实扩展环境人工验收。
+
+布局页保留页面、时钟和网站三组及原设置语义；桌面端选项固定宽度并与标签对齐，窄屏改纵向排列。主页区域改为编号行，移动、显隐和两个恢复操作仍按原范围更新。单选组补 `aria-labelledby`。普通 Chrome 网页预览手动检查了 1280×800 浅/深色、320×800 和 640×400 视口（模拟高缩放后的可用空间），布局面板与各选项组均无水平溢出；在 320px 下实测区域移动、隐藏、恢复主页内容以及宽度修改后恢复默认布局。此验证不等于真实扩展中的新一轮人工验收。
+
+`pnpm compile`、`timeout 60s pnpm test`（45 文件、396/396）和 `pnpm build` 均通过；`tests/browser/personalization.spec.ts` 3/3 通过。构建位于 `.output/chrome-mv3`，manifest 仍为 0.0.1，JS 944.59 kB、CSS 104.86 kB，总计 1.06 MB；保留大于 500 kB 的 JS chunk 提示。按用户此前说明未生成 ZIP。
+
+## 颜色令牌与已连接旧库升级修复（2026-10-15）
+
+旧颜色令牌单测把阅读表面和边框都当作纯 `rgba(...)`，而实际使用 `color-mix(...)` 与主题变量；已改为验证令牌与背景明暗、主题配对规则。AA 对比由现有浏览器像素采样回归验证。该回归先暴露强反差渐变上的日期、当前分组文字不足，现为日期和分组加局部半透明底层；同时修正测试中的旧 JSON 导入定位、图片背景入口与设置浮层遮挡采样。`tests/browser/contrast.spec.ts` 21/21 通过，`tests/browser/personalization.spec.ts` 3/3 通过，均为 Chrome 普通网页预览。
+
+版本 4 旧数据库在存在启用状态的 `sync_state` 时，版本 5 升级会让迁移中的设置写入进入同步捕获，并报 `TypeError Cannot read properties of undefined (reading 'table')`。升级现在在同一事务里暂时将捕获标志置为暂停，迁移后恢复原值；出错由升级事务回滚。fake-indexeddb 迁移用例覆盖已连接状态与逻辑版本保留。另用 Chromium 155.0.8059.39 真实加载版本 0.0.1 扩展，在临时配置中先写入版本 4 的设置、设置同步寄存器和启用的同步状态，再打开新标签页：主页正常显示，底层数据库升为版本 5，`suspended` 恢复为 false、逻辑时钟保持 6。此前同一 fixture 可复现上述 TypeError。此项只验证本机升级，不代表真实第三方 WebDAV 连通或用户原有数据（用户已删除旧扩展）。
+
+最终 `pnpm compile`、`timeout 60s pnpm test`（45 文件、396/396）、`pnpm build` 和 `git diff --check` 通过。本地解压构建位于 `.output/chrome-mv3`，manifest 版本 0.0.1，JS 943.84 kB、CSS 103.87 kB，总计 1.06 MB；仍提示 JS chunk 超过 500 kB。依用户后续说明，本轮未执行 `pnpm zip`，没有生成 ZIP。以下主页个性化配置批次的 395/396 属于修复前历史结果。
+
+## 主页个性化配置（2026-10-15）
+
+`pnpm compile` 通过。`pnpm build` 通过，产物 `.output/chrome-mv3` 为 JS 943.67 kB、CSS 103.88 kB，总计 1.06 MB；保留超过 500 kB 的 JS chunk 提示。42 个变更 TypeScript 文件的 AST 函数长度、文件行数、复杂度、嵌套和参数指标均通过；`git diff --check` 通过。
+
+`timeout 60s pnpm test` 完成：45 个测试文件、396 项中 395 通过、1 项失败。唯一失败为 `tests/features/color-tokens.test.ts`：测试辅助解析器只接受 `rgba(...)`，而未修改的 `src/features/appearance/color-tokens.ts` 为阅读表面生成 `color-mix(...)`，因此 AA 颜色断言未运行完成。该失败与本批个性化设置代码无关，仍作为失败记录。
+
+`timeout 45s pnpm exec playwright test tests/browser/personalization.spec.ts --workers=1` 完成，3/3 通过。普通网页浏览器回归覆盖：设置保存后刷新、英文星期、日期与星期独立开关及两者都关闭时移除日期行、秒数/布局/搜索设置、4/6/8 列、隐藏网站名称时保留可访问名称、搜索和网站链接以键盘方式在新标签页打开并保留主页，以及 320px 窄屏的网格自适应和单网站居中。此结果是普通网页测试环境，不能代表 Chrome 扩展 API。
+
+另用 Chromium 155.0.8059.39 和两个独立临时配置加载生产构建 `.output/chrome-mv3`，连接预授权来源的受控 localhost HTTPS WebDAV fixture。配置 A 创建加密同步库、保存恢复密钥，设置英文星期、8 列、隐藏网站名称、网站新标签页、搜索自动聚焦和搜索新标签页，并添加网站后手动同步；配置 B 导入同一恢复密钥并加入库，确认上述时钟/布局/网站/搜索偏好及网站内容均从远端恢复。随后在 B 重载扩展页确认首次就绪时聚焦，并用键盘打开同步过来的网站新标签页，主页仍保留。审计通过；使用临时扩展副本预授权 `https://localhost/*` 且仅忽略测试自签证书，没有修改用户浏览器配置。该证据覆盖新增寄存器的双配置文件同步，但不代表真实第三方 WebDAV 服务兼容、该服务来源权限弹窗或用户设备验收。
 
 ## 用户验收确认与文档整理（2026-10-14）
 

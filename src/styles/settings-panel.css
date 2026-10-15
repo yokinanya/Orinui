@@ -5,3 +5,54 @@
 .settings-panel-scroll::-webkit-scrollbar {
   display: none;
 }
+
+.settings-panel-nav [data-slot='tabs-trigger'] {
+  border-radius: 0.65rem;
+  color: var(--muted-foreground);
+}
+
+.settings-panel-nav [data-slot='tabs-trigger'][data-active] {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--primary) 11%, var(--popover));
+  color: var(--foreground);
+}
+
+.settings-panel-nav [data-slot='tabs-trigger']:hover:not([data-active]) {
+  background: color-mix(in oklch, var(--muted) 70%, transparent);
+}
+
+.settings-panel [data-slot='separator'] {
+  opacity: 0.5;
+}
+
+.settings-segmented {
+  border: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  border-radius: 0.8rem;
+  background: color-mix(in oklch, var(--muted) 60%, transparent);
+  padding: 0.2rem;
+}
+
+.settings-segmented [data-slot='toggle-group-item'] {
+  min-height: 2rem;
+  border-color: transparent;
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.settings-segmented [data-slot='toggle-group-item'][data-pressed] {
+  border-color: color-mix(in oklch, var(--border) 65%, transparent);
+  background: color-mix(in oklch, var(--primary) 12%, var(--popover));
+  color: var(--foreground);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+.settings-segmented [data-slot='toggle-group-item']:hover:not([data-pressed]) {
+  background: color-mix(in oklch, var(--accent) 65%, transparent);
+  color: var(--foreground);
+}
+
+.settings-slot-list > li {
+  background: transparent;
+}

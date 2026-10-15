@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { newId } from '@/domain/id';
 import { createDefaultSettings, type AppSettings } from '@/domain/settings';
+import { createDataCommands } from '@/app/data-commands';
 import { createDatabase, SETTINGS_ID, type OrinuiDatabase, type SettingsRow } from '@/storage/db';
 import { listGroups } from '@/storage/groups';
 import { ensureInitialized } from '@/storage/init';
@@ -60,7 +61,7 @@ describe('readSettings 与 updateSettings', () => {
 
     const updated = await updateSettings(db, (current) => ({
       ...current,
-      clock: { format: '24h' },
+      clock: { ...current.clock, format: '24h' },
     }));
 
     expect(updated.clock.format).toBe('24h');
@@ -89,6 +90,31 @@ describe('readSettings 与 updateSettings', () => {
     await db.settings.put(broken);
 
     await expect(readSettings(db)).rejects.toThrowError(/时钟设置不正确/);
+  });
+});
+
+describe('主页布局命令', () => {
+  it('布局补丁保留同组其他选项，恢复默认布局不影响时钟和打开方式', async () => {
+    await ensureInitialized(db);
+    await updateSettings(db, (current) => ({ ...current,
+      layout: { ...current.layout, pageWidth: 'compact', regionSpacing: 'relaxed', columns: 8, hidden: ['clock'] },
+      clock: { ...current.clock, size: 'large', weekdayFormat: 'english-short' },
+      search: { ...current.search, autoFocus: true, openTarget: 'new-tab' },
+      shortcuts: { showNames: false, openTarget: 'new-tab' },
+    }));
+    const commands = createDataCommands({ db, activeGroupId: null,
+      loadGroups: async () => [], loadShortcuts: async () => undefined,
+      setActiveGroupId: () => undefined, setSettings: () => undefined });
+
+    await commands.updateLayout({ pageWidth: 'wide' });
+    expect((await readSettings(db)).layout).toMatchObject({ pageWidth: 'wide', regionSpacing: 'relaxed', columns: 8 });
+    await commands.resetLayout();
+
+    const settings = await readSettings(db);
+    expect(settings.layout).toEqual(createDefaultSettings().layout);
+    expect(settings.shortcuts).toEqual({ showNames: true, openTarget: 'new-tab' });
+    expect(settings.clock).toMatchObject({ size: 'large', weekdayFormat: 'english-short' });
+    expect(settings.search).toMatchObject({ autoFocus: true, openTarget: 'new-tab' });
   });
 });
 

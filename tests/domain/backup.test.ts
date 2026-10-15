@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultSettings } from '@/domain/settings';
-import { parseBackup } from '@/domain/backup';
+import { BACKUP_VERSION, parseBackup } from '@/domain/backup';
 
 function backup(overrides: Record<string, unknown> = {}) {
   return {
-    version: 1,
+    version: BACKUP_VERSION,
     exportedAt: '2026-10-10T00:00:00.000Z',
     groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: true }],
     shortcuts: [],
@@ -23,7 +23,7 @@ describe('parseBackup', () => {
     [{ groups: [] }, /分组数量/],
     [{ groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: false }] }, /恰好/],
     [{ unknown: true }, /字段/],
-    [{ version: 2 }, /版本/],
+    [{ version: 0 }, /版本/],
     [{ shortcuts: [{ id: 's', groupId: 'missing', title: '站点', url: 'https://example.com', icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }] }, /所属分组/],
     [{ shortcuts: [{ id: 's', groupId: 'main', title: '站点', url: 'https://example.com', icon: { kind: 'asset', assetId: 'missing' }, iconSourceUrl: null, order: 0 }] }, /引用不存在/],
     [{ assets: [{ id: 'a', kind: 'icon', mime: 'image/png', width: 1, height: 1, sourceUrl: null, data: 'not base64' }] }, /Base64/],
@@ -54,5 +54,21 @@ describe('parseBackup', () => {
     expect(() => parseBackup(backup({ settings: { ...settings, search: {
       ...settings.search, customEngines: [{ id: 'google', name: '坏数据', template: 'https://example.com?q={query}', builtIn: false }],
     } } }))).toThrow(/内置标识/);
+  });
+});
+
+describe('parseBackup migration', () => {
+  it('migrates version 1 settings to the new defaults while preserving existing values', () => {
+    const settings = createDefaultSettings();
+    const legacy = {
+      appearance: settings.appearance,
+      search: { defaultEngineId: settings.search.defaultEngineId, customEngines: [] },
+      layout: { order: ['shortcuts', 'clock', 'search'], hidden: ['search'] },
+      clock: { format: '24h' },
+    };
+    const result = parseBackup(backup({ version: 1, settings: legacy }));
+    expect(result.document.version).toBe(BACKUP_VERSION);
+    expect(result.document.settings.clock).toMatchObject({ format: '24h', showSeconds: false, weekdayFormat: 'long' });
+    expect(result.document.settings.layout).toMatchObject({ order: legacy.layout.order, hidden: ['search'], columns: 6 });
   });
 });

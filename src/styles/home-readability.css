@@ -75,6 +75,19 @@
   color: var(--home-readable-role-color, var(--home-readable-accent, var(--primary)));
 }
 
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(5.5rem, 100%), 6rem));
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+@media (min-width: 48rem) {
+  .shortcut-grid {
+    gap: 1rem;
+  }
+}
+
 [data-home-photo] .home-readable-group {
   color: #fff !important;
   text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);
@@ -128,7 +141,7 @@
 }
 
 [data-home-readable='true'] .home-readable-group[aria-current='true'] {
-  color: var(--home-readable-accent, var(--primary));
+  color: var(--home-readable-foreground);
   box-shadow: none;
 }
 

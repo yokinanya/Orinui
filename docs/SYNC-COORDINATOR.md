@@ -39,7 +39,7 @@
 
 接收先本机提交、后远端发布，使上传期间的新编辑取得更高代次和逻辑版本，避免与尚未提交的候选争用同一版本。网络、加解密、哈希和图像解码都在事务外，事务只检查当前状态并原子写入。[Dexie 事务说明](https://dexie.org/docs/Tutorial/Best-Practices)
 
-当前 Dexie schema 为 4；同步表及索引在版本 3 引入，版本 4 不改表/索引，只迁移规范化图标占比和对应同步寄存器。`sync_state` 可选保存 hasAcceptedSnapshot、lastSync 和 lastSuccessfulSync，记录本机基线、运行身份/阶段/发布状态/时间/错误及成功代次/revision，不进入快照或普通 JSON 备份。
+当前 Dexie schema 为 5；同步表及索引在版本 3 引入，版本 4 迁移规范化图标占比和对应同步寄存器，版本 5 为个性化设置添加字段与独立偏好寄存器，不改变表/索引。`sync_state` 可选保存 hasAcceptedSnapshot、lastSync 和 lastSuccessfulSync，记录本机基线、运行身份/阶段/发布状态/时间/错误及成功代次/revision，不进入快照或普通 JSON 备份。
 
 基线在完整接收事务中保存：首次接收后发布失败，再次运行不会重新提升已收到的字段、覆盖其他设备后续修改。空设备首次接收有变化时，代次也递增。旧 runId 在断开并用同一库/设备重连后，不能修改新连接状态。
 

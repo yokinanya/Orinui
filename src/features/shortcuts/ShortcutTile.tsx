@@ -1,4 +1,5 @@
 import type { Shortcut } from '@/domain/shortcut';
+import type { OpenTarget } from '@/domain/settings';
 import { cn } from '@/lib/utils';
 import { ShortcutIcon } from '@/features/shortcuts/ShortcutIcon';
 import { iconFrameStyle } from '@/features/shortcuts/icon-size-style';
@@ -7,6 +8,8 @@ interface ShortcutTileProps {
   shortcut: Shortcut;
   /** 编辑模式下不再导航，格子改为可拖动条目 */
   editing?: boolean;
+  showName?: boolean;
+  openTarget?: OpenTarget;
 }
 
 /**
@@ -17,7 +20,7 @@ interface ShortcutTileProps {
  *
  * 图片图标仅加载本地 Blob，不请求远程网站。
  */
-export function ShortcutTile({ shortcut, editing = false }: ShortcutTileProps) {
+export function ShortcutTile({ shortcut, editing = false, showName = true, openTarget = 'current-tab' }: ShortcutTileProps) {
   const className = cn(
     'home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none md:p-3',
     editing
@@ -34,7 +37,9 @@ export function ShortcutTile({ shortcut, editing = false }: ShortcutTileProps) {
       >
         <ShortcutIcon shortcut={shortcut} />
       </span>
-      <span className="home-readable-chip home-readable-muted max-w-full truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground">
+      <span className={showName
+        ? 'home-readable-chip home-readable-muted max-w-full truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground'
+        : 'sr-only'}>
         {shortcut.title}
       </span>
     </>
@@ -45,7 +50,9 @@ export function ShortcutTile({ shortcut, editing = false }: ShortcutTileProps) {
   }
 
   return (
-    <a href={shortcut.url} className={className}>
+    <a href={shortcut.url} className={className} title={shortcut.title}
+      target={openTarget === 'new-tab' ? '_blank' : undefined}
+      rel={openTarget === 'new-tab' ? 'noopener noreferrer' : undefined}>
       {content}
     </a>
   );

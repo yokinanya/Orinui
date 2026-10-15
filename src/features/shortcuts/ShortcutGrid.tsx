@@ -17,6 +17,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import { useData } from '@/app/data-context';
 import type { Shortcut } from '@/domain/shortcut';
+import type { OpenTarget } from '@/domain/settings';
 import { AddShortcutTile } from '@/features/shortcuts/AddShortcutTile';
 import { ShortcutActionsButton, ShortcutContextMenu } from '@/features/shortcuts/ShortcutActionsMenu';
 import { ShortcutTile } from '@/features/shortcuts/ShortcutTile';
@@ -27,9 +28,11 @@ interface SortableShortcutProps {
   shortcut: Shortcut;
   editing: boolean;
   onEdit: (shortcut: Shortcut) => void;
+  showNames: boolean;
+  openTarget: OpenTarget;
 }
 
-function SortableShortcut({ shortcut, editing, onEdit }: SortableShortcutProps) {
+function SortableShortcut({ shortcut, editing, onEdit, showNames, openTarget }: SortableShortcutProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: shortcut.id,
     disabled: !editing,
@@ -39,12 +42,12 @@ function SortableShortcut({ shortcut, editing, onEdit }: SortableShortcutProps) 
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn('relative w-[5.5rem] md:w-24', isDragging && 'z-10 opacity-90')}
+      className={cn('relative min-w-0', isDragging && 'z-10 opacity-90')}
     >
       <ShortcutContextMenu shortcut={shortcut} onEdit={onEdit}>
         {/* 拖动属性挂在格子内层：li 保持列表语义，操作按钮作为兄弟节点不会嵌套在按钮里 */}
         <div className="home-readable-focus outline-none" {...(editing ? { ...attributes, ...listeners } : {})}>
-          <ShortcutTile shortcut={shortcut} editing={editing} />
+          <ShortcutTile shortcut={shortcut} editing={editing} showName={showNames || editing} openTarget={openTarget} />
         </div>
       </ShortcutContextMenu>
       {editing && (
@@ -68,16 +71,14 @@ interface ShortcutGridProps {
 /**
  * 网站网格。
  *
- * 视觉规格：宽屏最多 6 列，窄窗口自适应减少列数与间距。
- * 使用固定宽度的换行布局而不是等分网格：网站数量不足以填满一行时整行保持居中，
- * 不会像等分网格那样把前几个网站挤到最左侧。
- * 容器宽度上限 41rem 约等于 6 个网站宽度加 5 个间距，形成 6 列硬上限。
+ * 使用自适应网格，按用户设置的最大列数限制宽屏列数，窄屏随可用宽度减少。
+ * 网站数量不足以填满一行时保持居中。
  *
  * 编辑模式下整格可拖动（需要移动 8px 才算拖动，点击仍然有效），
  * 键盘用空格拿起、方向键移动、空格放下，右键菜单另提供上移下移。
  */
 export function ShortcutGrid({ shortcuts, editing, onEdit, onAdd }: ShortcutGridProps) {
-  const { reorderShortcut } = useData();
+  const { reorderShortcut, settings } = useData();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -95,12 +96,15 @@ export function ShortcutGrid({ shortcuts, editing, onEdit, onAdd }: ShortcutGrid
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={shortcuts.map((shortcut) => shortcut.id)} strategy={rectSortingStrategy}>
-        <ul className="mx-auto flex w-full max-w-[41rem] flex-wrap items-start justify-center gap-2 md:gap-4">
+        <ul className="shortcut-grid mx-auto w-full" style={{
+          maxWidth: `min(100%, calc(${settings.layout.columns} * 6rem + (${settings.layout.columns} - 1) * 1rem))`,
+        }}>
           {shortcuts.map((shortcut) => (
-            <SortableShortcut key={shortcut.id} shortcut={shortcut} editing={editing} onEdit={onEdit} />
+            <SortableShortcut key={shortcut.id} shortcut={shortcut} editing={editing} onEdit={onEdit}
+              showNames={settings.shortcuts.showNames} openTarget={settings.shortcuts.openTarget} />
           ))}
           {editing && (
-            <li className="w-[5.5rem] md:w-24">
+            <li className="min-w-0">
               <AddShortcutTile onClick={onAdd} />
             </li>
           )}

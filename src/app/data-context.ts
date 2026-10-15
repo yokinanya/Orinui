@@ -3,7 +3,7 @@ import { createContext, use } from 'react';
 import type { AppearanceSettings } from '@/domain/appearance';
 import type { Group, GroupColorRole } from '@/domain/group';
 import type { LayoutConfig } from '@/domain/layout';
-import type { AppSettings } from '@/domain/settings';
+import type { AppSettings, SearchPreferences, ShortcutPreferences } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { NewShortcut, RemovedShortcut, ShortcutPatch } from '@/storage/shortcuts';
 import type { ImageAsset } from '@/domain/asset';
@@ -30,8 +30,12 @@ export interface DataContextValue {
   setActiveGroupId: (id: string) => void;
 
   updateAppearance: (patch: Partial<AppearanceSettings>) => Promise<void>;
-  updateLayout: (layout: LayoutConfig) => Promise<void>;
+  updateLayout: (patch: Partial<LayoutConfig>) => Promise<void>;
+  resetLayout: () => Promise<void>;
   updateClockFormat: (format: ClockFormat) => Promise<void>;
+  updateClockSettings: (patch: Partial<AppSettings['clock']>) => Promise<void>;
+  updateSearchPreferences: (patch: Partial<SearchPreferences>) => Promise<void>;
+  updateShortcutPreferences: (patch: Partial<ShortcutPreferences>) => Promise<void>;
   setDefaultEngine: (id: string) => Promise<void>;
   createSearchEngine: (input: Pick<SearchEngine, 'name' | 'template'>) => Promise<void>;
   updateSearchEngine: (id: string, input: Pick<SearchEngine, 'name' | 'template'>) => Promise<void>;

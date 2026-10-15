@@ -14,23 +14,48 @@ function customEngine(overrides: Partial<SearchEngine> = {}): SearchEngine {
   };
 }
 
-describe('validateSettings', () => {
+describe('validateSettings defaults and personalization', () => {
   it('接受默认设置', () => {
     expect(validateSettings(createDefaultSettings())).toEqual(createDefaultSettings());
   });
 
+  it('接受用户可选的个性化档位和星期格式', () => {
+    const settings = createDefaultSettings();
+    const validated = validateSettings({
+      ...settings,
+      clock: { ...settings.clock, weekdayFormat: 'english-short', showSeconds: true },
+      layout: { ...settings.layout, columns: 8, pageWidth: 'wide' },
+      search: { ...settings.search, width: 'narrow', autoFocus: true, openTarget: 'new-tab' },
+      shortcuts: { showNames: false, openTarget: 'new-tab' },
+    });
+    expect(validated.clock.weekdayFormat).toBe('english-short');
+    expect(validated.layout.columns).toBe(8);
+    expect(validated.search.openTarget).toBe('new-tab');
+  });
+
+  it('拒绝不支持的布局和日期格式', () => {
+    const settings = createDefaultSettings();
+    expect(() => validateSettings({ ...settings, layout: { ...settings.layout, columns: 5 } })).toThrow(/列数/);
+    expect(() => validateSettings({ ...settings, clock: { ...settings.clock, dateFormat: 'custom' } })).toThrow(/日期格式/);
+    expect(() => validateSettings({ ...settings, clock: { ...settings.clock, weekdayFormat: 'en' } })).toThrow(/星期格式/);
+  });
+
   it('缺少自定义引擎时补为空数组', () => {
+    const { search } = createDefaultSettings();
     const result = validateSettings({
       ...createDefaultSettings(),
-      search: { defaultEngineId: 'google' },
+      search: { ...search, defaultEngineId: 'google', customEngines: undefined },
     });
     expect(result.search.customEngines).toEqual([]);
   });
+});
 
+describe('validateSettings custom engines', () => {
   it('接受合法的自定义引擎', () => {
+    const { search } = createDefaultSettings();
     const result = validateSettings({
       ...createDefaultSettings(),
-      search: { defaultEngineId: 'custom', customEngines: [customEngine()] },
+      search: { ...search, defaultEngineId: 'custom', customEngines: [customEngine()] },
     });
     expect(result.search.customEngines).toHaveLength(1);
   });
@@ -81,7 +106,9 @@ describe('validateSettings', () => {
       }),
     ).toThrowError(/标识重复/);
   });
+});
 
+describe('validateSettings invalid inputs', () => {
   it('拒绝超过上限的自定义引擎', () => {
     const settings = createDefaultSettings();
     const engines = Array.from({ length: LIMITS.customEngines + 1 }, (_, index) =>

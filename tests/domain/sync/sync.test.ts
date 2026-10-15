@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
 import { createDefaultAppearance } from '@/domain/appearance';
 import { DEFAULT_LAYOUT } from '@/domain/layout';
-import { mergeSyncSnapshots, materializeSyncSnapshot, parseSyncSnapshot, SyncMergeConflictError } from '@/domain/sync';
+import { createDefaultSettings } from '@/domain/settings';
+import { shortcutIconOccupancy } from '@/domain/shortcut-icon';
+import { mergeSyncSnapshots, materializeSyncSnapshot, parseSyncSnapshot, SyncMergeConflictError, SYNC_SCHEMA_VERSION } from '@/domain/sync';
 import type { SyncRegister, SyncSnapshotV1 } from '@/domain/sync';
 
 const IMAGE_TOTAL_LIMIT_BYTES = 50 * 1024 * 1024;
@@ -11,14 +13,17 @@ function register<T>(value: T, clock = 1, deviceId = 'device-a'): SyncRegister<T
 }
 
 function snapshot(deviceId: string, changes: Partial<SyncSnapshotV1> = {}): SyncSnapshotV1 {
+  const defaults = createDefaultSettings();
   return {
-    schemaVersion: 1, vaultId: 'vault-1', deviceId, generation: 1,
+    schemaVersion: SYNC_SCHEMA_VERSION, vaultId: 'vault-1', deviceId, generation: 1,
     defaultGroupId: register('group-default'),
     groups: [{ id: 'group-default', name: register('常用'), colorRole: register('primary' as const), position: register(0) }],
     shortcuts: [],
     settings: {
       appearance: register(createDefaultAppearance()), defaultEngineId: register('google'),
-      layout: register(DEFAULT_LAYOUT), clock: register({ format: 'system' as const }), customEngines: [],
+      layout: register(DEFAULT_LAYOUT), clock: register(defaults.clock),
+      searchPreferences: register({ width: defaults.search.width, autoFocus: defaults.search.autoFocus, openTarget: defaults.search.openTarget }),
+      shortcutPreferences: register(defaults.shortcuts), customEngines: [],
     },
     assets: [], tombstones: [], ...changes,
   };
@@ -51,6 +56,42 @@ it('merges independent shortcut fields while same-field conflicts use clock then
   expect(materializeSyncSnapshot(merged).shortcuts[0]).toMatchObject({ title: 'Local title', url: 'https://remote.test/' });
   const tied = mergeSyncSnapshots({ local, remotes: [snapshot('device-z', { shortcuts: [shortcut({ title: 'Later device', url: 'https://later.test/', deviceId: 'device-z', clock: 4 })] })] });
   expect(tied.shortcuts[0]?.title.value).toBe('Later device');
+});
+
+it('upgrades schema 1 snapshots with default preference registers', () => {
+  const current = snapshot('device-a');
+  const legacy = {
+    ...current, schemaVersion: 1,
+    settings: {
+      appearance: current.settings.appearance,
+      defaultEngineId: current.settings.defaultEngineId,
+      layout: { ...current.settings.layout, value: { order: ['shortcuts', 'clock', 'search'], hidden: ['search'] } },
+      clock: { ...current.settings.clock, value: { format: '24h' } },
+      customEngines: [],
+    },
+  };
+  const migrated = parseSyncSnapshot(legacy);
+  expect(migrated.schemaVersion).toBe(SYNC_SCHEMA_VERSION);
+  expect(migrated.settings.clock).toMatchObject({ value: { format: '24h', size: 'standard' }, clock: 1 });
+  expect(migrated.settings.layout.value).toMatchObject({ columns: 6, hidden: ['search'] });
+  expect(migrated.settings.searchPreferences.clock).toBe(0);
+  expect(migrated.settings.shortcutPreferences.clock).toBe(0);
+  expect(materializeSyncSnapshot(migrated).settings).toMatchObject({
+    clock: { format: '24h' }, layout: { order: ['shortcuts', 'clock', 'search'], hidden: ['search'] },
+    search: { width: 'standard', autoFocus: false }, shortcuts: { showNames: true },
+  });
+});
+
+it('merges new preference registers independently', () => {
+  const local = snapshot('device-a');
+  const remote = snapshot('device-b', { settings: {
+    ...snapshot('device-b').settings,
+    searchPreferences: register({ width: 'wide', autoFocus: true, openTarget: 'new-tab' }, 5, 'device-b'),
+    shortcutPreferences: register({ showNames: false, openTarget: 'new-tab' }, 6, 'device-b'),
+  } });
+  const merged = mergeSyncSnapshots({ local, remotes: [remote] });
+  expect(materializeSyncSnapshot(merged).settings.search).toMatchObject({ width: 'wide', autoFocus: true, openTarget: 'new-tab' });
+  expect(materializeSyncSnapshot(merged).settings.shortcuts).toEqual({ showNames: false, openTarget: 'new-tab' });
 });
 
 it('prefers an entity tombstone to a live replica and rejects the same tombstone beside a live entity', () => {
@@ -96,7 +137,7 @@ it('derives contiguous deterministic positions without changing register clocks'
 
 it('rejects unknown versions, unknown fields, excess entities and broken references', () => {
   const valid = snapshot('device-a');
-  expect(() => parseSyncSnapshot({ ...valid, schemaVersion: 2 })).toThrow(/版本不受支持/);
+  expect(() => parseSyncSnapshot({ ...valid, schemaVersion: SYNC_SCHEMA_VERSION + 1 })).toThrow(/版本不受支持/);
   expect(() => parseSyncSnapshot({ ...valid, extra: true })).toThrow(/字段不正确/);
   expect(() => parseSyncSnapshot({ ...valid, defaultGroupId: register('missing') })).toThrow(/默认分组引用不存在/);
   const groups = Array.from({ length: 51 }, (_, index) => ({ id: `group-${index}`, name: register(`分组${index}`),
@@ -134,8 +175,10 @@ it('accepts SVG icon colors only for SVG icon assets in snapshots', () => {
     byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null) };
   const shortcutWithSvg = { ...shortcut({ title: 'SVG', url: 'https://svg.example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id, color: '#12abef', occupancy: 75 }) };
-  expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg], assets: [asset] })
-    .shortcuts[0]?.icon.value).toMatchObject({ color: '#12abef', occupancy: 75 });
+  const restoredIcon = parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg], assets: [asset] })
+    .shortcuts[0]?.icon.value;
+  expect(restoredIcon).toMatchObject({ color: '#12abef' });
+  expect(shortcutIconOccupancy(restoredIcon!)).toBe(75);
   const legacyShortcut = { ...shortcut({ title: '旧同步', url: 'https://old-svg.example.test/', deviceId: 'device-a', clock: 2 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id, size: 32 }) };
   expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [legacyShortcut], assets: [asset] })

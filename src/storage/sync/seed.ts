@@ -21,7 +21,8 @@ function addIfChanged(input: { readonly records: Map<string, SyncRecordRow>; rea
 }
 
 function settingsValue(row: SettingsRow | undefined): AppSettings {
-  return row ? { appearance: row.appearance, search: row.search, layout: row.layout, clock: row.clock } : createDefaultSettings();
+  return row ? { appearance: row.appearance, search: row.search, shortcuts: row.shortcuts,
+    layout: row.layout, clock: row.clock } : createDefaultSettings();
 }
 
 interface SeedRecordsInput {

@@ -54,7 +54,9 @@ export function materializeSyncSnapshot(input: SyncSnapshotV1): MaterializedSync
   const settings: AppSettings = {
     appearance: snapshot.settings.appearance.value,
     search: { defaultEngineId: snapshot.settings.defaultEngineId.value,
-      customEngines: snapshot.settings.customEngines.map(({ value }) => value) },
+      customEngines: snapshot.settings.customEngines.map(({ value }) => value),
+      ...snapshot.settings.searchPreferences.value },
+    shortcuts: snapshot.settings.shortcutPreferences.value,
     layout: snapshot.settings.layout.value, clock: snapshot.settings.clock.value,
   };
   const assets = snapshot.assets.map(({ id, kind, mime, width, height, sourceUrl }) => ({ id, kind, mime, width, height, sourceUrl: sourceUrl.value }));

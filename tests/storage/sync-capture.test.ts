@@ -4,6 +4,7 @@ import { ensureInitialized } from '@/storage/init';
 import { createGroup, deleteGroup, renameGroup } from '@/storage/groups';
 import { createShortcut, deleteShortcut, restoreShortcut, updateShortcut } from '@/storage/shortcuts';
 import { createImageAsset } from '@/storage/assets';
+import { readSettings, updateSettings } from '@/storage/settings';
 import { finalizePendingDeletes, seedSyncRecords } from '@/storage/sync';
 import type { SyncStateRow } from '@/storage/sync/types';
 
@@ -48,7 +49,43 @@ describe('未启用及原子提交', () => {
   });
 });
 
-describe('字段版本捕获', () => {
+describe('字段版本捕获：个性化设置', () => {
+  it('独立捕获个性化寄存器，并在业务事务回滚时一并回滚', async () => {
+    const state = await enableSync();
+    const beforeRecord = await db.sync_records.get('settings:app');
+    const beforeSettings = await readSettings(db);
+    if (beforeRecord?.kind !== 'settings') throw new Error('同步设置记录缺失');
+
+    await expect(db.transaction('rw', [db.settings, db.sync_state, db.sync_records], async () => {
+      await updateSettings(db, (current) => ({
+        ...current,
+        clock: { ...current.clock, weekdayFormat: 'english-short' },
+        search: { ...current.search, width: 'wide', autoFocus: true },
+        shortcuts: { ...current.shortcuts, showNames: false },
+      }));
+      throw new Error('force settings rollback');
+    })).rejects.toThrow('force settings rollback');
+    expect(await readSettings(db)).toEqual(beforeSettings);
+    expect(await db.sync_records.get(beforeRecord.id)).toEqual(beforeRecord);
+    expect(await db.sync_state.get('app')).toEqual(state);
+
+    await updateSettings(db, (current) => ({
+      ...current,
+      clock: { ...current.clock, weekdayFormat: 'english-short' },
+      search: { ...current.search, width: 'wide', autoFocus: true },
+      shortcuts: { ...current.shortcuts, showNames: false },
+    }));
+    const after = await db.sync_records.get(beforeRecord.id);
+    const afterState = await db.sync_state.get('app');
+    if (after?.kind !== 'settings' || !afterState) throw new Error('同步设置更新缺失');
+    expect(after.value.clock.value.weekdayFormat).toBe('english-short');
+    expect(after.value.searchPreferences.value).toMatchObject({ width: 'wide', autoFocus: true });
+    expect(after.value.shortcutPreferences.value.showNames).toBe(false);
+    expect(afterState.generation).toBe(state.generation + 1);
+  });
+});
+
+describe('字段版本捕获：网站字段', () => {
   it('只为改变的shortcut字段分配新版本，不变put不增加generation', async () => {
     const shortcut = await createShortcut(db, { groupId: defaultGroupId, title: '文档', url: 'example.com' });
     const state = await enableSync();

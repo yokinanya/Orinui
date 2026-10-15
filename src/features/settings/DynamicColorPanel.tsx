@@ -36,7 +36,7 @@ export function DynamicColorPanel() {
       </Field>
       {color.enabled && <Field>
         <FieldLabel>取色方式</FieldLabel>
-        <ToggleGroup value={[color.mode]} onValueChange={(value) => {
+        <ToggleGroup className="settings-segmented" value={[color.mode]} onValueChange={(value) => {
           if (value[0] === 'follow') update({ dynamicColor: { ...color, mode: 'follow', seed: null } });
           if (value[0] === 'locked') selectSeed(seedDraft);
         }}>

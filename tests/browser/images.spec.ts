@@ -168,7 +168,7 @@ test('JSON 可导出、预览导入并在确认后完整替换本地数据', asy
   const path = await download.path();
   if (!path) throw new Error('导出的 JSON 文件没有落盘');
   const content = JSON.parse(await readFile(path, 'utf8')) as { version: number; groups: unknown[]; settings: { clock: { format: string } } };
-  expect(content).toMatchObject({ version: 1, groups: [{ name: '常用', isDefault: true }], settings: { clock: { format: 'system' } } });
+  expect(content).toMatchObject({ version: 2, groups: [{ name: '常用', isDefault: true }], settings: { clock: { format: 'system' } } });
   await page.getByRole('tab', { name: '布局' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '添加第一个网站' }).click();

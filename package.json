@@ -1,7 +1,7 @@
 {
   "name": "orinui",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "description": "设计精致、轻量、本地优先的 Chrome 新标签页扩展",
   "scripts": {

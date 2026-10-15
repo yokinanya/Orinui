@@ -1,10 +1,12 @@
-# 同步基础协议 v1
+# 同步基础协议（快照 schema 2）
 
 状态：已实现并自动验证领域合并、本地版本捕获、加密对象、事务接收及手动同步协调层。WebDAV 适配器、连接界面和事件触发已接入，并通过受控服务真实扩展审计；真实第三方 WebDAV 服务及用户设备仍待验收。现有功能扩展权限已有用户确认，Google Drive 适配器与 OAuth 延期，详见 [VERIFICATION.md](./VERIFICATION.md)。本文不把受控审计等同于发布可用性。
 
 ## 版本与身份
 
-Dexie schema 4 保存本机数据和同步元数据，JSON 备份仍是版本 1；同步快照 schemaVersion 为 1，加密对象格式为 ORINUI01。这四套版本独立升级，未知同步/加密版本明确拒绝。
+Dexie schema 5 保存本机数据和同步元数据，JSON 备份为版本 2；同步快照 schemaVersion 为 2，加密对象格式仍为 ORINUI01，其固定 AAD schemaVersion 仍为 1。这些版本独立升级，未知同步/加密版本明确拒绝。
+
+版本 1 同步快照由严格迁移器转换：既有外观、默认引擎、自定义引擎、布局和时钟寄存器保持原逻辑版本；搜索/网站新偏好寄存器以默认值、clock 0 和原 deviceId 初始化。新构建可读取版本 1 和 2；旧构建不保证读取版本 2。
 
 vaultId 标识一个同步库，deviceId 标识一个 Chrome 配置文件。实体标识沿用已有稳定 ID，新实体使用 UUID。协议接受既有非空字符串标识，但拒绝首尾空白和控制字符；不能用永久删除的标识重新创建实体。
 
@@ -18,7 +20,7 @@ generation 是每设备快照代次，不跨设备比较。实际本地变更和
 |---|---|
 | 分组 | name、colorRole、position 各自独立 |
 | 网站 | title、url 独立；groupId 与 order 合为 placement；icon 引用为一个寄存器 |
-| 设置 | appearance、layout、clock 各为一个单元；defaultEngineId 独立；自定义引擎按 ID 保存 |
+| 设置 | appearance、layout、clock、searchPreferences、shortcutPreferences 各为一个单元；defaultEngineId 独立；自定义引擎按 ID 保存 |
 | 默认组 | vault 级 defaultGroupId 寄存器，isDefault 从它派生 |
 | 图片 | id、kind、MIME、尺寸、byteLength、SHA-256 不可变；sourceUrl 单独版本化 |
 
@@ -28,9 +30,9 @@ generation 是每设备快照代次，不跨设备比较。实际本地变更和
 
 ## 本地捕获与删除
 
-数据库迁移只新增 sync_state、sync_records、sync_keys，不自动启用同步，不改变用户 ID。initializeSyncVault 建立状态和密钥后，全量 seed 已有实体。
+数据库版本 2 → 3 新增 sync_state、sync_records、sync_keys，不自动启用同步，不改变用户 ID。版本 4 → 5 为设置增加个性化字段与同步寄存器；旧字段的逻辑版本保留，新寄存器初始化为零。initializeSyncVault 建立状态和密钥后，全量 seed 已有实体。
 
-DBCore 中间件只在本机已配置同步状态时捕获业务写入，并把版本记录与领域写入放在同一事务。事务回滚也回滚元数据；接收远端时 suspended 标记在同一事务中暂停本机捕获，避免回声更新。
+DBCore 中间件只在本机已配置同步状态时捕获业务写入，并把版本记录与领域写入放在同一事务。布局和时钟各自原子捕获；搜索偏好及网站偏好使用独立寄存器。事务回滚也回滚元数据；接收远端时 suspended 标记在同一事务中暂停本机捕获，避免回声更新。
 
 网站删除立即从本机可见列表移除，撤销仍限当前页面会话 5 秒。同步记录先保留活版本及 pendingDeleteUntil；期限内导出仍保留该网站及必要图片，撤销清掉待删除状态。到期再生成永久墓碑，不复活同 ID。
 

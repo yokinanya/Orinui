@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable, type Transaction } from 'dexie';
 
 import { createDefaultAppearance } from '@/domain/appearance';
+import { createDefaultSettings, validateSettings } from '@/domain/settings';
 import type { Group } from '@/domain/group';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
@@ -24,6 +25,88 @@ async function migrateIconOccupancy(transaction: Transaction): Promise<void> {
   });
 }
 
+async function migratePersonalization(transaction: Transaction): Promise<void> {
+  const defaults = createDefaultSettings();
+  const syncState = transaction.table<SyncStateRow, string>('sync_state');
+  const previousState = await syncState.get('app');
+  // 迁移同时改写设置与对应寄存器，不能让捕获中间状态生成新的同步版本。
+  if (previousState) await syncState.update('app', { suspended: true });
+  await transaction.table<Record<string, unknown>, string>('settings').toCollection().modify((row) => {
+    const settings = validateSettings({
+      ...defaults,
+      ...row,
+      search: { ...defaults.search, ...asObject(row['search'], '搜索设置') },
+      shortcuts: defaults.shortcuts,
+      layout: { ...defaults.layout, ...asObject(row['layout'], '布局设置') },
+      clock: { ...defaults.clock, ...asObject(row['clock'], '时钟设置') },
+    });
+    Object.assign(row, settings);
+  });
+
+  await transaction.table<SyncRecordRow, string>('sync_records').where('kind').equals('settings').modify((record) => {
+    if (record.kind !== 'settings') return;
+    const previous = record.value;
+    Object.assign(record, { value: {
+      ...previous,
+      layout: { ...previous.layout, value: {
+        ...defaults.layout, ...asObject(previous.layout.value, '同步布局设置') } },
+      clock: { ...previous.clock, value: {
+        ...defaults.clock, ...asObject(previous.clock.value, '同步时钟设置') } },
+      searchPreferences: { value: {
+        width: defaults.search.width, autoFocus: defaults.search.autoFocus,
+        openTarget: defaults.search.openTarget,
+      }, clock: 0, deviceId: previous.clock.deviceId },
+      shortcutPreferences: { value: defaults.shortcuts, clock: 0, deviceId: previous.clock.deviceId },
+    } });
+  });
+  if (previousState) await syncState.update('app', { suspended: previousState.suspended });
+}
+
+function asObject(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${label}格式不正确，无法迁移`);
+  }
+  return value as Record<string, unknown>;
+}
+
+const SCHEMA_STORES_WITH_SYNC = {
+  groups: 'id, order, isDefault',
+  shortcuts: 'id, groupId, order',
+  settings: 'id',
+  assets: 'id, kind',
+  sync_state: 'id',
+  sync_records: 'id, kind, entityId',
+  sync_keys: 'id',
+};
+
+function registerSchemaVersions(database: OrinuiDatabase): void {
+  database.version(1).stores({
+    groups: 'id, order, isDefault',
+    shortcuts: 'id, groupId, order',
+    settings: 'id',
+  });
+
+  database.version(2).stores({
+    groups: 'id, order, isDefault',
+    shortcuts: 'id, groupId, order',
+    settings: 'id',
+    assets: 'id, kind',
+  }).upgrade(async (transaction) => {
+    const settings = transaction.table<Record<string, unknown>, string>('settings');
+    await settings.toCollection().modify((row) => {
+      const existing = row['appearance'];
+      row['appearance'] = {
+        ...createDefaultAppearance(),
+        ...(typeof existing === 'object' && existing !== null ? existing : {}),
+      };
+    });
+  });
+
+  database.version(3).stores({ ...SCHEMA_STORES_WITH_SYNC });
+  database.version(4).stores({ ...SCHEMA_STORES_WITH_SYNC }).upgrade(migrateIconOccupancy);
+  database.version(5).stores({ ...SCHEMA_STORES_WITH_SYNC }).upgrade(migratePersonalization);
+}
+
 /**
  * 本地数据库。
  *
@@ -44,51 +127,7 @@ export class OrinuiDatabase extends Dexie {
     super(name);
     this.now = options.now ?? Date.now;
     this.use(createSyncCaptureMiddleware(this.now));
-
-    this.version(1).stores({
-      groups: 'id, order, isDefault',
-      shortcuts: 'id, groupId, order',
-      settings: 'id',
-    });
-
-    // 版本 2：外观设置扩展为「主题 + 背景 + 动态配色」，并新增图片资源表。
-    this.version(2)
-      .stores({
-        groups: 'id, order, isDefault',
-        shortcuts: 'id, groupId, order',
-        settings: 'id',
-        assets: 'id, kind',
-      })
-      .upgrade(async (transaction) => {
-        const settings = transaction.table<Record<string, unknown>, string>('settings');
-        await settings.toCollection().modify((row) => {
-          const existing = row['appearance'];
-          row['appearance'] = {
-            ...createDefaultAppearance(),
-            ...(typeof existing === 'object' && existing !== null ? existing : {}),
-          };
-        });
-      });
-
-    this.version(3).stores({
-      groups: 'id, order, isDefault',
-      shortcuts: 'id, groupId, order',
-      settings: 'id',
-      assets: 'id, kind',
-      sync_state: 'id',
-      sync_records: 'id, kind, entityId',
-      sync_keys: 'id',
-    });
-
-    this.version(4).stores({
-      groups: 'id, order, isDefault',
-      shortcuts: 'id, groupId, order',
-      settings: 'id',
-      assets: 'id, kind',
-      sync_state: 'id',
-      sync_records: 'id, kind, entityId',
-      sync_keys: 'id',
-    }).upgrade(migrateIconOccupancy);
+    registerSchemaVersions(this);
   }
 }
 

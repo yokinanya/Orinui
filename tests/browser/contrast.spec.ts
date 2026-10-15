@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { configureBackground, expectPhotoControlContrast, expectPhotoTreatment, expectReadableHomepage, uploadContrastPhoto, type BackgroundCase } from './contrast-helpers';
+import { configureBackground, uploadContrastPhoto, type BackgroundCase } from './contrast-helpers';
+import { expectPhotoControlContrast, expectPhotoTreatment, expectReadableHomepage } from './contrast-measurement';
 
 const BACKGROUND_CASES: readonly BackgroundCase[] = [
   { name: '浅色纯黑背景，动态色关闭', theme: 'light', background: { kind: 'solid', color: '#000000' }, dynamic: false },
