@@ -12,14 +12,20 @@
   padding: 0.2rem 0.55rem;
 }
 
-/* 照片上的文字直接融入画面；轻柔阴影负责字形边缘，小控件保留轻透玻璃感。 */
+/* 复杂照片上固定白色字形并加深色描边；控件表面仍按封面明暗适配。 */
 [data-home-photo] .home-readable-chip {
   background-color: transparent;
   border-radius: 0;
   padding: 0;
-  color: #fff;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 88%), 0 0 9px rgb(0 0 0 / 50%);
-  -webkit-text-stroke: 1.05px rgb(0 0 0 / 100%);
+  color: var(--home-readable-photo-foreground);
+  text-shadow: var(--home-readable-text-shadow);
+  -webkit-text-stroke: 1.25px var(--home-readable-text-outline);
+  paint-order: stroke fill;
+}
+
+[data-home-photo] time.home-readable-ink,
+[data-home-photo] .home-readable-group {
+  -webkit-text-stroke: 1.25px var(--home-readable-text-outline);
   paint-order: stroke fill;
 }
 
@@ -31,19 +37,26 @@
 
 [data-home-photo] .home-readable-ink,
 [data-home-photo] .home-readable-muted {
-  color: #fff;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 72%);
+  color: var(--home-readable-photo-foreground);
+  text-shadow: var(--home-readable-text-shadow);
 }
 
-[data-home-readable='true'] .home-readable-muted {
+[data-home-photo] form[role='search'] .home-readable-ink,
+[data-home-photo] form[role='search'] .home-readable-muted {
+  color: var(--home-readable-foreground);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-muted {
   color: var(--home-readable-muted);
 }
 
-[data-home-readable='true'] .group:hover .home-readable-chip.home-readable-muted {
+[data-home-readable='true']:not([data-home-photo]) .group:hover .home-readable-chip.home-readable-muted {
   color: var(--home-readable-muted);
 }
 
-[data-home-readable='true'] .home-readable-ink {
+[data-home-readable='true']:not([data-home-photo]) .home-readable-ink {
   color: var(--home-readable-foreground);
 }
 
@@ -64,22 +77,56 @@
   background-color: var(--home-readable-hover);
 }
 
+/* The engine shares the search surface instead of adding a second glass tile. */
+form[role='search'] .search-engine-trigger {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--home-readable-foreground, var(--glass-foreground-muted));
+}
+
+form[role='search'] .search-engine-trigger:hover,
+form[role='search'] .search-engine-trigger[data-popup-open] {
+  background-color: var(--home-readable-hover, var(--glass));
+}
+
 .home-readable-group {
   position: relative;
+  border-radius: 0.75rem;
   background-color: transparent;
   color: var(--glass-foreground-muted);
 }
 
-.home-readable-group[aria-current='true'],
-.home-readable-group:not([aria-current='true']):hover {
-  color: var(--home-readable-role-color, var(--home-readable-accent, var(--primary)));
+/* 当前分组：用一层柔和的圆角底加 1px 内描边标出选中态；其余标签保持透明，只在悬停时轻微提亮。 */
+.home-readable-group[aria-current='true'] {
+  background-color: var(--home-readable-surface);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
 }
 
+.home-readable-group:not([aria-current='true']):hover {
+  background-color: var(--home-readable-hover);
+}
+
+/*
+ * 网站格子始终保持 6rem 宽：窄屏装不下时改为横向滚动，而不是继续压缩格子。
+ * 列数由 ShortcutGrid 按用户设置的行内样式给出（与折行后的实际列数一致）。
+ */
 .shortcut-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(5.5rem, 100%), 6rem));
-  justify-content: center;
+  justify-content: start;
   gap: 0.5rem;
+  /* 网格容器即横向滚动容器；子项以 max-content 计算列宽后，这里按格子宽度收窄。 */
+  grid-auto-columns: 6rem;
+  grid-auto-rows: auto;
+  align-items: start;
+}
+
+/*
+ * 内容放得下时居中；放不下时整体按格子宽度收窄并横向滚动，首个格子仍在可见区域左侧。
+ * 与居中的滚动容器不同，这里不会把初始滚动位置推到中间，空格子宽度也和已有格子一致。
+ */
+.shortcut-grid[data-shortcut-alignment='center'] {
+  justify-content: safe center;
 }
 
 @media (min-width: 48rem) {
@@ -89,10 +136,20 @@
 }
 
 [data-home-photo] .home-readable-group {
-  color: #fff !important;
-  text-shadow: 0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 44%);
-  -webkit-text-stroke: 1px rgb(0 0 0 / 90%);
+  color: var(--home-readable-foreground);
+  text-shadow: var(--home-readable-text-shadow);
+  -webkit-text-stroke: 1px var(--home-readable-text-outline);
   paint-order: stroke fill;
+}
+
+/* 照片背景沿用同一套表面与描边；选中态仍保留柔和的圆角底，避免文字直接压在照片上。 */
+[data-home-photo] .home-readable-group[aria-current='true'] {
+  background-color: var(--home-readable-surface);
+  box-shadow: inset 0 0 0 1px var(--home-readable-border);
+}
+
+[data-home-photo] .home-readable-group:not([aria-current='true']):hover {
+  background-color: var(--home-readable-hover);
 }
 
 .home-readable-group[data-color-role='primary'] {
@@ -125,24 +182,255 @@
 }
 
 [data-home-photo] .home-readable-group[aria-current='true']::after {
-  background-color: #fff;
+  background-color: var(--home-readable-photo-foreground);
 }
 
-[data-home-readable='true'] .home-readable-group {
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group {
   color: var(--home-readable-foreground);
 }
 
-[data-home-readable='true'] .home-readable-group:hover {
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group:hover {
   color: var(--home-readable-foreground);
 }
 
-[data-home-readable='true'] .home-readable-group:not([aria-current='true']) {
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group:not([aria-current='true']) {
   color: var(--home-readable-muted);
 }
 
-[data-home-readable='true'] .home-readable-group[aria-current='true'] {
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group[aria-current='true'] {
   color: var(--home-readable-foreground);
+}
+
+[data-home-photo] .home-readable-group[aria-current='true'],
+[data-home-photo] .home-readable-group:not([aria-current='true']),
+[data-home-photo] .home-readable-group[aria-current='true']:hover,
+[data-home-photo] .home-readable-group:not([aria-current='true']):hover {
+  color: var(--home-readable-photo-foreground);
+}
+
+[data-home-readable='true'] .home-readable-focus:focus-visible {
+  outline: 2px solid var(--home-readable-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--home-readable-surface);
+  --tw-ring-color: transparent;
+}
+
+.group-tabs-scroll {
+  scrollbar-width: none;
+}
+
+.group-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+[data-home-readable='true'] .home-readable-surface:focus-within {
+  border-color: var(--home-readable-border);
+  --tw-ring-color: transparent;
+}
+
+form[role='search'] [data-slot='input-group']:focus-within {
+  border-color: var(--home-readable-accent, var(--primary));
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--home-readable-accent, var(--primary)) 24%, transparent);
+}
+
+form[role='search'] [data-slot='input-group']:focus-within [data-slot='input-group-control'] {
+  outline: none;
   box-shadow: none;
+  --tw-ring-color: transparent;
+}.shortcut-grid {
+  --shortcut-grid-gap: 0.5rem;
+  display: grid;
+  gap: var(--shortcut-grid-gap);
+  align-items: start;
+}
+
+@media (min-width: 48rem) {
+  .shortcut-grid { --shortcut-grid-gap: 1rem; }
+}
+
+[data-home-photo] .home-readable-group {
+  -webkit-text-stroke: 1.25px var(--home-readable-text-outline);
+  paint-order: stroke fill;
+}
+
+[data-home-photo] .home-readable-surface,
+[data-home-photo] .home-readable-control {
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+
+[data-home-photo] .home-readable-ink,
+[data-home-photo] .home-readable-muted {
+  color: var(--home-readable-photo-foreground);
+  text-shadow: var(--home-readable-text-shadow);
+}
+
+[data-home-photo] form[role='search'] .home-readable-ink,
+[data-home-photo] form[role='search'] .home-readable-muted {
+  color: var(--home-readable-foreground);
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .group:hover .home-readable-chip.home-readable-muted {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-ink {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-ink::placeholder {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true'] .home-readable-surface,
+[data-home-readable='true'] .home-readable-control {
+  border-color: var(--home-readable-border);
+}
+
+[data-home-readable='true'] .group:hover .home-readable-surface {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true'] .home-readable-control:hover {
+  background-color: var(--home-readable-hover);
+}
+
+/* The engine shares the search surface instead of adding a second glass tile. */
+form[role='search'] .search-engine-trigger {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--home-readable-foreground, var(--glass-foreground-muted));
+}
+
+form[role='search'] .search-engine-trigger:hover,
+form[role='search'] .search-engine-trigger[data-popup-open] {
+  background-color: var(--home-readable-hover, var(--glass));
+}
+
+.home-readable-group {
+  position: relative;
+  border-radius: 0.75rem;
+  background-color: transparent;
+  color: var(--glass-foreground-muted);
+}
+
+/* 当前分组：用一层柔和的圆角底加 1px 内描边标出选中态；其余标签保持透明，只在悬停时轻微提亮。 */
+.home-readable-group[aria-current='true'] {
+  background-color: var(--home-readable-surface);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.home-readable-group:not([aria-current='true']):hover {
+  background-color: var(--home-readable-hover);
+}
+
+/*
+ * 网站格子始终保持 6rem 宽：窄屏装不下时改为横向滚动，而不是继续压缩格子。
+ * 列数由 ShortcutGrid 按用户设置的行内样式给出（与折行后的实际列数一致）。
+ */
+.shortcut-grid {
+  display: grid;
+  justify-content: start;
+  gap: 0.5rem;
+  /* 网格容器即横向滚动容器；子项以 max-content 计算列宽后，这里按格子宽度收窄。 */
+  grid-auto-columns: 6rem;
+  grid-auto-rows: auto;
+  align-items: start;
+}
+
+/*
+ * 内容放得下时居中；放不下时整体按格子宽度收窄并横向滚动，首个格子仍在可见区域左侧。
+ * 与居中的滚动容器不同，这里不会把初始滚动位置推到中间，空格子宽度也和已有格子一致。
+ */
+.shortcut-grid[data-shortcut-alignment='center'] {
+  justify-content: safe center;
+}
+
+@media (min-width: 48rem) {
+  .shortcut-grid {
+    gap: 1rem;
+  }
+}
+
+[data-home-photo] .home-readable-group {
+  color: var(--home-readable-foreground);
+  text-shadow: var(--home-readable-text-shadow);
+  -webkit-text-stroke: 1px var(--home-readable-text-outline);
+  paint-order: stroke fill;
+}
+
+/* 照片背景沿用同一套表面与描边；选中态仍保留柔和的圆角底，避免文字直接压在照片上。 */
+[data-home-photo] .home-readable-group[aria-current='true'] {
+  background-color: var(--home-readable-surface);
+  box-shadow: inset 0 0 0 1px var(--home-readable-border);
+}
+
+[data-home-photo] .home-readable-group:not([aria-current='true']):hover {
+  background-color: var(--home-readable-hover);
+}
+
+.home-readable-group[data-color-role='primary'] {
+  --home-readable-role-color: var(--primary);
+}
+
+.home-readable-group[data-color-role='secondary'] {
+  --home-readable-role-color: var(--secondary-foreground);
+}
+
+.home-readable-group[data-color-role='tertiary'] {
+  --home-readable-role-color: var(--accent-foreground);
+}
+
+.home-readable-group[aria-current='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.1rem;
+  left: 0;
+  width: 1rem;
+  height: 2px;
+  margin-inline: auto;
+  border-radius: 9999px;
+  background-color: var(--home-readable-role-color);
+  content: '';
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group[aria-current='true']::after {
+  background-color: var(--home-readable-accent, var(--primary));
+}
+
+[data-home-photo] .home-readable-group[aria-current='true']::after {
+  background-color: var(--home-readable-photo-foreground);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group:hover {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group:not([aria-current='true']) {
+  color: var(--home-readable-muted);
+}
+
+[data-home-readable='true']:not([data-home-photo]) .home-readable-group[aria-current='true'] {
+  color: var(--home-readable-foreground);
+}
+
+[data-home-photo] .home-readable-group[aria-current='true'],
+[data-home-photo] .home-readable-group:not([aria-current='true']),
+[data-home-photo] .home-readable-group[aria-current='true']:hover,
+[data-home-photo] .home-readable-group:not([aria-current='true']):hover {
+  color: var(--home-readable-photo-foreground);
 }
 
 [data-home-readable='true'] .home-readable-focus:focus-visible {

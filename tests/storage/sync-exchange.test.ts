@@ -4,6 +4,7 @@ import { createSyncCrypto } from '@/platform/sync-crypto';
 import { decodeSyncSnapshot, encodeSyncSnapshot, openSyncImage } from '@/platform/sync-codec';
 import { mergeSyncSnapshots } from '@/domain/sync';
 import { createDatabase, type Database } from '@/storage/db';
+import { createFolder } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
 import { createShortcut, updateShortcut } from '@/storage/shortcuts';
 import { createBackupSnapshot, replaceAllData, resetLocalData } from '@/storage/backup';
@@ -42,15 +43,16 @@ async function verifyFixtureImage(asset: MediaAsset): Promise<void> {
 }
 
 async function seedFirstDevice() {
-  const { defaultGroup } = await ensureInitialized(first);
+  await ensureInitialized(first);
+  const localFolder = await createFolder(first, '常用');
   const image = new Blob([Uint8Array.from(atob(PNG), (character) => character.charCodeAt(0))], { type: 'image/png' });
-  const shortcut = await createShortcut(first, { groupId: defaultGroup.id, title: '共有网站', url: 'https://example.com',
+  const shortcut = await createShortcut(first, { folderId: localFolder.id, title: '共有网站', url: 'https://example.com',
     icon: { kind: 'letter', occupancy: 71 },
     iconSourceUrl: 'https://images.example.com/icon.png',
     image: { kind: 'icon', mime: 'image/png', width: 1, height: 1, blob: image, sourceUrl: 'https://images.example.com/icon.png' } });
   const svgImage = new Blob(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M0 0h512v512H0z"/></svg>'],
     { type: 'image/svg+xml' });
-  const svgShortcut = await createShortcut(first, { groupId: defaultGroup.id, title: 'SVG 图标', url: 'https://svg.example.com',
+  const svgShortcut = await createShortcut(first, { folderId: localFolder.id, title: 'SVG 图标', url: 'https://svg.example.com',
     icon: { kind: 'letter', occupancy: 88 }, svgColor: '#12abef',
     image: { kind: 'icon', mime: 'image/svg+xml', width: 512, height: 512, blob: svgImage } });
   const material = await cipher.createKey();
@@ -107,17 +109,16 @@ describe('provider-independent encrypted device exchange', () => {
     expect(await first.shortcuts.get(shortcut.id)).toMatchObject({ title: '设备 A 标题', url: 'https://example.com/new' });
   });
 
-  it('preserves nonempty local data as an ordinary group on first joining', async () => {
+  it('preserves nonempty local data on first joining', async () => {
     const { shortcut } = await seedFirstDevice();
-    const localGroup = (await second.groups.toArray())[0]!;
-    await createShortcut(second, { groupId: localGroup.id, title: '本机网站', url: 'https://local.example.com' });
+    await createShortcut(second, { folderId: null, title: '本机网站', url: 'https://local.example.com' });
     const local = await exportSyncSnapshot(second, cipher);
     const remote = await exportSyncSnapshot(first, cipher);
     const joined = planSyncJoin({ local: local.snapshot, remotes: [remote.snapshot] });
     await applySyncSnapshot(second, { snapshot: joined, assets: remote.assets,
       expectedGeneration: local.localGeneration }, { crypto: cipher, validateStoredMediaAsset: async (asset) => { await verifyFixtureImage(asset); return asset; } });
-    expect(await second.groups.count()).toBe(2);
-    expect((await second.groups.get(localGroup.id))?.isDefault).toBe(false);
+    // 远端文件夹一并合并进来，本机的主页网站保留在原位。
+    expect(await second.folders.count()).toBe(1);
     expect((await second.shortcuts.toArray()).map(({ title }) => title).sort()).toEqual(['SVG 图标', '共有网站', '本机网站']);
     expect(await second.shortcuts.get(shortcut.id)).toBeDefined();
   });
@@ -147,7 +148,7 @@ function assertExportedIcons(shortcuts: readonly { readonly id: string; readonly
 async function expectImportedIcons(firstId: string, secondId: string): Promise<void> {
   expect(await second.shortcuts.get(firstId)).toMatchObject({ icon: { kind: 'asset', occupancy: 71 }, iconSourceUrl: 'https://images.example.com/icon.png' });
   expect(await second.shortcuts.get(secondId)).toMatchObject({ icon: { kind: 'asset', occupancy: 88, color: '#12abef' } });
-  expect(await second.groups.count()).toBe(1);
+  expect(await second.folders.count()).toBe(1);
 }
 
 async function prepareMotionExchange() {
@@ -183,20 +184,25 @@ async function applyMotionExchange(exchange: Awaited<ReturnType<typeof prepareMo
 describe('explicit full replacements with sync metadata', () => {
   it('remaps previously registered IDs and propagates tombstones without restoring old identities', async () => {
     const initial = await ensureInitialized(first);
-    const old = await createShortcut(first, { groupId: initial.defaultGroup.id, title: '备份网站', url: 'https://example.com' });
+    const folder = await createFolder(first, '常用');
+    const old = await createShortcut(first, { folderId: folder.id, title: '备份网站', url: 'https://example.com' });
     await initializeSyncVault(first, { vaultId: 'vault', deviceId: 'a', key: (await cipher.createKey()).key });
     const saved = await createBackupSnapshot(first);
     const document: BackupDocument = { ...saved, formatVersion: BACKUP_VERSION, assets: [] };
+    const beforeReplacementRecords = await first.sync_records.toArray();
     await replaceAllData(first, { document, assets: [] });
     const restored = (await first.shortcuts.toArray())[0]!;
     expect(restored.id).not.toBe(old.id);
     expect(restored.title).toBe(old.title);
     const exported = await exportSyncSnapshot(first, cipher);
-    expect(exported.snapshot.tombstones).toContainEqual(expect.objectContaining({ entityType: 'shortcut', id: old.id }));
+    // 备份替换后旧文件夹被删除、新文件夹换了标识，墓碑按新语义落在文件夹上。
+    expect(exported.snapshot.tombstones).toContainEqual(expect.objectContaining({ entityType: 'folder', id: folder.id }));
     expect(await first.sync_keys.count()).toBe(1);
     await resetLocalData(first);
     const reset = await exportSyncSnapshot(first, cipher);
-    expect(reset.snapshot.shortcuts).toHaveLength(0);
+    // 重置会清除容器及其中网站，远端因此同时收到两类墓碑。
+    expect(reset.snapshot.folders).toHaveLength(0);
+    expect(reset.snapshot.tombstones).toContainEqual(expect.objectContaining({ entityType: 'folder', id: restored.folderId }));
     expect(reset.snapshot.tombstones).toContainEqual(expect.objectContaining({ entityType: 'shortcut', id: restored.id }));
   });
 });

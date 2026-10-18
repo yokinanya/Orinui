@@ -1,5 +1,6 @@
 import { createContext, use } from 'react';
 import type { WebDavConnectionPlan, WebDavPrepareInput, WebDavSyncStatus } from '@/sync/webdav-types';
+import type { SyncSizePreview } from '@/sync/ports';
 
 export interface WebDavSyncContextValue {
   readonly status: WebDavSyncStatus | null;
@@ -14,6 +15,7 @@ export interface WebDavSyncContextValue {
   disconnect(): Promise<boolean>;
   deleteRemote(): Promise<boolean>;
   readonly recoveryRequired: boolean;
+  previewSizes(): Promise<SyncSizePreview | null>;
   resetRemote(): Promise<boolean>;
 }
 

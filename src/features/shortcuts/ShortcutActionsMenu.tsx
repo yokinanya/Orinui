@@ -1,7 +1,9 @@
+import { openContextMenuFromKeyboard } from '@/features/folders/menu-keyboard';
 import { ArrowDownIcon, ArrowUpIcon, FolderInputIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 
 import { useData } from '@/app/data-context';
+import { useOperations } from '@/app/operations';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -14,14 +16,16 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { Group } from '@/domain/group';
-import type { Shortcut } from '@/domain/shortcut';
+import type { Folder } from '@/domain/folder';
+import { shortcutDisplayName, type Shortcut } from '@/domain/shortcut';
 import { notifyError, notifyRemoved } from '@/lib/notify';
 import { cn } from '@/lib/utils';
 
 interface ShortcutMenuProps {
-  shortcut: Shortcut;
-  onEdit: (shortcut: Shortcut) => void;
+  readonly shortcut: Shortcut;
+  readonly onEdit: (shortcut: Shortcut) => void;
+  readonly containerShortcuts: readonly Shortcut[];
+  readonly onChanged: () => void;
 }
 
 /**
@@ -51,41 +55,57 @@ function ShortcutPositionItems({ index, total, onMove }: ShortcutPositionItemsPr
   );
 }
 
-interface MoveToGroupItemsProps {
-  readonly groups: readonly Group[];
-  readonly onMove: (groupId: string) => void;
+interface MoveToFolderItemsProps {
+  readonly folders: readonly Folder[];
+  readonly includeHome: boolean;
+  readonly onMove: (folderId: string | null) => void;
 }
 
-function MoveToGroupItems({ groups, onMove }: MoveToGroupItemsProps) {
+function MoveToFolderItems({ folders, includeHome, onMove }: MoveToFolderItemsProps) {
+  const empty = folders.length === 0 && !includeHome;
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger>
         <FolderInputIcon />
-        移动到分组
+        移动到文件夹
       </ContextMenuSubTrigger>
       <ContextMenuSubContent>
-        {groups.length === 0 ? <ContextMenuItem disabled>没有其他分组</ContextMenuItem> : groups.map((group) => (
-          <ContextMenuItem key={group.id} onClick={() => onMove(group.id)}>{group.name}</ContextMenuItem>
-        ))}
+        {empty ? <ContextMenuItem disabled>没有其他文件夹</ContextMenuItem> : <>
+          {includeHome && <ContextMenuItem onClick={() => onMove(null)}>主页</ContextMenuItem>}
+          {folders.map((folder) => (
+            <ContextMenuItem key={folder.id} onClick={() => onMove(folder.id)}>{folder.name}</ContextMenuItem>
+          ))}
+        </>}
       </ContextMenuSubContent>
     </ContextMenuSub>
   );
 }
 
-function ShortcutMenuItems({ shortcut, onEdit }: ShortcutMenuProps) {
-  const { groups, shortcuts, moveShortcut, moveShortcutToGroup, deleteShortcut, restoreShortcut } = useData();
-  const index = shortcuts.findIndex((item) => item.id === shortcut.id);
-  const otherGroups = groups.filter((group) => group.id !== shortcut.groupId);
+function ShortcutMenuItems({ shortcut, onEdit, containerShortcuts, onChanged }: ShortcutMenuProps) {
+  const { folders, moveShortcut, moveShortcutToFolder, deleteShortcut, restoreShortcut } = useData();
+  const operations = useOperations();
+  const index = containerShortcuts.findIndex((item) => item.id === shortcut.id);
+  // 主页网格上的网站可以移进任意文件夹；文件夹里的网站还能移回主页。
+  const candidates = shortcut.folderId === null ? folders : folders.filter((folder) => folder.id !== shortcut.folderId);
   const remove = () => {
     void (async () => {
       try {
         const removed = await deleteShortcut(shortcut.id);
-        notifyRemoved(removed.title, () => void restoreShortcut(removed).catch(notifyError));
+        onChanged();
+        notifyRemoved(operations, shortcutDisplayName(removed), () => {
+          restoreShortcut(removed).then(onChanged).catch((error: unknown) => { notifyError(error); });
+        });
       } catch (error) { notifyError(error); }
     })();
   };
-  const move = (direction: 'up' | 'down') => void moveShortcut(shortcut.id, direction).catch(notifyError);
-  const moveToGroup = (groupId: string) => void moveShortcutToGroup(shortcut.id, groupId).catch(notifyError);
+  const move = async (direction: 'up' | 'down') => {
+    await moveShortcut(shortcut.id, direction);
+    onChanged();
+  };
+  const moveToFolder = async (folderId: string | null) => {
+    await moveShortcutToFolder(shortcut.id, folderId);
+    onChanged();
+  };
 
   return (
     <>
@@ -94,8 +114,9 @@ function ShortcutMenuItems({ shortcut, onEdit }: ShortcutMenuProps) {
         编辑
       </ContextMenuItem>
       <ContextMenuSeparator />
-      <ShortcutPositionItems index={index} total={shortcuts.length} onMove={move} />
-      <MoveToGroupItems groups={otherGroups} onMove={moveToGroup} />
+      <ShortcutPositionItems index={index} total={containerShortcuts.length} onMove={(direction) => { void move(direction).catch(notifyError); }} />
+      <MoveToFolderItems folders={candidates} includeHome={shortcut.folderId !== null}
+        onMove={(folderId) => { void moveToFolder(folderId).catch(notifyError); }} />
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onClick={remove}>
         <Trash2Icon />
@@ -110,23 +131,34 @@ interface ShortcutContextMenuProps extends ShortcutMenuProps {
 }
 
 /** 右键（或长按）网站时弹出的操作菜单。 */
-export function ShortcutContextMenu({ shortcut, onEdit, children }: ShortcutContextMenuProps) {
+export function ShortcutContextMenu({ shortcut, onEdit, containerShortcuts, onChanged, children }: ShortcutContextMenuProps) {
+  const container = useRef<HTMLElement | null>(null);
+  const restoreFocus = () => {
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (dialog && dialog !== container.current) return false;
+    return container.current ?? true;
+  };
   return (
     <ContextMenu>
-      <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ShortcutMenuItems shortcut={shortcut} onEdit={onEdit} />
+      <ContextMenuTrigger className="block w-full" onKeyDown={openContextMenuFromKeyboard}
+        ref={(element) => {
+          if (element) container.current = element.closest<HTMLElement>('[role="dialog"]');
+        }}>
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-52" finalFocus={restoreFocus}>
+        <ShortcutMenuItems shortcut={shortcut} onEdit={onEdit} containerShortcuts={containerShortcuts} onChanged={onChanged} />
       </ContextMenuContent>
     </ContextMenu>
   );
 }
 
 interface ShortcutActionsButtonProps extends ShortcutMenuProps {
-  className?: string;
+  readonly className?: string;
 }
 
 /** 编辑模式下暴露的键盘入口：不需要右键即可打开同一份操作菜单。 */
-export function ShortcutActionsButton({ shortcut, onEdit, className }: ShortcutActionsButtonProps) {
+export function ShortcutActionsButton({ shortcut, onEdit, containerShortcuts, onChanged, className }: ShortcutActionsButtonProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -136,14 +168,14 @@ export function ShortcutActionsButton({ shortcut, onEdit, className }: ShortcutA
             variant="ghost"
             size="icon-xs"
             className={cn(className, 'home-readable-control home-readable-focus')}
-            aria-label={`${shortcut.title} 的操作`}
+            aria-label={`${shortcutDisplayName(shortcut)} 的操作`}
           />
         }
       >
         <MoreHorizontalIcon />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        <ShortcutMenuItems shortcut={shortcut} onEdit={onEdit} />
+        <ShortcutMenuItems shortcut={shortcut} onEdit={onEdit} containerShortcuts={containerShortcuts} onChanged={onChanged} />
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -12,7 +12,7 @@ const BACKGROUND_CASES: readonly BackgroundCase[] = [
 ];
 
 for (const input of BACKGROUND_CASES) {
-  test(`${input.name}：文字、当前分组与编辑/设置图标达到所需对比`, async ({ page }) => {
+  test(`${input.name}：文字、文件夹与编辑/设置图标达到所需对比`, async ({ page }) => {
     await configureBackground(page, input);
     await expectReadableHomepage(page);
   });
@@ -30,16 +30,29 @@ for (const theme of ['light', 'dark'] as const) {
   }
 }
 
+for (const color of ['black', 'white'] as const) {
+  test(`动态配色关闭时，${color === 'black' ? '深色' : '浅色'}照片仍按封面色调整前景`, async ({ page }) => {
+    await configureBackground(page, { name: '关闭动态配色的照片', theme: 'light', background: { kind: 'default' }, dynamic: false });
+    await uploadContrastPhoto(page, { color, mask: 0 });
+    await expectPhotoTreatment(page);
+    await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--home-readable-foreground')))
+      .toBe(color === 'black' ? '#ffffff' : '#000000');
+  });
+}
+
 test('无遮罩白照片：设置/编辑/站点图标达到3:1，搜索文字达到4.5:1', async ({ page }) => {
   await configureBackground(page, { name: '无遮罩照片控件对比', theme: 'light', background: { kind: 'default' }, dynamic: true });
   await uploadContrastPhoto(page, { color: 'white', mask: 0 });
   await expectPhotoControlContrast(page);
 });
 
-test('自定义暗背景下空分组标题、引导和添加操作可读', async ({ page }) => {
+test('自定义暗背景下空主页标题、引导和添加操作可读', async ({ page }) => {
   await configureBackground(page, BACKGROUND_CASES[0]!);
   await page.getByRole('link', { name: '对比度站点', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+  await page.getByRole('button', { name: '常用', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '删除文件夹', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '删除文件夹', exact: true }).click();
   await expect(page.getByText('还没有网站', { exact: true })).toBeVisible();
   await expectReadableHomepage(page, [
     { selector: '[data-slot="empty-title"]' },
@@ -50,14 +63,14 @@ test('自定义暗背景下空分组标题、引导和添加操作可读', async
 
 test('自定义暗背景下编辑模式的操作与添加入口可读', async ({ page }) => {
   await configureBackground(page, BACKGROUND_CASES[0]!);
-  await page.getByRole('button', { name: '编辑分组与网站' }).click();
+  await page.getByRole('button', { name: '编辑网站' }).click();
   await expect(page.getByRole('button', { name: '完成编辑' })).toBeVisible();
   await expectReadableHomepage(page, [
     { selector: 'button[aria-label="完成编辑"]', icon: true },
-    { selector: 'button[aria-label="新建分组"]', icon: true },
+    { selector: 'button[aria-label="新建文件夹"]', icon: true },
     { selector: 'button[aria-label="对比度站点 的操作"]', icon: true },
-    { selector: 'nav[aria-label="分组"] button[aria-current="true"]' },
-    { selector: '[data-testid="shortcut-group-content"] li:last-child button span:last-child' },
-    { selector: '[data-testid="shortcut-group-content"] li:last-child button span:first-child', icon: true },
+    { selector: '[data-folder-tile] > span:last-child' },
+    { selector: '.shortcut-grid li:last-child button span:last-child' },
+    { selector: '.shortcut-grid li:last-child button span:first-child', icon: true },
   ]);
 });

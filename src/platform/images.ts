@@ -8,13 +8,16 @@ import type { NewMediaAsset } from '@/storage/assets';
 
 const IMAGE_QUALITY = 0.9;
 const ANIMATION_CHUNK = 'ANIM';
-const PHOTO_SEED_EDGE = 128;
+const PHOTO_SAMPLE_EDGE = 128;
 const RGBA_CHANNELS = 4;
 const ALPHA_CHANNEL = 3;
 const RED_CHANNEL = 0;
 const GREEN_CHANNEL = 1;
 const BLUE_CHANNEL = 2;
 const OPAQUE_ALPHA = 255;
+const RED_SHIFT = 16;
+const GREEN_SHIFT = 8;
+const BYTE_MASK = 0xff;
 const COLOR_QUANTIZATION = 128;
 const RIFF_HEADER_BYTES = 12;
 const CHUNK_HEADER_BYTES = 8;
@@ -84,8 +87,8 @@ export async function prepareImage(input: {
   }
 }
 
-export async function photoSeed(blob: Blob, sourceWidth: number, sourceHeight: number): Promise<string> {
-  const scale = Math.min(1, PHOTO_SEED_EDGE / Math.max(sourceWidth, sourceHeight));
+async function readPhotoPixels(blob: Blob, sourceWidth: number, sourceHeight: number): Promise<number[]> {
+  const scale = Math.min(1, PHOTO_SAMPLE_EDGE / Math.max(sourceWidth, sourceHeight));
   const width = Math.max(1, Math.round(sourceWidth * scale));
   const height = Math.max(1, Math.round(sourceHeight * scale));
   const image = await createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' });
@@ -94,7 +97,7 @@ export async function photoSeed(blob: Blob, sourceWidth: number, sourceHeight: n
   canvas.height = height;
   const context = canvas.getContext('2d');
   try {
-    if (!context) fail('无法创建照片取色画布');
+    if (!context) fail('无法创建照片颜色分析画布');
     context.drawImage(image, 0, 0, width, height);
     const { data } = context.getImageData(0, 0, width, height);
     const pixels: number[] = [];
@@ -103,10 +106,29 @@ export async function photoSeed(blob: Blob, sourceWidth: number, sourceHeight: n
         pixels.push(argbFromRgb(data[index + RED_CHANNEL]!, data[index + GREEN_CHANNEL]!, data[index + BLUE_CHANNEL]!));
       }
     }
-    const color = Score.score(QuantizerCelebi.quantize(pixels, COLOR_QUANTIZATION))[0];
-    if (color === undefined) fail('照片没有可用于动态配色的不透明颜色');
-    return hexFromArgb(color);
+    return pixels;
   } finally {
     image.close();
   }
+}
+
+export async function photoSeed(blob: Blob, sourceWidth: number, sourceHeight: number): Promise<string> {
+  const pixels = await readPhotoPixels(blob, sourceWidth, sourceHeight);
+  if (pixels.length === 0) fail('照片没有可用于动态配色的不透明颜色');
+  const color = Score.score(QuantizerCelebi.quantize(pixels, COLOR_QUANTIZATION))[0];
+  if (color === undefined) fail('照片没有可用于动态配色的不透明颜色');
+  return hexFromArgb(color);
+}
+
+export async function photoReadabilityColor(blob: Blob, sourceWidth: number, sourceHeight: number): Promise<string> {
+  const pixels = await readPhotoPixels(blob, sourceWidth, sourceHeight);
+  if (pixels.length === 0) fail('照片没有可用于可读性分析的不透明颜色');
+  const sums = [0, 0, 0];
+  for (const pixel of pixels) {
+    sums[RED_CHANNEL] = sums[RED_CHANNEL]! + (pixel >> RED_SHIFT & BYTE_MASK);
+    sums[GREEN_CHANNEL] = sums[GREEN_CHANNEL]! + (pixel >> GREEN_SHIFT & BYTE_MASK);
+    sums[BLUE_CHANNEL] = sums[BLUE_CHANNEL]! + (pixel & BYTE_MASK);
+  }
+  const channel = (index: number) => Math.round(sums[index]! / pixels.length);
+  return hexFromArgb(argbFromRgb(channel(RED_CHANNEL), channel(GREEN_CHANNEL), channel(BLUE_CHANNEL)));
 }

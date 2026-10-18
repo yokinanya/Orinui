@@ -22,9 +22,9 @@ export function useSystemPrefersDark(): boolean {
 
 /** 外观变化时把主题、背景与动态配色同步到根元素。 */
 export function useApplyAppearance(input: ApplyAppearanceInput): void {
-  const { appearance, systemPrefersDark, photoSeed = null, photoUrl = null } = input;
+  const { appearance, systemPrefersDark, photoSeed = null, photoColor = null, photoUrl = null } = input;
 
   useEffect(() => {
-    applyAppearance({ appearance, systemPrefersDark, photoSeed, photoUrl });
-  }, [appearance, systemPrefersDark, photoSeed, photoUrl]);
+    applyAppearance({ appearance, systemPrefersDark, photoSeed, photoColor, photoUrl });
+  }, [appearance, systemPrefersDark, photoSeed, photoColor, photoUrl]);
 }

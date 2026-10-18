@@ -64,3 +64,15 @@ export async function finalizePendingDeletes(db: Database, now = db.now()): Prom
     return next.finalized;
   });
 }
+
+/** 用户确认的整库替换/重置没有网站撤销窗口，立即传播旧身份的永久删除。 */
+export async function tombstoneReplacedShortcuts(db: Database): Promise<void> {
+  const state = await db.sync_state.get('app');
+  if (!state || state.suspended) return;
+  const records = await db.sync_records.where('kind').equals('shortcut').toArray();
+  const clock = new SyncClock(state);
+  const tombstones = records.map((previous) => buildTombstoneRecord({ kind: 'shortcut', entityId: previous.entityId, previous, clock }));
+  if (tombstones.length === 0) return;
+  await db.sync_records.bulkPut(tombstones);
+  await db.sync_state.put(clock.state(state));
+}

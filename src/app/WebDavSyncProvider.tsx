@@ -28,11 +28,21 @@ export function WebDavSyncProvider({ children, db, refreshData }: ProviderProps)
     recoveryRequired: actions.recoveryRequired, resetRemote: actions.resetRemote,
     deleteRemote: () => {
       const permission = status ? requestWebDavPermission(status.url) : Promise.reject(new Error('尚未连接 WebDAV 同步'));
-      return actions.run(async () => { await permission; await service.deleteRemote(); });
+      return actions.run(async () => { await permission; await service.deleteRemote(); }, false, '删除 WebDAV 远端同步库');
     },
     syncNow: () => {
       const permission = status ? requestWebDavPermission(status.url) : Promise.reject(new Error('尚未连接 WebDAV 同步'));
-      return actions.run(async () => { await permission; await service.syncNow(); });
+      return actions.run(async (reportProgress) => { await permission; await service.syncNow(reportProgress); }, false, '同步 WebDAV 数据');
+    },
+    previewSizes: async () => {
+      const endpoint = status?.url;
+      if (!endpoint) return null;
+      let preview: import('@/sync/ports').SyncSizePreview | null = null;
+      const succeeded = await actions.run(async (reportProgress) => {
+        await requestWebDavPermission(endpoint);
+        preview = await service.previewSizes(reportProgress);
+      }, false, '预览 WebDAV 同步容量');
+      return succeeded ? preview : null;
     } };
   return <WebDavSyncContext value={value}>{children}</WebDavSyncContext>;
 }

@@ -12,14 +12,14 @@ export interface ReadabilityTarget {
 const HOMEPAGE_TARGETS: readonly ReadabilityTarget[] = [
   { selector: 'time' }, { selector: 'time + p' },
   { selector: 'section[aria-label="快捷方式"] a > span:last-child' },
-  { selector: 'nav[aria-label="分组"] button[aria-current="true"]' },
-  { selector: 'button[aria-label="编辑分组与网站"]', icon: true },
+  { selector: '[data-folder-tile] > span:last-child' },
+  { selector: 'button[aria-label="编辑网站"]', icon: true },
   { selector: 'button[aria-label="设置"]', icon: true },
 ];
 const PHOTO_TEXT_TARGETS = HOMEPAGE_TARGETS.slice(0, 4);
 const PHOTO_CONTROL_TARGETS: readonly ReadabilityTarget[] = [
   { selector: 'button[aria-label="设置"]', icon: true },
-  { selector: 'button[aria-label="编辑分组与网站"]', icon: true },
+  { selector: 'button[aria-label="编辑网站"]', icon: true },
   { selector: 'section[aria-label="快捷方式"] a > span:first-child', icon: true },
   { selector: 'form[role="search"] input' },
   { selector: 'form[role="search"] svg', icon: true },
@@ -41,32 +41,34 @@ const CONTROL_GLYPH_PIXEL_MIN = 4;
 const CONTROL_PIXELS_PER_CHARACTER = 1.5;
 const REMOVE_GLYPHS = `time, time + p, section[aria-label="快捷方式"] a > span:first-child,
   section[aria-label="快捷方式"] a > span:last-child, form[role="search"] input,
-  main button, button[aria-label="编辑分组与网站"], button[aria-label="完成编辑"],
+  main button, button[aria-label="编辑网站"], button[aria-label="完成编辑"],
   [data-slot="empty-title"], [data-slot="empty-description"],
-  [data-slot="empty"] button, [data-testid="shortcut-group-content"] button span,
+  [data-slot="empty"] button, .shortcut-grid button span,
+  button[aria-label="新建文件夹"], button[aria-label$=" 的操作"],
   button[aria-label="设置"] {
     color: transparent !important; -webkit-text-fill-color: transparent !important;
     text-shadow: none !important; -webkit-text-stroke: 0 !important;
   }
   form[role="search"] input::placeholder { color: transparent !important; -webkit-text-fill-color: transparent !important; }
-  main svg, button[aria-label="编辑分组与网站"] svg,
-  button[aria-label="完成编辑"] svg, button[aria-label="设置"] svg { visibility: hidden !important; }`;
+  main svg, button[aria-label="编辑网站"] svg,
+  button[aria-label="完成编辑"] svg, button[aria-label="新建文件夹"] svg,
+  button[aria-label$=" 的操作"] svg, button[aria-label="设置"] svg { visibility: hidden !important; }`;
 const PHOTO_BACKGROUND_STYLE = `time, time + p, section[aria-label="快捷方式"] a > span:last-child {
   color: transparent !important; -webkit-text-fill-color: transparent !important;
   text-shadow: none !important; -webkit-text-stroke: 0 !important;
 }
-nav[aria-label="分组"] button[aria-current="true"] {
+[data-folder-tile] > span:last-child {
   color: transparent !important; -webkit-text-fill-color: transparent !important;
   text-shadow: none !important; -webkit-text-stroke: 0 !important;
 }
-nav[aria-label="分组"] button[aria-current="true"]::after { background-color: transparent !important; }`;
+`;
 const PHOTO_HALO_STYLE = `time, time + p, section[aria-label="快捷方式"] a > span:last-child {
   color: transparent !important; -webkit-text-fill-color: transparent !important;
 }
-nav[aria-label="分组"] button[aria-current="true"] {
+[data-folder-tile] > span:last-child {
   color: transparent !important; -webkit-text-fill-color: transparent !important;
 }
-nav[aria-label="分组"] button[aria-current="true"]::after { background-color: transparent !important; }`;
+`;
 
 async function readForegrounds(page: Page, targets: readonly ReadabilityTarget[]) {
   return page.evaluate((targets) => {
@@ -239,25 +241,30 @@ async function readPhotoAppearance(page: Page) {
     const surface = document.querySelector('form[role="search"] .home-readable-surface');
     const input = document.querySelector('form[role="search"] input');
     if (!clock || !date || !title || !surface || !input) throw new Error('照片主页缺少文字或搜索表面');
+    const foreground = getComputedStyle(document.documentElement).getPropertyValue('--home-readable-foreground').trim();
     const read = (element: Element) => {
       const style = getComputedStyle(element);
       return { color: style.color, background: style.backgroundColor, radius: style.borderRadius,
         shadow: style.textShadow, blur: style.backdropFilter };
     };
-    return { clock: read(clock), date: read(date), title: read(title), surface: read(surface), input: read(input) };
+    return { foreground, clock: read(clock), date: read(date), title: read(title), surface: read(surface), input: read(input) };
   });
 }
 
 function expectPhotoTypography(appearance: Awaited<ReturnType<typeof readPhotoAppearance>>) {
+  const isLight = appearance.foreground === '#000000';
+  const foreground = isLight ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
+  const searchSurface = isLight ? 'rgba(250, 248, 245, 0.72)' : 'rgba(14, 16, 20, 0.58)';
+  expect(appearance.foreground).toMatch(/^#(?:000000|ffffff)$/);
   for (const text of [appearance.clock, appearance.date, appearance.title]) {
     expect(text.color).toBe('rgb(255, 255, 255)');
     expect(text.background).toBe('rgba(0, 0, 0, 0)');
     expect(text.radius).toBe('0px');
     expect(text.shadow).not.toBe('none');
   }
-  expect(appearance.surface.background).toBe('rgba(14, 16, 20, 0.58)');
+  expect(appearance.surface.background).toBe(searchSurface);
   expect(appearance.surface.blur).toContain('blur(');
-  expect(appearance.input.color).toBe('rgb(255, 255, 255)');
+  expect(appearance.input.color).toBe(foreground);
 }
 
 export async function expectPhotoTreatment(page: Page) {
@@ -280,7 +287,6 @@ export async function expectPhotoControlContrast(page: Page) {
     const minimumPixels = point.icon
       ? CONTROL_GLYPH_PIXEL_MIN
       : Math.max(MINIMUM_HALO_PIXELS, Math.ceil(point.text.length * CONTROL_PIXELS_PER_CHARACTER));
-    expect(point.foreground).toEqual([255, 255, 255]);
     expect(measured.contrastingPixels,
       `${point.selector}: 实际控件像素达到 ${target}:1 的数量 ${measured.contrastingPixels}/${measured.changedPixels}`)
       .toBeGreaterThanOrEqual(minimumPixels);

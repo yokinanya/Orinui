@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import './home-readability.css';
 @import './settings-panel.css';
+@import './home-layout.css';
 
 /*
  * shadcn/ui 的 Base UI 组件依赖以下变体：
@@ -78,6 +79,7 @@
  * 这里的值是取色失败或未启用动态色时的静态回退。
  */
 :root {
+  --layout-sidebar-width: 12rem;
   --home-content-enter-duration: 180ms;
   --home-content-enter-offset: 5px;
   --home-content-enter-easing: cubic-bezier(0.22, 1, 0.36, 1);
@@ -237,6 +239,17 @@ body {
 @keyframes home-content-fade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* 卡片底色随 --accent 动态变化；透出面板自身表面，避免透明底被视作纯黑块。 */
+@keyframes motion2 {
+  from { background-color: var(--popover); }
+  to { background-color: color-mix(in oklab, var(--accent) 100%, transparent); }
+}
+
+/* 照片壁纸上的分组标签在描边之外补一层柔光，抵消浅色壁纸的局部反差。 */
+[data-home-photo] .home-readable-group {
+  text-shadow: var(--home-readable-text-shadow);
 }
 
 .motion-home-enter {

@@ -3,6 +3,7 @@ import { countWebDavData, sealWebDavVault, verifyWebDavVault } from '@/sync/webd
 import type { WebDavConnectionDependencies, WebDavConnectionPlan, WebDavPrepareInput,
   WebDavConfiguration } from '@/sync/webdav-types';
 import type { WebDavRemote } from '@/platform/webdav-store';
+import type { SyncProgressReporter } from '@/sync/ports';
 import { WEBDAV_CONFIGURATION_VERSION } from '@/domain/webdav/configuration';
 import { WebDavRecoveryRequiredError } from '@/sync/webdav-recovery-required';
 
@@ -12,6 +13,33 @@ export interface PreparedConnection {
   readonly key: CryptoKey;
   readonly remote: WebDavRemote;
   readonly ciphertext: Uint8Array;
+}
+
+interface VaultMaterial {
+  readonly vaultId: string;
+  readonly key: CryptoKey;
+  readonly ciphertext: Uint8Array;
+  readonly recoveryKey?: string;
+}
+
+async function prepareVaultMaterial(deps: WebDavConnectionDependencies, input: WebDavPrepareInput,
+  vault: Awaited<ReturnType<WebDavRemote['readVault']>>): Promise<VaultMaterial> {
+  const material = await prepareKey(deps, { existing: vault !== null, recoveryKey: input.recoveryKey });
+  const vaultId = vault?.vaultId ?? deps.createId();
+  const ciphertext = vault?.ciphertext ?? await sealWebDavVault({ crypto: deps.crypto, key: material.key, vaultId });
+  await verifyWebDavVault({ crypto: deps.crypto, key: material.key, vaultId, ciphertext });
+  return { vaultId, key: material.key, ciphertext, recoveryKey: material.recoveryKey };
+}
+
+async function readConnectionCounts(input: { readonly deps: WebDavConnectionDependencies; readonly remote: WebDavRemote;
+  readonly vaultId: string; readonly key: CryptoKey; readonly vaultExists: boolean;
+  readonly local: Promise<Awaited<ReturnType<WebDavConnectionDependencies['local']['count']>>> }) {
+  const remoteCount = input.vaultExists
+    ? countWebDavData({ objects: input.remote.objects, crypto: input.deps.crypto, key: input.key,
+      vaultId: input.vaultId, decodeSnapshot: input.deps.decodeSnapshot })
+    : Promise.resolve({ folders: 0, shortcuts: 0, assets: 0, assetBytes: 0 });
+  const remoteBytes = input.vaultExists ? input.remote.measureVaultBytes(input.vaultId) : Promise.resolve(0);
+  return Promise.all([remoteCount, input.local, remoteBytes]);
 }
 
 async function prepareKey(deps: WebDavConnectionDependencies,
@@ -28,10 +56,10 @@ export async function prepareConnection(deps: WebDavConnectionDependencies, inpu
   const credentials = parseWebDavCredentials(input.credentials);
   // This call must remain before the first await, within the user's click gesture.
   const permission = deps.requestPermission(credentials.url);
-  const [localConnection, storedConfiguration] = await Promise.all([
-    deps.local.read(), deps.settings.read(), permission,
-  ]).then(([local, settings]) => [local, settings] as const);
-  if (localConnection || storedConfiguration) throw new Error('请先断开当前同步库');
+  const [localConnection, storedConfiguration, otherProvider] = await Promise.all([
+    deps.local.read(), deps.settings.read(), deps.hasOtherProviderConfiguration?.() ?? Promise.resolve(false), permission,
+  ]);
+  if (localConnection || storedConfiguration || otherProvider) throw new Error('请先断开当前同步库');
   const remote = deps.remote(credentials, input.consistencyMode);
   const localCountsPromise = deps.local.count();
   const vault = await remote.readVault();
@@ -39,21 +67,15 @@ export async function prepareConnection(deps: WebDavConnectionDependencies, inpu
     await localCountsPromise;
     throw new WebDavRecoveryRequiredError({ credentials, consistencyMode: input.consistencyMode, ...vault });
   }
-  const material = await prepareKey(deps, { existing: vault !== null, recoveryKey: input.recoveryKey });
-  const vaultId = vault?.vaultId ?? deps.createId();
-  const ciphertext = vault?.ciphertext ?? await sealWebDavVault({ crypto: deps.crypto, key: material.key, vaultId });
-  await verifyWebDavVault({ crypto: deps.crypto, key: material.key, vaultId, ciphertext });
-  const [remoteCounts, localCounts] = await Promise.all([
-    vault ? countWebDavData({ remote, crypto: deps.crypto, key: material.key, vaultId, decodeSnapshot: deps.decodeSnapshot })
-      : Promise.resolve({ groups: 0, shortcuts: 0, assets: 0 }),
-    localCountsPromise,
-  ]);
-  return { remote, key: material.key, ciphertext,
-    configuration: { schemaVersion: WEBDAV_CONFIGURATION_VERSION, consistencyMode: input.consistencyMode,
-      credentials, vaultId, deviceId: deps.createId() },
-    plan: { mode: vault ? 'join' : 'create', consistencyMode: input.consistencyMode,
-      url: credentials.url, username: credentials.username,
-      recoveryKey: material.recoveryKey, local: localCounts, remote: remoteCounts } };
+  const material = await prepareVaultMaterial(deps, input, vault);
+  const [remoteCounts, localCounts, remoteObjectBytes] = await readConnectionCounts({ deps, remote,
+    vaultId: material.vaultId, key: material.key, vaultExists: vault !== null, local: localCountsPromise });
+  const configuration: WebDavConfiguration = { schemaVersion: WEBDAV_CONFIGURATION_VERSION, consistencyMode: input.consistencyMode,
+    credentials, vaultId: material.vaultId, deviceId: deps.createId() };
+  return { remote, key: material.key, ciphertext: material.ciphertext, configuration,
+    plan: { mode: vault ? 'join' as const : 'create' as const, consistencyMode: input.consistencyMode,
+      url: credentials.url, username: credentials.username, recoveryKey: material.recoveryKey,
+      local: localCounts, remote: remoteCounts, remoteObjectBytes } };
 }
 
 async function checkPreparedVault(deps: WebDavConnectionDependencies, prepared: PreparedConnection): Promise<void> {
@@ -63,12 +85,15 @@ async function checkPreparedVault(deps: WebDavConnectionDependencies, prepared: 
   await verifyWebDavVault({ crypto: deps.crypto, key, ...observed });
 }
 
-export async function connectPrepared(deps: WebDavConnectionDependencies, prepared: PreparedConnection): Promise<void> {
+export async function connectPrepared(deps: WebDavConnectionDependencies, prepared: PreparedConnection,
+  reportProgress?: SyncProgressReporter): Promise<void> {
   const { configuration, key, remote } = prepared;
   await deps.checkPermission(configuration.credentials.url);
   await deps.lock.runExclusive(deps.local.scope, async () => {
     const [localConnection, storedConfiguration] = await Promise.all([deps.local.read(), deps.settings.read()]);
-    if (localConnection || storedConfiguration) throw new Error('本机连接在确认期间已变化，请重新检查');
+    if (localConnection || storedConfiguration || await deps.hasOtherProviderConfiguration?.()) {
+      throw new Error('本机同步提供方在确认期间已变化，请重新检查');
+    }
     if (prepared.plan.mode === 'join') await checkPreparedVault(deps, prepared);
     await remote.prepareCollections(configuration);
     await remote.verifyConditions(configuration);
@@ -76,5 +101,5 @@ export async function connectPrepared(deps: WebDavConnectionDependencies, prepar
     await deps.local.initialize({ vaultId: configuration.vaultId, deviceId: configuration.deviceId, key });
     await deps.settings.write(configuration);
   });
-  await deps.synchronize(remote.objects, configuration);
+  await deps.synchronize(remote.objects, configuration, reportProgress);
 }

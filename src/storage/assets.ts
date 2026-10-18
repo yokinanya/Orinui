@@ -1,6 +1,7 @@
 import type { MediaAsset } from '@/domain/asset';
 import { fail } from '@/domain/errors';
 import { newId } from '@/domain/id';
+import { normalizeOptionalAssetName } from '@/domain/text';
 
 import { SETTINGS_ID, type Database, type SettingsRow } from '@/storage/db';
 import type { Shortcut } from '@/domain/shortcut';
@@ -13,7 +14,9 @@ export interface NewMediaAsset {
   readonly height: number;
   readonly blob: Blob;
   readonly sourceUrl?: string | null;
+  readonly name?: string | null;
   readonly motion?: MediaAsset['motion'];
+  readonly createdAt?: number;
 }
 
 /** 替换时只释放独占的旧资源；同一事务失败会恢复旧数据。 */
@@ -41,6 +44,8 @@ export async function createMediaAsset(db: Database, input: NewMediaAsset): Prom
       height: input.height,
       blob: input.blob,
       sourceUrl: input.sourceUrl ?? null,
+      name: input.name ?? null,
+      createdAt: input.createdAt ?? Date.now(),
       ...(input.motion ? { motion: input.motion } : {}),
     };
 
@@ -121,6 +126,50 @@ export async function getMediaAsset(db: Database, id: string): Promise<MediaAsse
   return db.assets.get(id);
 }
 
+export async function listBackgroundAssets(db: Database): Promise<MediaAsset[]> {
+  return db.assets.where('kind').equals('background').toArray();
+}
+
+/** 素材库按创建顺序稳定展示，不依赖主键排序。 */
+function newestFirst(left: MediaAsset, right: MediaAsset): number {
+  return (right.createdAt ?? 0) - (left.createdAt ?? 0);
+}
+
+export async function listLibraryAssets(db: Database): Promise<MediaAsset[]> {
+  return (await listBackgroundAssets(db)).toSorted(newestFirst);
+}
+
+export async function renameBackgroundAsset(db: Database, id: string, name: string): Promise<void> {
+  const normalized = normalizeOptionalAssetName(name) || null;
+  await db.transaction('rw', db.assets, async () => {
+    const asset = await db.assets.get(id);
+    if (!asset || asset.kind !== 'background') fail('壁纸素材不存在');
+    await db.assets.update(id, { name: normalized });
+  });
+}
+
+export async function moveBackgroundAsset(db: Database, input: {
+  readonly id: string;
+  readonly direction: -1 | 1;
+}): Promise<boolean> {
+  return db.transaction('rw', db.assets, async () => {
+    const ordered = (await listBackgroundAssets(db)).toSorted(newestFirst);
+    const current = ordered.find((asset) => asset.id === input.id);
+    if (!current) fail('壁纸素材不存在');
+    const target = ordered[ordered.indexOf(current) + input.direction];
+    if (!target) return false;
+    await swapCreatedAt(db, current, target);
+    return true;
+  });
+}
+
+/** 排序用相邻两项的时间戳互换，不需要额外字段，也不破坏已保存的备份与同步结构。 */
+async function swapCreatedAt(db: Database, left: MediaAsset, right: MediaAsset): Promise<void> {
+  const leftTime = left.createdAt ?? 0;
+  await db.assets.update(left.id, { createdAt: right.createdAt ?? 0 });
+  await db.assets.update(right.id, { createdAt: leftTime });
+}
+
 export async function deleteMediaAsset(db: Database, id: string): Promise<void> {
   return db.transaction('rw', db.assets, async () => {
     await db.assets.delete(id);
@@ -155,6 +204,7 @@ export async function pruneUnreferencedAssets(db: Database): Promise<number> {
 
     const orphans: string[] = [];
     await db.assets.each((asset) => {
+      if (asset.kind === 'background') return;
       if (!referenced.has(asset.id)) orphans.push(asset.id);
     });
 
@@ -162,5 +212,19 @@ export async function pruneUnreferencedAssets(db: Database): Promise<number> {
       await db.assets.bulkDelete(orphans);
     }
     return orphans.length;
+  });
+}
+
+export async function reorderBackgroundAsset(db: Database, input: { readonly id: string; readonly targetId: string }): Promise<void> {
+  await db.transaction('rw', db.assets, async () => {
+    const ordered = await listLibraryAssets(db);
+    const from = ordered.findIndex(({ id }) => id === input.id);
+    const to = ordered.findIndex(({ id }) => id === input.targetId);
+    if (from < 0 || to < 0) fail('壁纸素材不存在');
+    const moved = [...ordered];
+    const [asset] = moved.splice(from, 1);
+    moved.splice(to, 0, asset!);
+    const baseTime = Date.now();
+    await Promise.all(moved.map((item, index) => db.assets.update(item.id, { createdAt: baseTime - index })));
   });
 }

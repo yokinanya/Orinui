@@ -19,7 +19,6 @@ export async function launchAuditProfile({ extensionPath, profilePath, downloads
       `--load-extension=${extensionPath}`,
       '--ignore-certificate-errors',
       '--allow-insecure-localhost',
-      ...(headed ? ['--window-position=-32000,-32000'] : []),
     ],
   });
   const page = context.pages()[0] ?? await context.newPage();
@@ -56,7 +55,8 @@ export async function createWebDavVault(page, url) {
   await page.locator('#webdav-url').fill(url);
   await page.locator('#webdav-username').fill(FIXTURE_USERNAME);
   await page.locator('#webdav-password').fill(FIXTURE_PASSWORD);
-  await page.getByRole('button', { name: '检查连接', exact: true }).click();
+  await page.locator('#webdav-url').locator('xpath=../..')
+    .getByRole('button', { name: '检查连接', exact: true }).click();
   await expect(page.getByRole('heading', { name: '首次合并预览' })).toBeVisible({ timeout: 30_000 });
   const keyInput = page.locator('#webdav-new-recovery-key');
   await expect(keyInput).toHaveValue(/.+/);
@@ -74,7 +74,8 @@ export async function joinWebDavVault(page, url, recoveryKey) {
   await page.locator('#webdav-username').fill(FIXTURE_USERNAME);
   await page.locator('#webdav-password').fill(FIXTURE_PASSWORD);
   await page.locator('#webdav-recovery-key').fill(recoveryKey);
-  await page.getByRole('button', { name: '检查连接', exact: true }).click();
+  await page.locator('#webdav-url').locator('xpath=../..')
+    .getByRole('button', { name: '检查连接', exact: true }).click();
   await expect(page.getByRole('heading', { name: '首次合并预览' })).toBeVisible({ timeout: 30_000 });
   await page.getByRole('button', { name: '确认并启用', exact: true }).click();
   await waitForConnection(page);
@@ -83,7 +84,7 @@ export async function joinWebDavVault(page, url, recoveryKey) {
 async function waitForConnection(page) {
   const panel = page.locator('section[aria-labelledby="webdav-connected-title"]');
   await expect(panel).toBeVisible({ timeout: 60_000 });
-  const button = panel.getByRole('button', { name: /立即同步|处理中/ });
+  const button = panel.getByRole('button', { name: /立即同步|处理中/ }).first();
   await expect(button).toBeVisible({ timeout: 60_000 });
   await expect(button).toBeEnabled({ timeout: 60_000 });
   await manuallySync(page);
@@ -142,7 +143,7 @@ export async function readMotionState(page) {
 export async function manuallySync(page) {
   await openSettingsTab(page, '数据');
   const panel = page.locator('section[aria-labelledby="webdav-connected-title"]');
-  const button = panel.getByRole('button', { name: /立即同步|处理中/ });
+  const button = panel.getByRole('button', { name: /立即同步|处理中/ }).first();
   await expect(button).toBeEnabled({ timeout: 60_000 });
   const previousRunId = (await readMotionState(page)).syncState?.lastSync?.runId ?? null;
   const startedAt = Date.now();
@@ -171,42 +172,37 @@ export async function assertPlaying({ page, mime }) {
 }
 
 export async function assertBackgroundPause({ context, page }) {
-  const pageSession = await context.newCDPSession(page);
-  await pageSession.send('Emulation.setFocusEmulationEnabled', { enabled: false });
   const before = await page.locator('video').first().evaluate((video) => video.currentTime);
   const otherPage = await context.newPage();
-  const otherSession = await context.newCDPSession(otherPage);
-  await otherSession.send('Emulation.setFocusEmulationEnabled', { enabled: false });
   try {
     await otherPage.goto('data:text/html,<title>visibility audit</title>');
     await otherPage.bringToFront();
     try {
-      await page.waitForFunction(() => document.visibilityState === 'hidden', null, { timeout: 15_000 });
+      await page.waitForFunction(() => document.visibilityState === 'hidden' || !document.hasFocus(), null, { timeout: 15_000 });
     } catch (error) {
       const states = await Promise.all([page, otherPage].map((tab) => tab.evaluate(() => ({
         visibility: document.visibilityState, focused: document.hasFocus(), url: location.href,
       }))));
-      if (states.every(({ visibility }) => visibility === 'visible')) {
-        return { verified: false, reason: '两份 headed Chromium 页面在真实标签切换后仍报告 visible', states,
+      if (states[0].visibility === 'visible' && states[0].focused) {
+        return { verified: false, reason: '前台页面切换后仍报告可见且有焦点', states,
           timeout: error instanceof Error ? error.message : String(error) };
       }
       throw new Error(`真实页面切换产生了意外状态：${JSON.stringify(states)}`, { cause: error });
     }
     await expect.poll(() => page.locator('video').first().evaluate((video) => video.paused)).toBe(true);
+    const blurred = await page.evaluate(() => ({ visibility: document.visibilityState, focused: document.hasFocus() }));
     const pausedAt = await page.locator('video').first().evaluate((video) => video.currentTime);
     await page.waitForTimeout(350);
     const stillPausedAt = await page.locator('video').first().evaluate((video) => video.currentTime);
     if (Math.abs(stillPausedAt - pausedAt) > 0.05) throw new Error('页面隐藏后视频仍在播放');
     await page.bringToFront();
-    await page.waitForFunction(() => document.visibilityState === 'visible', null, { timeout: 15_000 });
+    await page.waitForFunction(() => document.visibilityState === 'visible' && document.hasFocus(), null, { timeout: 15_000 });
     await expect.poll(() => page.locator('video').first().evaluate((video) => !video.paused)).toBe(true);
     const resumedAt = await page.locator('video').first().evaluate((video) => video.currentTime);
     if (resumedAt < before) throw new Error('页面恢复后视频没有从暂停位置继续');
-    return { verified: true, visibilityChanged: true, pausedAt, stillPausedAt, resumedAt };
+    return { verified: true, blurred, pausedAt, stillPausedAt, resumedAt };
   } finally {
     await page.bringToFront();
-    await otherSession.detach();
-    await pageSession.detach();
     await otherPage.close();
   }
 }

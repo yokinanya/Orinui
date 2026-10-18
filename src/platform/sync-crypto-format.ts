@@ -13,6 +13,7 @@ const HEX_RADIX = 16;
 const PACKET_MAGIC = new TextEncoder().encode('ORINUI01');
 const HEADER_BYTES = PACKET_MAGIC.length + SYNC_IV_BYTES;
 const TAG_BYTES = SYNC_TAG_BITS / SYNC_BITS_PER_BYTE;
+export const SYNC_ENVELOPE_OVERHEAD_BYTES = HEADER_BYTES + TAG_BYTES;
 
 export function encodeRecoveryKey(bytes: Uint8Array): string {
   const encoded = btoa(String.fromCharCode(...bytes));

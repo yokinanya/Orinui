@@ -1,10 +1,10 @@
-import type { SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncSnapshot } from '@/domain/sync';
 import { SyncCoordinatorError } from '@/sync/errors';
 import type { SyncRunContext } from '@/sync/run-context';
 import { parsePublishReceipt } from '@/domain/sync/object-validation';
 
 export async function publishSyncSnapshot(context: SyncRunContext, input: {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly expectedRevision: string | null;
 }): Promise<string> {
   const { crypto, codec, local, objects } = context.dependencies;

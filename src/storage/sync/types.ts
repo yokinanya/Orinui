@@ -1,6 +1,6 @@
 import type { MediaAsset } from '@/domain/asset';
 import type { SearchEngine } from '@/domain/search-engines';
-import type { SyncAsset, SyncEntityType, SyncGroup, SyncRegister, SyncSettings, SyncShortcut, SyncTombstone } from '@/domain/sync/types';
+import type { SyncAsset, SyncEntityType, SyncFolder, SyncRegister, SyncSettings, SyncShortcut, SyncTombstone } from '@/domain/sync/types';
 import type { SyncRunRecord, SyncSuccessRecord } from '@/sync/types';
 
 export interface SyncStateRow {
@@ -9,7 +9,6 @@ export interface SyncStateRow {
   readonly deviceId: string;
   readonly clock: number;
   readonly generation: number;
-  readonly defaultGroupId: SyncRegister<string>;
   readonly suspended: boolean;
   readonly hasAcceptedSnapshot?: boolean;
   readonly lastSync?: SyncRunRecord;
@@ -28,7 +27,7 @@ interface SyncRecordBase<K extends SyncRecordKind, V> {
 }
 
 export type SyncEntityRecordRow =
-  | SyncRecordBase<'group', SyncGroup>
+  | SyncRecordBase<'folder', SyncFolder>
   | SyncRecordBase<'shortcut', SyncShortcut>
   | (SyncRecordBase<'asset', Omit<SyncAsset, 'sha256'>> & { readonly sha256?: string })
   | SyncRecordBase<'settings', SyncSettings>

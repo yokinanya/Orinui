@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, type Database } from '@/storage/db';
+import { createFolder } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
 import { setPhotoBackground } from '@/storage/image-operations';
 import { readSettings } from '@/storage/settings';
@@ -7,21 +8,22 @@ import { createShortcut } from '@/storage/shortcuts';
 import { clearImageSourceUrl } from '@/storage/source-metadata';
 
 let db: Database;
-let groupId: string;
+let folderId: string;
 const sourceUrl = 'https://images.example/icon.png';
 const image = (kind: 'icon' | 'background') => ({ kind, width: 10, height: 10, mime: 'image/png' as const,
   blob: new Blob(['pixels'], { type: 'image/png' }), sourceUrl });
 
 beforeEach(async () => {
   db = createDatabase(`source-metadata-${crypto.randomUUID()}`);
-  groupId = (await ensureInitialized(db)).defaultGroup.id;
+  await ensureInitialized(db);
+  folderId = (await createFolder(db, '测试')).id;
 });
 afterEach(async () => { db.close(); await db.delete(); });
 
 describe('图片来源元数据清除', () => {
   it('清除共享图标来源并保留图片 Blob 与全部资源引用', async () => {
-    const first = await createShortcut(db, { groupId, title: '一', url: 'one.example', image: image('icon'), iconSourceUrl: sourceUrl });
-    const second = await createShortcut(db, { groupId, title: '二', url: 'two.example', icon: first.icon, iconSourceUrl: sourceUrl });
+    const first = await createShortcut(db, { folderId, title: '一', url: 'one.example', image: image('icon'), iconSourceUrl: sourceUrl });
+    const second = await createShortcut(db, { folderId, title: '二', url: 'two.example', icon: first.icon, iconSourceUrl: sourceUrl });
     const before = await db.assets.get(first.icon.kind === 'asset' ? first.icon.assetId : '');
     if (!before) throw new Error('测试图片未创建');
 

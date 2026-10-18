@@ -1,26 +1,25 @@
 import type { AppSettings } from '@/domain/settings';
 import type { MediaAsset } from '@/domain/asset';
 import type { Shortcut } from '@/domain/shortcut';
-import type { SyncEntityType, SyncSnapshotV1, SyncTombstone } from '@/domain/sync';
+import type { SyncEntityType, SyncSnapshot, SyncTombstone } from '@/domain/sync';
 import type { MaterializedSyncData } from '@/domain/sync';
-import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow, SyncTombstoneRecordRow } from '@/storage/sync/types';
+import type { SyncEntityRecordRow, SyncRecordRow, SyncTombstoneRecordRow } from '@/storage/sync/types';
 import { recordId } from '@/storage/sync/builders';
 import { fail } from '@/domain/errors';
 
 export interface AppliedRows {
-  readonly groups: MaterializedSyncData['groups'];
+  readonly folders: MaterializedSyncData['folders'];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
   readonly assets: readonly MediaAsset[];
   readonly records: readonly SyncRecordRow[];
-  readonly defaultGroupId: SyncStateRow['defaultGroupId'];
 }
 
 function tombstoneRow(tombstone: SyncTombstone): SyncTombstoneRecordRow {
   return { id: recordId(tombstone.entityType, tombstone.id), kind: 'tombstone', entityId: tombstone.id, tombstone };
 }
 
-function tombstoneMap(snapshot: SyncSnapshotV1): ReadonlyMap<string, SyncTombstone> {
+function tombstoneMap(snapshot: SyncSnapshot): ReadonlyMap<string, SyncTombstone> {
   return new Map(snapshot.tombstones.map((item) => [recordId(item.entityType, item.id), item]));
 }
 
@@ -37,7 +36,13 @@ function pendingShortcuts(records: readonly SyncRecordRow[], tombstones: Readonl
 
 function assertTombstonesRetained(records: readonly SyncRecordRow[], tombstones: ReadonlyMap<string, SyncTombstone>): void {
   for (const record of records) {
-    if (record.kind === 'tombstone' && !tombstones.has(record.id)) fail(`同步合并结果缺少本地删除墓碑：${record.entityId}`);
+    if (record.kind !== 'tombstone') continue;
+    const received = tombstones.get(record.id);
+    if (!received) fail(`同步合并结果缺少本地删除墓碑：${record.entityId}`);
+    const prior = record.tombstone;
+    if (received.clock < prior.clock || (received.clock === prior.clock && received.deviceId < prior.deviceId)) {
+      fail(`同步合并结果回退本地删除墓碑版本：${record.entityId}`);
+    }
   }
 }
 
@@ -56,14 +61,14 @@ function pendingAssetIds(shortcuts: ReadonlyMap<string, Extract<SyncEntityRecord
 }
 
 interface CreateLiveRecordsInput {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly pending: ReadonlyMap<string, Extract<SyncEntityRecordRow, { kind: 'shortcut' }>>;
   readonly allAssets: ReadonlyMap<string, MediaAsset>;
   readonly cachedAssetIds: ReadonlySet<string>;
 }
 
 function createLiveRecords({ snapshot, pending, allAssets, cachedAssetIds }: CreateLiveRecordsInput): SyncEntityRecordRow[] {
-  const groups: SyncEntityRecordRow[] = snapshot.groups.map((value) => ({ id: recordId('group', value.id), kind: 'group', entityId: value.id, value }));
+  const folders: SyncEntityRecordRow[] = snapshot.folders.map((value) => ({ id: recordId('folder', value.id), kind: 'folder', entityId: value.id, value }));
   const shortcuts: SyncEntityRecordRow[] = snapshot.shortcuts.map((value) => {
     const prior = pending.get(value.id);
     return { id: recordId('shortcut', value.id), kind: 'shortcut', entityId: value.id, value,
@@ -80,15 +85,15 @@ function createLiveRecords({ snapshot, pending, allAssets, cachedAssetIds }: Cre
   const engines: SyncEntityRecordRow[] = snapshot.settings.customEngines.map((value) => ({
     id: recordId('custom-engine', value.value.id), kind: 'custom-engine', entityId: value.value.id, value,
   }));
-  return [...groups, ...shortcuts, ...assets, settings, ...engines];
+  return [...folders, ...shortcuts, ...assets, settings, ...engines];
 }
 
-function createTombstoneRecords(snapshot: SyncSnapshotV1): SyncTombstoneRecordRow[] {
+function createTombstoneRecords(snapshot: SyncSnapshot): SyncTombstoneRecordRow[] {
   return snapshot.tombstones.map(tombstoneRow);
 }
 
 export function buildAppliedRows(input: {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly materialized: MaterializedSyncData;
   readonly existingRecords: readonly SyncRecordRow[];
   readonly incomingAssets: ReadonlyMap<string, MediaAsset>;
@@ -103,6 +108,7 @@ export function buildAppliedRows(input: {
   }
   const shortcuts = input.materialized.shortcuts.filter(({ id }) => !pending.has(id));
   const currentAssets = activeAssetIds(shortcuts, input.materialized.settings);
+  for (const asset of input.materialized.assets) if (asset.kind === 'background') currentAssets.add(asset.id);
   const retainedIds = new Set([...pendingAssetIds(pending)].filter((id) => !currentAssets.has(id)));
   const liveRecords = createLiveRecords({ snapshot: input.snapshot, pending, allAssets: input.incomingAssets, cachedAssetIds: retainedIds });
   const records: SyncRecordRow[] = [...liveRecords, ...createTombstoneRecords(input.snapshot)];
@@ -111,6 +117,5 @@ export function buildAppliedRows(input: {
     if (!asset) fail(`同步图片内容缺失：${id}`);
     return asset;
   });
-  return { groups: input.materialized.groups, shortcuts, settings: input.materialized.settings, assets, records,
-    defaultGroupId: input.snapshot.defaultGroupId };
+  return { folders: input.materialized.folders, shortcuts, settings: input.materialized.settings, assets, records };
 }

@@ -4,17 +4,20 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { FieldDescription, FieldError, FieldGroup } from '@/components/ui/field';
+import { useOperations } from '@/app/operations';
 
 export function ResetDataPanel() {
   const { resetLocalData } = useData();
+  const operations = useOperations();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const reset = async () => {
     setBusy(true);
     setError(null);
-    try { await resetLocalData(); setOpen(false); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+    const task = operations.begin('重置本地数据', '清除本地数据');
+    try { await resetLocalData(); setOpen(false); task.succeed('本地数据已重置'); }
+    catch (cause) { task.fail(cause); setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
   return (
@@ -26,7 +29,7 @@ export function ResetDataPanel() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>永久删除本地数据？</AlertDialogTitle>
-            <AlertDialogDescription>本机网站、分组、背景和设置都会删除，并恢复空白的「常用」分组。</AlertDialogDescription>
+            <AlertDialogDescription>本机网站、文件夹、背景和设置都会删除，并恢复为空白主页。</AlertDialogDescription>
           </AlertDialogHeader>
           {error && <FieldError role="alert">{error}</FieldError>}
           <AlertDialogFooter>

@@ -1,6 +1,7 @@
 import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, type Database } from '@/storage/db';
+import { createFolder } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
 import { createShortcut, updateShortcut } from '@/storage/shortcuts';
 import { createBackupSnapshot } from '@/storage/backup';
@@ -18,21 +19,22 @@ beforeEach(() => { db = createDatabase(`sync-vault-${crypto.randomUUID()}`); });
 afterEach(async () => { await db.delete(); });
 
 async function setup() {
-  const initial = await ensureInitialized(db);
-  const shortcut = await createShortcut(db, { groupId: initial.defaultGroup.id, title: '原网站', url: 'https://example.com' });
+  await ensureInitialized(db);
+  const folder = await createFolder(db, '常用');
+  const shortcut = await createShortcut(db, { folderId: folder.id, title: '原网站', url: 'https://example.com' });
   const material = await cipher.createKey();
   await initializeSyncVault(db, { vaultId: 'shared-vault', deviceId: 'device-a', key: material.key });
-  return { initial, shortcut, material };
+  return { folder, shortcut, material };
 }
 
 describe('local sync vault foundation', () => {
   it('seeds stable IDs without including keys or sync metadata in ordinary ZIP backups', async () => {
-    const { initial, shortcut } = await setup();
+    const { folder, shortcut } = await setup();
     const exported = await exportSyncSnapshot(db, cipher);
-    expect(exported.snapshot.groups.map(({ id }) => id)).toContain(initial.defaultGroup.id);
+    expect(exported.snapshot.folders.map(({ id }) => id)).toContain(folder.id);
     expect(exported.snapshot.shortcuts[0]?.id).toBe(shortcut.id);
     const backup = await createBackupSnapshot(db);
-    expect(Object.keys(backup)).toEqual(['formatVersion', 'exportedAt', 'groups', 'shortcuts', 'settings', 'assets']);
+    expect(Object.keys(backup)).toEqual(['formatVersion', 'exportedAt', 'folders', 'shortcuts', 'settings', 'assets']);
     expect(JSON.stringify(backup)).not.toContain('sync_records');
   });
 
@@ -62,7 +64,7 @@ describe('local sync vault foundation', () => {
 });
 
 describe('local sync vault lifecycle', () => {
-  it('plans another empty device without keeping its generated default group', async () => {
+  it('plans another empty device onto the existing library without a placeholder folder', async () => {
     const { material } = await setup();
     const remote = (await exportSyncSnapshot(db, cipher)).snapshot;
     const other = createDatabase(`sync-join-${crypto.randomUUID()}`);
@@ -72,8 +74,7 @@ describe('local sync vault lifecycle', () => {
       const local = (await exportSyncSnapshot(other, cipher)).snapshot;
       const joined = planSyncJoin({ local, remotes: [remote] });
       expect(joined.generation).toBeGreaterThan(local.generation);
-      expect(joined.groups.map(({ id }) => id)).toEqual(remote.groups.map(({ id }) => id));
-      expect(joined.defaultGroupId.value).toBe(remote.defaultGroupId.value);
+      expect(joined.folders.map(({ id }) => id)).toEqual(remote.folders.map(({ id }) => id));
       expect(joined.shortcuts[0]?.title.value).toBe('原网站');
     } finally { await other.delete(); }
   });

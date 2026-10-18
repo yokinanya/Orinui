@@ -17,12 +17,21 @@ export interface SyncStep<T> {
 export async function runSyncStep<T>(context: SyncRunContext, step: SyncStep<T>): Promise<T> {
   const publication = step.publication ?? 'not-started';
   try {
+    context.dependencies.reportProgress?.({ phase: syncPhaseLabel(step.phase), totalBytes: undefined });
     await context.dependencies.local.markPhase({ ...context.identity, phase: step.phase, publication });
     return await step.action();
   } catch (cause) {
     if (cause instanceof SyncCoordinatorError) throw cause;
     throw new SyncCoordinatorError({ phase: step.phase, publication, cause });
   }
+}
+
+function syncPhaseLabel(phase: SyncPhase): string {
+  const labels: Record<SyncPhase, string> = {
+    reading: '读取同步快照', merging: '合并本机与远端数据', 'receiving-media': '检查并接收媒体',
+    applying: '事务应用到本机', 'uploading-media': '上传加密媒体', publishing: '发布同步快照', complete: '完成同步',
+  };
+  return labels[phase];
 }
 
 export async function failSyncRun(context: SyncRunContext, cause: unknown): Promise<never> {

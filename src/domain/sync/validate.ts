@@ -6,15 +6,17 @@ import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEng
 import type { ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { createDefaultSettings, validateSettings } from '@/domain/settings';
-import { normalizeEngineName, normalizeGroupName, normalizeShortcutTitle } from '@/domain/text';
+import { normalizeEngineName, normalizeFolderName, normalizeOptionalShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
 import { parseSyncAsset } from '@/domain/sync/validate-assets';
-import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncGroup, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshotV1, type SyncTombstone } from '@/domain/sync/types';
+import { LEGACY_GROUP_SYNC_SCHEMA_VERSION, LEGACY_FOLDER_SYNC_SCHEMA_VERSION, LEGACY_LAYOUT_SYNC_SCHEMA_VERSION,
+  LEGACY_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION,
+  SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset, type SyncEntityType,
+  type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
-const MAX_ASSET_COUNT = LIMITS.shortcuts + 1;
 interface SnapshotEnvelope extends RecordValue {
-  readonly groups: unknown[];
+  readonly folders: unknown[];
   readonly shortcuts: unknown[];
   readonly assets: unknown[];
   readonly tombstones: unknown[];
@@ -27,29 +29,26 @@ function normalized(value: unknown, normalize: (input: string) => string, label:
   return result;
 }
 
-function parseGroup(value: unknown): SyncGroup {
-  const raw = asRecord(value, '同步分组');
-  exactKeys(raw, ['id', 'name', 'colorRole', 'position'], '同步分组');
-  const colorRole = (item: unknown) => {
-    if (item !== null && item !== 'primary' && item !== 'secondary' && item !== 'tertiary') fail('分组颜色角色不正确');
-    return item as SyncGroup['colorRole']['value'];
-  };
-  return { id: identifier(raw.id, '分组标识'), name: validateRegister(raw.name, '分组名称', (item) => normalized(item, normalizeGroupName, '分组名称')),
-    colorRole: validateRegister(raw.colorRole, '分组颜色', colorRole),
-    position: validateRegister(raw.position, '分组位置', (item) => integer(item, '分组位置')) };
+function parseFolder(value: unknown): SyncFolder {
+  const raw = asRecord(value, '同步文件夹');
+  exactKeys(raw, ['id', 'name', 'position'], '同步文件夹');
+  return { id: identifier(raw.id, '文件夹标识'),
+    name: validateRegister(raw.name, '文件夹名称', (item) => normalized(item, normalizeFolderName, '文件夹名称')),
+    position: validateRegister(raw.position, '文件夹位置', (item) => integer(item, '文件夹位置')) };
 }
 
 function parsePlacement(value: unknown): SyncShortcut['placement']['value'] {
   const raw = asRecord(value, '网站位置');
-  exactKeys(raw, ['groupId', 'order'], '网站位置');
-  return { groupId: identifier(raw.groupId, '所属分组'), order: integer(raw.order, '网站顺序') };
+  exactKeys(raw, ['folderId', 'order'], '网站位置');
+  const folderId = raw.folderId === null ? null : identifier(raw.folderId, '所属文件夹');
+  return { folderId, order: integer(raw.order, '网站顺序') };
 }
 
 function parseShortcut(value: unknown): SyncShortcut {
   const raw = asRecord(value, '同步网站');
   exactKeys(raw, ['id', 'title', 'url', 'placement', 'icon'], '同步网站');
   return { id: identifier(raw.id, '网站标识'),
-    title: validateRegister(raw.title, '网站标题', (item) => normalized(item, normalizeShortcutTitle, '网站标题')),
+    title: validateRegister(raw.title, '网站标题', (item) => normalized(item, normalizeOptionalShortcutTitle, '网站标题')),
     url: validateRegister(raw.url, '网站地址', (item) => normalized(item, normalizeShortcutUrl, '网站地址')),
     placement: validateRegister(raw.placement, '网站位置', parsePlacement),
     icon: validateRegister(raw.icon, '网站图标', parseShortcutIcon) };
@@ -81,11 +80,11 @@ function parseAppearance(value: unknown): SyncSettings['appearance']['value'] {
 
 function parseLayout(value: unknown): SyncSettings['layout']['value'] {
   const raw = asRecord(value, '布局设置');
-  exactKeys(raw, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'], '布局设置');
-  return validateLayout(value);
+  exactKeys(raw, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns', 'style', 'clockPosition'], '布局设置');
+  return validateLayout(raw);
 }
 
-function parseSettings(value: unknown): SyncSettings {
+function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion): SyncSettings {
   const raw = asRecord(value, '同步设置');
   exactKeys(raw, ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'], '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
@@ -126,7 +125,7 @@ function parseSettings(value: unknown): SyncSettings {
 function parseTombstone(value: unknown): SyncTombstone {
   const raw = asRecord(value, '删除墓碑');
   exactKeys(raw, ['entityType', 'id', 'clock', 'deviceId'], '删除墓碑');
-  const entityTypes: readonly SyncEntityType[] = ['group', 'shortcut', 'asset', 'custom-engine'];
+  const entityTypes: readonly SyncEntityType[] = ['folder', 'shortcut', 'asset', 'custom-engine'];
   if (typeof raw.entityType !== 'string' || !entityTypes.includes(raw.entityType as SyncEntityType)) fail('墓碑实体类型不正确');
   const entityType = raw.entityType as SyncEntityType;
   const id = identifier(raw.id, '墓碑标识');
@@ -144,8 +143,8 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : 1;
 }
 
-function validateSnapshotLimits(snapshot: SyncSnapshotV1): void {
-  if (snapshot.groups.length < 1 || snapshot.groups.length > LIMITS.groups) fail('分组数量超限');
+function validateSnapshotLimits(snapshot: SyncSnapshot): void {
+  if (snapshot.folders.length > LIMITS.folders) fail('文件夹数量超限');
   if (snapshot.shortcuts.length > LIMITS.shortcuts) fail('网站数量超限');
 }
 
@@ -158,14 +157,15 @@ function requireAsset({ assets, id, kind, label }: {
   return asset;
 }
 
-function collectShortcutAssetRefs({ snapshot, groupIds, assets }: {
-  readonly snapshot: SyncSnapshotV1; readonly groupIds: ReadonlySet<string>;
+function collectShortcutAssetRefs({ snapshot, folderIds, assets }: {
+  readonly snapshot: SyncSnapshot; readonly folderIds: ReadonlySet<string>;
   readonly assets: ReadonlyMap<string, SyncAsset>;
 }): ReadonlySet<string> {
   const refs = new Set<string>();
   for (const shortcut of snapshot.shortcuts) {
-    const groupId = shortcut.placement.value.groupId;
-    if (!groupIds.has(groupId)) fail('网站所属分组引用不存在');
+    const folderId = shortcut.placement.value.folderId;
+    if (folderId !== null && !folderIds.has(folderId) &&
+      !snapshot.tombstones.some((item) => item.entityType === 'folder' && item.id === folderId)) fail('网站所属文件夹引用不存在');
     if (shortcut.icon.value.kind !== 'asset') continue;
     const assetId = shortcut.icon.value.assetId;
     requireAsset({ assets, id: assetId, kind: 'icon', label: '网站图标' });
@@ -175,7 +175,7 @@ function collectShortcutAssetRefs({ snapshot, groupIds, assets }: {
   return refs;
 }
 
-function collectBackgroundAssetRef(snapshot: SyncSnapshotV1, assets: ReadonlyMap<string, SyncAsset>): string | null {
+function collectBackgroundAssetRef(snapshot: SyncSnapshot, assets: ReadonlyMap<string, SyncAsset>): string | null {
   const background = snapshot.settings.appearance.value.background;
   if (background.kind !== 'photo' && background.kind !== 'motion') return null;
   const asset = requireAsset({ assets, id: background.assetId, kind: 'background', label: '背景媒体' });
@@ -183,58 +183,63 @@ function collectBackgroundAssetRef(snapshot: SyncSnapshotV1, assets: ReadonlyMap
   return background.assetId;
 }
 
-function validateAssetSet(snapshot: SyncSnapshotV1, refs: ReadonlySet<string>): void {
-  if (refs.size !== snapshot.assets.length || snapshot.assets.some(({ id }) => !refs.has(id))) fail('存在未引用的图片资源');
+function validateAssetSet(snapshot: SyncSnapshot, refs: ReadonlySet<string>): void {
+  if (snapshot.assets.some(({ id, kind }) => kind === 'icon' && !refs.has(id))) fail('存在未引用的网站图标');
 }
 
-function validateSettingsReferences(snapshot: SyncSnapshotV1): void {
+function validateSettingsReferences(snapshot: SyncSnapshot): void {
   const custom = snapshot.settings.customEngines.map(({ value }) => value);
   if (!resolveEngine(snapshot.settings.defaultEngineId.value, custom)) fail('默认搜索引擎引用不存在');
-  for (const group of snapshot.groups) {
-    if (group.id === snapshot.defaultGroupId.value && group.colorRole.value !== 'primary') fail('默认分组必须使用主色');
-  }
 }
 
-function validateReferences(snapshot: SyncSnapshotV1): void {
-  const groupIds = new Set(snapshot.groups.map(({ id }) => id));
+function validateReferences(snapshot: SyncSnapshot): void {
+  const folderIds = new Set(snapshot.folders.map(({ id }) => id));
   const assets = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
-  if (!groupIds.has(snapshot.defaultGroupId.value)) fail('默认分组引用不存在');
   validateSnapshotLimits(snapshot);
-  const refs = new Set(collectShortcutAssetRefs({ snapshot, groupIds, assets }));
+  const refs = new Set(collectShortcutAssetRefs({ snapshot, folderIds, assets }));
   const backgroundRef = collectBackgroundAssetRef(snapshot, assets);
   if (backgroundRef) refs.add(backgroundRef);
   validateAssetSet(snapshot, refs);
   validateSettingsReferences(snapshot);
 }
 
-function validateSnapshotEnvelope(raw: RecordValue): asserts raw is SnapshotEnvelope {
-  exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'defaultGroupId', 'groups', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
-  if (raw.schemaVersion !== SYNC_SCHEMA_VERSION) fail('同步快照版本不受支持');
-  if (!Array.isArray(raw.groups) || !Array.isArray(raw.shortcuts) || !Array.isArray(raw.assets) || !Array.isArray(raw.tombstones)) fail('同步快照列表格式不正确');
-  if (raw.groups.length > LIMITS.groups) fail('分组数量超限');
-  if (raw.shortcuts.length > LIMITS.shortcuts) fail('网站数量超限');
-  if (raw.assets.length > MAX_ASSET_COUNT) fail('图片资源数量超限');
+function isSupportedSchemaVersion(value: unknown): value is SupportedSyncSchemaVersion {
+  return value === LEGACY_SYNC_SCHEMA_VERSION || value === LEGACY_STYLE_SYNC_SCHEMA_VERSION
+    || value === LEGACY_LAYOUT_SYNC_SCHEMA_VERSION || value === LEGACY_GROUP_SYNC_SCHEMA_VERSION
+    || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
 }
 
-function parseSnapshotFields(raw: SnapshotEnvelope): SyncSnapshotV1 {
+function validateSnapshotEnvelope(raw: RecordValue): SupportedSyncSchemaVersion {
+  const schemaVersion = raw.schemaVersion;
+  if (!isSupportedSchemaVersion(schemaVersion)) fail('同步快照版本不受支持');
+  if (schemaVersion !== SYNC_SCHEMA_VERSION) {
+    fail('旧分组同步协议不兼容当前文件夹版本；需要重新启用同步并显式重置远端库');
+  }
+  exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'folders', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
+  if (!Array.isArray(raw.folders) || !Array.isArray(raw.shortcuts) || !Array.isArray(raw.assets) || !Array.isArray(raw.tombstones)) fail('同步快照列表格式不正确');
+  if (raw.folders.length > LIMITS.folders) fail('文件夹数量超限');
+  if (raw.shortcuts.length > LIMITS.shortcuts) fail('网站数量超限');
+  return schemaVersion;
+}
+
+function parseSnapshotFields(raw: SnapshotEnvelope, schemaVersion: SupportedSyncSchemaVersion): SyncSnapshot {
   return {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: identifier(raw.vaultId, '同步库标识'), deviceId: identifier(raw.deviceId, '设备标识'),
     generation: integer(raw.generation, '快照代次'),
-    defaultGroupId: validateRegister(raw.defaultGroupId, '默认分组', (item) => parseString(item, '默认分组')),
-    groups: raw.groups.map(parseGroup).sort((left, right) => compareText(left.id, right.id)),
+    folders: raw.folders.map(parseFolder).sort((left, right) => compareText(left.id, right.id)),
     shortcuts: raw.shortcuts.map(parseShortcut).sort((left, right) => compareText(left.id, right.id)),
-    settings: parseSettings(raw.settings),
-    assets: raw.assets.map(parseSyncAsset).sort((left, right) => compareText(left.id, right.id)),
+    settings: parseSettings(raw.settings, schemaVersion),
+    assets: raw.assets.map((item) => parseSyncAsset(item, schemaVersion)).sort((left, right) => compareText(left.id, right.id)),
     tombstones: raw.tombstones.map(parseTombstone).sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id)),
   };
 }
 
-function validateSnapshotEntities(snapshot: SyncSnapshotV1): void {
-  uniqueIds(snapshot.groups, '分组'); uniqueIds(snapshot.shortcuts, '网站'); uniqueIds(snapshot.assets, '图片资源');
+function validateSnapshotEntities(snapshot: SyncSnapshot): void {
+  uniqueIds(snapshot.folders, '文件夹'); uniqueIds(snapshot.shortcuts, '网站'); uniqueIds(snapshot.assets, '图片资源');
   const tombstoneKeys = snapshot.tombstones.map(({ entityType, id }) => `${entityType}:${id}`);
   if (new Set(tombstoneKeys).size !== tombstoneKeys.length) fail('墓碑标识重复');
   const liveKeys = [
-    ...snapshot.groups.map(({ id }) => `group:${id}`),
+    ...snapshot.folders.map(({ id }) => `folder:${id}`),
     ...snapshot.shortcuts.map(({ id }) => `shortcut:${id}`),
     ...snapshot.assets.map(({ id }) => `asset:${id}`),
     ...snapshot.settings.customEngines.map(({ value: engine }) => `custom-engine:${engine.id}`),
@@ -242,10 +247,10 @@ function validateSnapshotEntities(snapshot: SyncSnapshotV1): void {
   if (liveKeys.some((key) => tombstoneKeys.includes(key))) fail('实体不能同时处于存活和删除状态');
 }
 
-export function parseSyncSnapshot(value: unknown): SyncSnapshotV1 {
+export function parseSyncSnapshot(value: unknown): SyncSnapshot {
   const raw = asRecord(value, '同步快照');
-  validateSnapshotEnvelope(raw);
-  const snapshot = parseSnapshotFields(raw);
+  const schemaVersion = validateSnapshotEnvelope(raw);
+  const snapshot = parseSnapshotFields(raw as SnapshotEnvelope, schemaVersion);
   validateSnapshotEntities(snapshot);
   validateReferences(snapshot);
   return snapshot;

@@ -7,7 +7,7 @@ export function AddShortcutTile({ onClick, disabled }: { onClick: () => void; di
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none hover:bg-glass/60 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50 md:p-3"
+      className="home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none hover:bg-glass/60 disabled:opacity-50 md:p-3"
     >
       <span
         aria-hidden="true"

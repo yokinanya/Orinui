@@ -1,10 +1,10 @@
 import type { DBCore, DBCoreMutateRequest, DBCoreMutateResponse, DBCoreTable } from 'dexie';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { MediaAsset } from '@/domain/asset';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow } from '@/storage/sync/types';
-import { buildAssetRecord, buildEngineRecord, buildGroupRecord, buildSettingsRecord, buildShortcutRecord,
+import { buildAssetRecord, buildEngineRecord, buildFolderRecord, buildSettingsRecord, buildShortcutRecord,
   buildTombstoneRecord, recordId, SyncClock } from '@/storage/sync/builders';
 import { readAfterRows, readBeforeRows, requestKeys, type MutationRows } from '@/storage/sync/requests';
 
@@ -12,9 +12,9 @@ export { finalizePendingDeletes } from '@/storage/sync/pending-deletes';
 export { seedSyncRecords } from '@/storage/sync/seed';
 
 export const SHORTCUT_UNDO_WINDOW_MS = 5_000;
-const TRACKED_TABLES = ['groups', 'shortcuts', 'settings', 'assets'] as const;
+const TRACKED_TABLES = ['folders', 'shortcuts', 'settings', 'assets'] as const;
 type TrackedTable = (typeof TRACKED_TABLES)[number];
-type TableRow = Group | Shortcut | (AppSettings & { readonly id: 'app' }) | MediaAsset;
+type TableRow = Folder | Shortcut | (AppSettings & { readonly id: 'app' }) | MediaAsset;
 
 export function isTrackedTable(name: string): name is TrackedTable {
   return TRACKED_TABLES.includes(name as TrackedTable);
@@ -70,7 +70,6 @@ async function captureChangedRows(input: { readonly core: DBCore; readonly name:
   const state = await core.table('sync_state').get({ trans: rows.transaction, key: 'app' }) as SyncStateRow | undefined;
   if (!state || state.suspended) return;
   const clock = new SyncClock(state);
-  let defaultGroupId = state.defaultGroupId;
   let changes = new Map<string, SyncRecordRow>();
   const beforeIds = new Set(rows.before.map(({ id }) => id));
   const afterIds = new Set(rows.after.map(({ id }) => id));
@@ -78,14 +77,11 @@ async function captureChangedRows(input: { readonly core: DBCore; readonly name:
   for (const id of ids) {
     const before = rows.before.find((row) => row.id === id) as TableRow | undefined;
     const after = rows.after.find((row) => row.id === id) as TableRow | undefined;
-    const result = await captureEntity({ core, rows, name, id, before, after, now: now(), clock, changes, defaultGroupId });
-    defaultGroupId = result.defaultGroupId;
-    changes = result.changes;
+    changes = await captureEntity({ core, rows, name, id, before, after, now: now(), clock, changes });
   }
-  if (name === 'groups') changes = await tombstoneGroupChildren({ core, rows, changes, clock });
   if (clock.changed) {
     await putRecords({ core, rows, records: [...changes.values()] });
-    await putState({ core, rows, state: clock.state({ ...state, defaultGroupId }) });
+    await putState({ core, rows, state: clock.state({ ...state }) });
   }
 }
 
@@ -99,20 +95,19 @@ interface CaptureEntityInput {
   readonly now: number;
   readonly clock: SyncClock;
   readonly changes: Map<string, SyncRecordRow>;
-  readonly defaultGroupId: SyncStateRow['defaultGroupId'];
 }
 
-async function captureEntity(input: CaptureEntityInput): Promise<{ defaultGroupId: SyncStateRow['defaultGroupId']; changes: Map<string, SyncRecordRow> }> {
-  const { core, rows, name, id, before, after, now, clock, defaultGroupId } = input;
+async function captureEntity(input: CaptureEntityInput): Promise<Map<string, SyncRecordRow>> {
+  const { core, rows, name, id, before, after, now, clock } = input;
   let changes = input.changes;
-  if (name === 'groups') return captureGroup({ core, rows, id, before: before as Group | undefined,
-    after: after as Group | undefined, clock, changes, defaultGroupId });
+  if (name === 'folders') changes = await captureFolder({ core, rows, id, before: before as Folder | undefined,
+    after: after as Folder | undefined, clock, changes });
   if (name === 'shortcuts') changes = await captureShortcut({ core, rows, id,
     before: before as Shortcut | undefined, after: after as Shortcut | undefined, now, clock, changes });
   if (name === 'assets') changes = await captureAsset({ core, rows, id,
     before: before as MediaAsset | undefined, after: after as MediaAsset | undefined, clock, changes });
   if (name === 'settings' && after) changes = await captureSettings({ core, rows, settings: after as AppSettings & { id: 'app' }, clock, changes });
-  return { defaultGroupId, changes };
+  return changes;
 }
 
 interface PriorRecordInput {
@@ -130,25 +125,23 @@ async function priorRecord(input: PriorRecordInput): Promise<SyncRecordRow | und
   return core.table('sync_records').get({ trans: rows.transaction, key }) as Promise<SyncRecordRow | undefined>;
 }
 
-interface CaptureGroupInput {
-  readonly core: DBCore; readonly rows: MutationRows; readonly id: string; readonly before?: Group; readonly after?: Group;
-  readonly clock: SyncClock; readonly changes: Map<string, SyncRecordRow>; readonly defaultGroupId: SyncStateRow['defaultGroupId'];
+interface CaptureFolderInput {
+  readonly core: DBCore; readonly rows: MutationRows; readonly id: string; readonly before?: Folder; readonly after?: Folder;
+  readonly clock: SyncClock; readonly changes: Map<string, SyncRecordRow>;
 }
 
-async function captureGroup(input: CaptureGroupInput): Promise<{ defaultGroupId: SyncStateRow['defaultGroupId']; changes: Map<string, SyncRecordRow> }> {
-  const { core, rows, id, before, after, clock, changes, defaultGroupId } = input;
-  const prior = await priorRecord({ core, rows, kind: 'group', id, changes });
+async function captureFolder(input: CaptureFolderInput): Promise<Map<string, SyncRecordRow>> {
+  const { core, rows, id, before, after, clock, changes } = input;
+  const prior = await priorRecord({ core, rows, kind: 'folder', id, changes });
   if (after) {
-    if (prior?.kind === 'tombstone') throw new Error('已同步删除的分组不能复活');
-    const next = buildGroupRecord({ group: after, previous: prior, before, clock });
-    const updated = assignIfChanged({ changes, previous: prior, next, clock });
-    const nextDefault = after.isDefault && defaultGroupId.value !== after.id ? clock.register(after.id, defaultGroupId) : defaultGroupId;
-    return { defaultGroupId: nextDefault, changes: updated };
+    if (prior?.kind === 'tombstone') throw new Error('已同步删除的文件夹不能复活');
+    const next = buildFolderRecord({ folder: after, previous: prior, before, clock });
+    return assignIfChanged({ changes, previous: prior, next, clock });
   }
-  if (!before || prior?.kind === 'tombstone') return { defaultGroupId, changes };
-  const live = prior ?? buildGroupRecord({ group: before, clock });
-  const next = buildTombstoneRecord({ kind: 'group', entityId: id, previous: live, clock });
-  return { defaultGroupId, changes: setRecord(changes, next) };
+  if (!before || prior?.kind === 'tombstone') return changes;
+  const live = prior ?? buildFolderRecord({ folder: before, clock });
+  const next = buildTombstoneRecord({ kind: 'folder', entityId: id, previous: live, clock });
+  return setRecord(changes, next);
 }
 
 interface CaptureShortcutInput {
@@ -185,6 +178,10 @@ async function captureAsset(input: CaptureAssetInput): Promise<Map<string, SyncR
     return assignIfChanged({ changes, previous: prior, next, clock });
   }
   if (!before) return changes;
+  if (before.kind === 'background') {
+    return assignIfChanged({ changes, previous: prior,
+      next: buildTombstoneRecord({ kind: 'asset', entityId: id, previous: prior, clock }), clock });
+  }
   const metadata = prior ?? buildAssetRecord(before, undefined, clock);
   const pending = await pendingShortcuts({ core, rows, changes, assetId: id });
   const next = pending.length > 0 ? { ...metadata, retainedAsset: before } : withoutRetainedAsset(metadata);
@@ -213,21 +210,6 @@ async function captureSettings(input: CaptureSettingsInput): Promise<Map<string,
     changes = setRecord(changes, buildTombstoneRecord({ kind: 'custom-engine', entityId: prior.entityId, previous: prior, clock }));
   }
   return changes;
-}
-
-interface GroupCascadeInput { readonly core: DBCore; readonly rows: MutationRows; readonly changes: Map<string, SyncRecordRow>; readonly clock: SyncClock }
-
-async function tombstoneGroupChildren(input: GroupCascadeInput): Promise<Map<string, SyncRecordRow>> {
-  const { core, rows, changes, clock } = input;
-  const deletedGroups = [...changes.values()].filter((row) => row.kind === 'tombstone' && row.tombstone.entityType === 'group').map((row) => row.entityId);
-  if (deletedGroups.length === 0) return changes;
-  const shortcuts = await allRecords({ core, rows, kind: 'shortcut' });
-  let nextChanges = changes;
-  for (const previous of shortcuts) {
-    if (previous.kind !== 'shortcut' || !deletedGroups.includes(previous.value.placement.value.groupId)) continue;
-    nextChanges = setRecord(nextChanges, buildTombstoneRecord({ kind: 'shortcut', entityId: previous.entityId, previous, clock }));
-  }
-  return nextChanges;
 }
 
 async function pendingShortcuts(input: { readonly core: DBCore; readonly rows: MutationRows; readonly changes: ReadonlyMap<string, SyncRecordRow>; readonly assetId: string }): Promise<SyncRecordRow[]> {

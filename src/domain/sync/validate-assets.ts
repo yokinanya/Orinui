@@ -1,7 +1,8 @@
 import { fail } from '@/domain/errors';
 import { imageOutputSize } from '@/domain/image';
 import { validateRemoteImageUrl } from '@/domain/remote-image-url';
-import type { SyncAsset } from '@/domain/sync/types';
+import { normalizeOptionalAssetName } from '@/domain/text';
+import { SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset } from '@/domain/sync/types';
 import { asRecord, exactKeys, identifier, integer, validateRegister } from '@/domain/sync/validate-common';
 
 const ICON_EDGE_PIXELS = 1024;
@@ -86,9 +87,18 @@ function parseSourceUrl(value: unknown): string | null {
   return value;
 }
 
-export function parseSyncAsset(value: unknown): SyncAsset {
+function parseAssetName(value: unknown): string | null {
+  if (value === null) return null;
+  const name = normalizeOptionalAssetName(identifier(value, '媒体名称'));
+  if (name === '' || name !== value) fail('媒体名称必须是已保存的规范格式');
+  return name;
+}
+
+export function parseSyncAsset(value: unknown, schemaVersion: SupportedSyncSchemaVersion = SYNC_SCHEMA_VERSION): SyncAsset {
   const raw = asRecord(value, '同步图片资源');
-  exactKeys(raw, ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl', 'motion'], '同步媒体资源');
+  const keys = ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl', 'motion'];
+  if (schemaVersion === SYNC_SCHEMA_VERSION) keys.push('name');
+  exactKeys(raw, keys, '同步媒体资源');
   const kind = parseKind(raw.kind);
   const mime = parseMime(raw.mime);
   const motion = parseMotion(raw.motion, mime, kind);
@@ -97,5 +107,9 @@ export function parseSyncAsset(value: unknown): SyncAsset {
   if (byteLength === 0) fail('媒体大小必须大于零');
   const sourceUrl = validateRegister(raw.sourceUrl, '图片来源', parseSourceUrl);
   if (motion && sourceUrl.value !== null) fail('动态媒体来源必须为空');
-  return { id: identifier(raw.id, '媒体标识'), kind, mime, width, height, byteLength, sha256: parseHash(raw.sha256), sourceUrl, motion };
+  const name = schemaVersion === SYNC_SCHEMA_VERSION
+    ? validateRegister(raw.name, '素材名称', parseAssetName)
+    : { value: null, clock: 0, deviceId: sourceUrl.deviceId };
+  return { id: identifier(raw.id, '媒体标识'), kind, mime, width, height, byteLength, sha256: parseHash(raw.sha256),
+    sourceUrl, name, motion };
 }

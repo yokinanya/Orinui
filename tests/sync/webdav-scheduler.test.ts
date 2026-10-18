@@ -7,7 +7,7 @@ import { deferred } from './fixtures/devices';
 function observation(input: { generation: number; appliedGeneration?: number; vaultId?: string;
   deviceId?: string; nextDeleteAt?: number }): WebDavObservation {
   const state: SyncStateRow = { id: 'app', vaultId: input.vaultId ?? 'vault', deviceId: input.deviceId ?? 'device',
-    clock: input.generation, generation: input.generation, defaultGroupId: { value: 'group', clock: 0, deviceId: 'device' },
+    clock: input.generation, generation: input.generation,
     suspended: false, ...(input.appliedGeneration === undefined ? {} : { lastSync: {
       runId: 'apply', status: 'succeeded', phase: 'complete', publication: 'confirmed', startedAt: 1,
       appliedGeneration: input.appliedGeneration,

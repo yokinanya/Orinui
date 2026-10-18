@@ -1,4 +1,4 @@
-import type { Shortcut } from '@/domain/shortcut';
+import { shortcutDisplayName, type Shortcut } from '@/domain/shortcut';
 import { BUILT_IN_ICONS } from '@/features/shortcuts/built-in-icons';
 import { shortcutInitial } from '@/features/shortcuts/shortcut-initial';
 import { useLocalImage } from '@/hooks/use-local-image';
@@ -10,7 +10,7 @@ export function ShortcutIcon({ shortcut }: { readonly shortcut: Shortcut }) {
   const image = useLocalImage(shortcut.icon.kind === 'asset' ? shortcut.icon.assetId : null);
   const occupancy = shortcutIconOccupancy(shortcut.icon);
   const contentStyle = { frameSize: HOME_ICON_FRAME_SIZE, occupancy, inset: HOME_ICON_INSET };
-  if (shortcut.icon.kind === 'letter') return <span style={iconLetterStyle(contentStyle)}>{shortcutInitial(shortcut.title)}</span>;
+  if (shortcut.icon.kind === 'letter') return <span style={iconLetterStyle(contentStyle)}>{shortcutInitial(shortcutDisplayName(shortcut))}</span>;
   if (shortcut.icon.kind === 'built-in') {
     const { Icon } = BUILT_IN_ICONS[shortcut.icon.iconId];
     return <Icon aria-hidden="true" style={iconGraphicStyle(contentStyle)} />;

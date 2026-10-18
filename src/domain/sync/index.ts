@@ -4,13 +4,21 @@ export { SyncMergeConflictError, type SyncMergeConflictCode } from '@/domain/syn
 export { parseSyncSnapshot } from '@/domain/sync/validate';
 export { maximumSyncClock, nextSyncCounter } from '@/domain/sync/version';
 export {
+  LEGACY_SYNC_SCHEMA_VERSION,
+  LEGACY_STYLE_SYNC_SCHEMA_VERSION,
+  LEGACY_LAYOUT_SYNC_SCHEMA_VERSION,
+  LEGACY_GROUP_SYNC_SCHEMA_VERSION,
+  LEGACY_FOLDER_SYNC_SCHEMA_VERSION,
+  PREVIOUS_SYNC_SCHEMA_VERSION,
+  CURRENT_SYNC_SCHEMA_VERSION,
   SYNC_SCHEMA_VERSION,
+  type SupportedSyncSchemaVersion,
   type SyncAsset,
   type SyncEntityType,
-  type SyncGroup,
+  type SyncFolder,
   type SyncRegister,
   type SyncSettings,
   type SyncShortcut,
-  type SyncSnapshotV1,
+  type SyncSnapshot,
   type SyncTombstone,
 } from '@/domain/sync/types';

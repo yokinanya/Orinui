@@ -1,5 +1,4 @@
 export type SyncMergeConflictCode =
-  | 'default-group-deleted'
   | 'custom-engine-deleted-while-default'
   | 'asset-deleted-while-referenced';
 

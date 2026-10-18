@@ -9,7 +9,7 @@ interface SettingsSwitchFieldProps {
 
 export function SettingsSwitchField({ label, checked, onChange }: SettingsSwitchFieldProps) {
   return (
-    <Field className="flex-row items-center justify-between rounded-xl px-2 py-2">
+    <Field orientation="horizontal" className="min-h-10 items-center justify-between gap-3 py-1">
       <FieldLabel>{label}</FieldLabel>
       <Switch aria-label={label} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
     </Field>

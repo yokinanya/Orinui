@@ -56,9 +56,7 @@ it('checks the expected generation without changing sync metadata', async () => 
   const { database, local } = await setup();
   const identity = await begin(local, 'run-generation');
   const exported = await local.export(identity);
-  const group = (await database.groups.toArray())[0];
-  if (!group) throw new Error('缺少默认分组');
-  await createShortcut(database, { groupId: group.id, title: '本机改动', url: 'https://local.test' });
+  await createShortcut(database, { folderId: null, title: '本机改动', url: 'https://local.test' });
 
   await expect(local.assertCurrent({ ...identity, expectedGeneration: exported.localGeneration }))
     .rejects.toThrow(/本机数据在同步期间已变化/);
@@ -75,9 +73,7 @@ it('records apply metadata in the same operation and marks later edits pending o
     runId: identity.runId, appliedGeneration: exported.localGeneration, appliedAt: 20, phase: 'uploading-media',
   });
   await local.markPhase({ ...identity, phase: 'publishing', publication: 'unconfirmed' });
-  const group = (await database.groups.toArray())[0];
-  if (!group) throw new Error('缺少默认分组');
-  await createShortcut(database, { groupId: group.id, title: '发布期间编辑', url: 'https://pending.test' });
+  await createShortcut(database, { folderId: null, title: '发布期间编辑', url: 'https://pending.test' });
 
   const result = await local.finish({ ...identity, publishedGeneration: exported.localGeneration,
     revision: 'rev-1', completedAt: 30 });

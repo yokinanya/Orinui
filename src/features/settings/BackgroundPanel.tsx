@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { BackgroundTypePicker, BACKGROUND_OPTIONS } from '@/features/settings/BackgroundTypePicker';
 import type { Background, GradientBackground } from '@/domain/appearance';
 import { ColorPicker } from '@/features/appearance/ColorPicker';
 import { useAppearanceActions } from '@/features/settings/appearance-actions';
@@ -11,11 +11,7 @@ import { MotionBackgroundPanel } from '@/features/settings/MotionBackgroundPanel
 const DEFAULT_SOLID = { kind: 'solid', color: '#f2ece3' } as const;
 const DEFAULT_GRADIENT = { kind: 'gradient', from: '#f4efe6', to: '#c9d6e4', angle: 160 } as const;
 const FULL_TURN_DEGREES = 360;
-const BACKGROUND_OPTIONS = [
-  { value: 'default', label: '默认' }, { value: 'solid', label: '纯色' },
-  { value: 'gradient', label: '渐变' }, { value: 'photo', label: '图片' },
-  { value: 'motion', label: '动态壁纸' },
-] as const;
+
 
 function ColorField(props: { readonly id: string; readonly label: string; readonly value: string; readonly onChange: (color: string) => void }) {
   return (
@@ -45,21 +41,23 @@ function GradientFields({ background, onChange }: { readonly background: Gradien
   );
 }
 
-export function BackgroundPanel() {
+export function BackgroundPanel({ editing = false, fresh = false }: { readonly editing?: boolean; readonly fresh?: boolean }) {
   const { appearance, update } = useAppearanceActions();
   const { background } = appearance;
-  const [requestedKind, setRequestedKind] = useState<'photo' | 'motion' | null>(null);
+  const [requestedKind, setRequestedKind] = useState<Background['kind'] | null>(fresh ? 'default' : null);
+  const initialAssetId = useRef(background.kind === 'photo' || background.kind === 'motion' ? background.assetId : null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const selectedKind: Background['kind'] = requestedKind ?? background.kind;
   const setBackground = (next: Background) => update({ background: next });
   useEffect(() => {
-    if (background.kind === 'photo' || background.kind === 'motion') setRequestedKind(null);
-  }, [background.kind]);
+    if ((background.kind === 'photo' || background.kind === 'motion')
+      && (!fresh || background.assetId !== initialAssetId.current)) setRequestedKind(null);
+  }, [background, fresh]);
 
   const selectKind = (value: string[]) => {
     const next = BACKGROUND_OPTIONS.find((option) => option.value === value[0])?.value;
     if (!next) return;
-    setRequestedKind(next === 'photo' || next === 'motion' ? next : null);
+    setRequestedKind(fresh || next === 'photo' || next === 'motion' ? next : null);
     if (next === 'photo' || next === 'motion') return;
     if (next === 'default') setBackground({ kind: 'default' });
     if (next === 'solid') setBackground(DEFAULT_SOLID);
@@ -68,19 +66,11 @@ export function BackgroundPanel() {
 
   return (
     <FieldGroup>
-      <Field>
-        <FieldLabel id="background-kind-label">背景类型</FieldLabel>
-        <ToggleGroup aria-labelledby="background-kind-label" value={[selectedKind]}
-          disabled={photoBusy} className="settings-segmented w-full flex-wrap gap-1" onValueChange={selectKind}>
-          {BACKGROUND_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value} className="flex-1">
-            {option.label}
-          </ToggleGroupItem>)}
-        </ToggleGroup>
-        {background.kind === 'photo' && selectedKind !== 'photo'
-          && <FieldDescription>切换类型会移除当前图片。</FieldDescription>}
-      </Field>
-      {selectedKind === 'photo' && <PhotoBackgroundPanel onBusyChange={setPhotoBusy} />}
-      {selectedKind === 'motion' && <MotionBackgroundPanel onBusyChange={setPhotoBusy} />}
+      {!editing && <BackgroundTypePicker value={selectedKind} disabled={photoBusy} onChange={selectKind} />}
+      {!fresh && background.kind === 'photo' && selectedKind !== 'photo'
+        && <FieldDescription>切换背景后，当前照片仍保留在壁纸素材库中。</FieldDescription>}
+      {selectedKind === 'photo' && <PhotoBackgroundPanel fresh={fresh} editing={editing} onBusyChange={setPhotoBusy} />}
+      {selectedKind === 'motion' && <MotionBackgroundPanel fresh={fresh} editing={editing} onBusyChange={setPhotoBusy} />}
       {selectedKind === 'solid' && <ColorField id="background-color" label="背景颜色"
         value={background.kind === 'solid' ? background.color : DEFAULT_SOLID.color}
         onChange={(color) => setBackground({ kind: 'solid', color })} />}

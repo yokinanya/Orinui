@@ -167,6 +167,8 @@ export async function createImageShortcut(page: Page) {
 
 export async function clearPhotoSource(page: Page, ids: { photoId: string; iconId: string; shortcutId: string }) {
   await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
   const photoClear = page.getByRole('button', { name: '清除来源', exact: true });
   await expect(photoClear).toBeVisible();
   await holdAssetSourceWriteLock(page, ids.photoId);

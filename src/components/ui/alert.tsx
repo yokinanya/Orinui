@@ -7,7 +7,8 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
+        // 面板内已经是一层表面，提示条不再叠一张卡，只保留细边界与语义色。
+        default: "border-border/60 bg-card/40 text-card-foreground",
         destructive:
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
       },

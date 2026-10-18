@@ -8,37 +8,71 @@ import { FieldError, FieldGroup, FieldTitle } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { readBackupFile, type RestorableBackup } from '@/platform/backup-file';
 import { downloadBackupFile } from '@/platform/backup-download';
+import { useOperations } from '@/app/operations';
+import { useWebDavSync } from '@/app/webdav-sync-context';
+import { useS3Sync } from '@/app/s3-sync-context';
+import type { OperationValue } from '@/app/operations';
+
+interface BackupActionDependencies {
+  readonly setBusy: (busy: boolean) => void;
+  readonly setError: (error: string | null) => void;
+  readonly begin: OperationValue['begin'];
+}
+
+async function exportZip(input: BackupActionDependencies & { readonly exportBackup: () => Promise<Blob> }): Promise<void> {
+  input.setError(null); input.setBusy(true);
+  const task = input.begin('导出完整 ZIP 备份', '收集本机数据');
+  try {
+    const archive = await input.exportBackup();
+    task.update('生成并下载 ZIP'); downloadBackupFile(archive); task.succeed('ZIP 已生成并开始下载');
+  } catch (cause) { task.fail(cause); input.setError(errorText(cause)); }
+  finally { input.setBusy(false); }
+}
+
+async function validateZip(input: BackupActionDependencies & { readonly file: File | undefined;
+  readonly setPreview: (preview: RestorableBackup | null) => void;
+  readonly setConfirmOpen: (open: boolean) => void }): Promise<void> {
+  if (!input.file) return;
+  input.setPreview(null); input.setError(null); input.setBusy(true);
+  const task = input.begin('验证 ZIP 备份', '读取清单并校验媒体');
+  try {
+    const next = await readBackupFile(input.file); input.setPreview(next); input.setConfirmOpen(true);
+    task.succeed(`验证完成，共 ${next.assetCount} 个媒体文件`);
+  } catch (cause) { task.fail(cause); input.setError(errorText(cause)); }
+  finally { input.setBusy(false); }
+}
+
+async function importZip(input: BackupActionDependencies & { readonly preview: RestorableBackup | null;
+  readonly restoreBackup: (backup: RestorableBackup) => Promise<void>;
+  readonly setPreview: (preview: RestorableBackup | null) => void;
+  readonly setConfirmOpen: (open: boolean) => void }): Promise<void> {
+  if (!input.preview) throw new Error('请先选择并验证备份文件');
+  input.setBusy(true); input.setError(null);
+  const task = input.begin('恢复 ZIP 备份', '恢复本机数据');
+  try {
+    await input.restoreBackup(input.preview); input.setPreview(null); input.setConfirmOpen(false);
+    task.succeed('本机数据已恢复');
+  } catch (cause) { task.fail(cause); input.setError(errorText(cause)); }
+  finally { input.setBusy(false); }
+}
+
+function errorText(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause); }
 
 function useBackupActions() {
   const { exportBackup, restoreBackup } = useData();
+  const operations = useOperations();
+  const sync = useWebDavSync();
+  const s3Sync = useS3Sync();
   const [preview, setPreview] = useState<RestorableBackup | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const exportFile = async () => {
-    setError(null);
-    try { downloadBackupFile(await exportBackup()); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-  };
-  const selectFile = async (file: File | undefined) => {
-    if (!file) return;
-    setPreview(null);
-    setError(null);
-    try {
-      const next = await readBackupFile(file);
-      setPreview(next);
-      setConfirmOpen(true);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-  };
-  const confirmImport = async () => {
-    if (!preview) throw new Error('请先选择并验证备份文件');
-    setBusy(true);
-    setError(null);
-    try { await restoreBackup(preview); setPreview(null); setConfirmOpen(false); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setBusy(false); }
-  };
-  return { preview, confirmOpen, setConfirmOpen, error, busy, exportFile, selectFile, confirmImport, clearPreview: () => setPreview(null) };
+  const dependencies = { setBusy, setError, begin: operations.begin };
+  const exportFile = () => exportZip({ ...dependencies, exportBackup });
+  const selectFile = (file: File | undefined) => validateZip({ ...dependencies, file, setPreview, setConfirmOpen });
+  const confirmImport = () => importZip({ ...dependencies, preview, restoreBackup, setPreview, setConfirmOpen });
+  return { preview, confirmOpen, setConfirmOpen, error, busy, syncConfigured: sync.status !== null || s3Sync.status !== null,
+    exportFile, selectFile, confirmImport, clearPreview: () => setPreview(null) };
 }
 
 type BackupActions = ReturnType<typeof useBackupActions>;
@@ -51,8 +85,8 @@ function ImportConfirmation({ actions }: { readonly actions: BackupActions }) {
         <AlertDialogHeader>
           <AlertDialogTitle>替换本机数据？</AlertDialogTitle>
           <AlertDialogDescription>
-            {preview && `备份包含 ${preview.groupCount} 个分组、${preview.shortcutCount} 个网站、${preview.assetCount} 个媒体文件。默认分组「${preview.defaultGroup}」，默认搜索引擎「${preview.engine}」。`}
-            {' '}继续后会覆盖当前数据；联网搜索建议仍保持关闭。
+            {preview && `备份包含 ${preview.folderCount} 个文件夹、${preview.shortcutCount} 个网站、${preview.backgroundCount} 个壁纸素材及 ${preview.assetCount} 个媒体文件，原件共 ${preview.totalAssetBytes.toLocaleString()} 字节。默认搜索引擎「${preview.engine}」。`}
+            {' '}继续后会完整替换当前数据。{actions.syncConfigured && '恢复数据会参与后续跨设备同步。'}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && <FieldError role="alert">{error}</FieldError>}
@@ -72,7 +106,7 @@ function BackupActionRow({ actions }: { readonly actions: BackupActions }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <FieldTitle className="mr-auto">本地备份</FieldTitle>
-      <Button type="button" variant="outline" size="sm" onClick={() => void actions.exportFile()}>
+      <Button type="button" variant="outline" size="sm" disabled={actions.busy} onClick={() => void actions.exportFile()}>
         <DownloadIcon data-icon="inline-start" />导出 ZIP
       </Button>
       <Button type="button" variant="outline" size="sm" disabled={actions.busy}

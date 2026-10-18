@@ -14,7 +14,7 @@ export function WebDavDisconnectDialog({ connection }: { readonly connection: Re
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>断开 WebDAV 同步？</AlertDialogTitle>
-            <AlertDialogDescription>只移除本机连接和密钥，本机与云端数据都会保留。</AlertDialogDescription>
+            <AlertDialogDescription>移除本机连接和密钥；本机与云端数据保留。</AlertDialogDescription>
           </AlertDialogHeader>
           {connection.error && <FieldError role="alert">{connection.error}</FieldError>}
           <AlertDialogFooter>

@@ -2,6 +2,9 @@ import { fail } from '@/domain/errors';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import { validateSettings, type AppSettings } from '@/domain/settings';
 
+export const CURRENT_BACKUP_VERSION = 8 as const;
+export type SupportedBackupVersion = typeof CURRENT_BACKUP_VERSION;
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(`${label}格式不正确`);
   return value as Record<string, unknown>;
@@ -15,10 +18,8 @@ function exactKeys(value: Record<string, unknown>, allowed: readonly string[], l
 }
 
 const BACKGROUND_FIELDS = new Map<unknown, readonly string[]>([
-  ['photo', ['kind', 'assetId', 'maskStrength']],
-  ['motion', ['kind', 'assetId', 'maskStrength']],
-  ['solid', ['kind', 'color']],
-  ['gradient', ['kind', 'from', 'to', 'angle']],
+  ['photo', ['kind', 'assetId', 'maskStrength']], ['motion', ['kind', 'assetId', 'maskStrength']],
+  ['solid', ['kind', 'color']], ['gradient', ['kind', 'from', 'to', 'angle']],
 ]);
 
 function validateAppearanceShape(value: unknown): void {
@@ -42,9 +43,10 @@ function validateSearchShape(value: unknown): void {
   }
 }
 
-function validateLayoutShape(value: unknown): void {
+function validateCurrentLayout(value: unknown): Record<string, unknown> {
   const layout = record(value, '布局设置');
-  exactKeys(layout, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns'], '布局设置');
+  exactKeys(layout, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns', 'style', 'clockPosition'], '布局设置');
+  return layout;
 }
 
 function validateClockShape(value: unknown): void {
@@ -52,12 +54,13 @@ function validateClockShape(value: unknown): void {
   exactKeys(clock, ['format', 'size', 'showSeconds', 'showDate', 'showWeekday', 'dateFormat', 'weekdayFormat'], '时钟设置');
 }
 
-export function validateBackupSettings(value: unknown): AppSettings {
+export function validateBackupSettings(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): AppSettings {
+  if (formatVersion !== CURRENT_BACKUP_VERSION) fail('备份版本不兼容当前文件夹协议');
   const raw = record(value, '设置');
   exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock'], '设置');
   validateAppearanceShape(raw.appearance);
   validateSearchShape(raw.search);
-  validateLayoutShape(raw.layout);
+  const layout = validateCurrentLayout(raw.layout);
   validateClockShape(raw.clock);
-  return validateSettings(value);
+  return validateSettings({ ...raw, layout });
 }

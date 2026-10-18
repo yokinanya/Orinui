@@ -2,11 +2,11 @@ import { fail } from '@/domain/errors';
 import { SyncMergeConflictError } from '@/domain/sync/conflicts';
 import { parseSyncSnapshot } from '@/domain/sync/validate';
 import type { SearchEngine } from '@/domain/search-engines';
-import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncGroup, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshotV1, type SyncTombstone } from '@/domain/sync/types';
+import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
 export interface MergeSyncSnapshotsInput {
-  readonly local: SyncSnapshotV1;
-  readonly remotes: readonly SyncSnapshotV1[];
+  readonly local: SyncSnapshot;
+  readonly remotes: readonly SyncSnapshot[];
 }
 
 function registerOrder(left: Pick<SyncRegister<unknown>, 'clock' | 'deviceId'>, right: Pick<SyncRegister<unknown>, 'clock' | 'deviceId'>): number {
@@ -35,8 +35,8 @@ function mergeRecord<T extends { readonly id: string }>(records: readonly T[], m
   return [...result.values()].sort((left, right) => compareText(left.id, right.id));
 }
 
-function mergeGroup(left: SyncGroup, right: SyncGroup): SyncGroup {
-  return { id: left.id, name: choose(left.name, right.name), colorRole: choose(left.colorRole, right.colorRole), position: choose(left.position, right.position) };
+function mergeFolder(left: SyncFolder, right: SyncFolder): SyncFolder {
+  return { id: left.id, name: choose(left.name, right.name), position: choose(left.position, right.position) };
 }
 
 function mergeShortcut(left: SyncShortcut, right: SyncShortcut): SyncShortcut {
@@ -54,7 +54,7 @@ function mergeEngines(engines: readonly SyncRegister<SearchEngine>[]): SyncRegis
   return [...engineMap.values()].sort((left, right) => compareText(left.value.id, right.value.id));
 }
 
-function mergeSettings(snapshots: readonly SyncSnapshotV1[]): SyncSettings {
+function mergeSettings(snapshots: readonly SyncSnapshot[]): SyncSettings {
   const first = snapshots[0];
   if (!first) fail('同步快照不能为空');
   const customEngines = mergeEngines(snapshots.flatMap(({ settings }) => settings.customEngines));
@@ -78,12 +78,13 @@ function mergeAsset(left: SyncAsset, right: SyncAsset): SyncAsset {
     left.byteLength !== right.byteLength || left.sha256 !== right.sha256 || JSON.stringify(left.motion) !== JSON.stringify(right.motion)) {
     fail(`同一媒体标识对应不同内容：${left.id}`);
   }
-  return { ...left, sourceUrl: choose(left.sourceUrl, right.sourceUrl) };
+  return { ...left, sourceUrl: choose(left.sourceUrl, right.sourceUrl), name: choose(left.name, right.name) };
 }
 
-function mergeAssets(snapshots: readonly SyncSnapshotV1[], tombstones: ReadonlySet<string>, references: ReadonlySet<string>): SyncAsset[] {
+function mergeAssets(snapshots: readonly SyncSnapshot[], tombstones: ReadonlySet<string>, references: ReadonlySet<string>): SyncAsset[] {
   const all = snapshots.flatMap(({ assets }) => assets);
-  return mergeRecord(all, mergeAsset).filter((asset) => references.has(asset.id) && !tombstones.has(tombstoneKey('asset', asset.id)));
+  return mergeRecord(all, mergeAsset).filter((asset) => (asset.kind === 'background' || references.has(asset.id))
+    && !tombstones.has(tombstoneKey('asset', asset.id)));
 }
 
 function referencedAssets(shortcuts: readonly SyncShortcut[], settings: SyncSettings): Set<string> {
@@ -94,15 +95,11 @@ function referencedAssets(shortcuts: readonly SyncShortcut[], settings: SyncSett
 }
 
 function assertReferencesAlive(input: {
-  readonly defaultGroupId: SyncRegister<string>;
   readonly settings: SyncSettings;
   readonly shortcuts: readonly SyncShortcut[];
   readonly tombstones: ReadonlySet<string>;
 }): void {
-  const { defaultGroupId, settings, shortcuts, tombstones } = input;
-  if (tombstones.has(tombstoneKey('group', defaultGroupId.value))) {
-    throw new SyncMergeConflictError('default-group-deleted', defaultGroupId.value);
-  }
+  const { settings, shortcuts, tombstones } = input;
   const engineId = settings.defaultEngineId.value;
   if (tombstones.has(tombstoneKey('custom-engine', engineId))) {
     throw new SyncMergeConflictError('custom-engine-deleted-while-default', engineId);
@@ -128,24 +125,12 @@ function mergeTombstoneLists(lists: readonly (readonly SyncTombstone[])[]): Sync
   return [...unique.values()].sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id));
 }
 
-function mergeTombstones(snapshots: readonly SyncSnapshotV1[]): SyncTombstone[] {
+function mergeTombstones(snapshots: readonly SyncSnapshot[]): SyncTombstone[] {
   return mergeTombstoneLists(snapshots.map(({ tombstones }) => tombstones));
 }
 
-function cascadeDeletedGroups(shortcuts: readonly SyncShortcut[], tombstones: readonly SyncTombstone[]): SyncTombstone[] {
-  const deletedGroups = new Map(tombstones.filter(({ entityType }) => entityType === 'group').map((item) => [item.id, item]));
-  const existing = new Set(tombstones.filter(({ entityType }) => entityType === 'shortcut').map(({ id }) => id));
-  const cascaded = shortcuts.flatMap((shortcut) => {
-    const groupId = shortcut.placement.value.groupId;
-    const groupTombstone = deletedGroups.get(groupId);
-    if (!groupTombstone || existing.has(shortcut.id)) return [];
-    return [{ entityType: 'shortcut' as const, id: shortcut.id, clock: groupTombstone.clock, deviceId: groupTombstone.deviceId }];
-  });
-  return mergeTombstoneLists([tombstones, cascaded]);
-}
-
-function latestSnapshotPerDevice(snapshots: readonly SyncSnapshotV1[]): SyncSnapshotV1[] {
-  const devices = new Map<string, SyncSnapshotV1>();
+function latestSnapshotPerDevice(snapshots: readonly SyncSnapshot[]): SyncSnapshot[] {
+  const devices = new Map<string, SyncSnapshot>();
   for (const snapshot of snapshots) {
     const current = devices.get(snapshot.deviceId);
     if (current && current.vaultId !== snapshot.vaultId) fail('同一设备快照属于不同同步库');
@@ -155,37 +140,41 @@ function latestSnapshotPerDevice(snapshots: readonly SyncSnapshotV1[]): SyncSnap
   return [...devices.values()].sort((left, right) => compareText(left.deviceId, right.deviceId));
 }
 
-export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput): SyncSnapshotV1 {
+export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput): SyncSnapshot {
   const snapshots = latestSnapshotPerDevice([parseSyncSnapshot(local), ...remotes.map(parseSyncSnapshot)]);
   const first = snapshots[0];
   if (!first) fail('同步快照不能为空');
   if (snapshots.some(({ vaultId }) => vaultId !== first.vaultId)) fail('无法合并不同步库的数据');
-  const initialTombstones = mergeTombstones(snapshots);
-  const mergedShortcuts = mergeRecord(snapshots.flatMap(({ shortcuts }) => shortcuts), mergeShortcut);
-  const tombstones = cascadeDeletedGroups(mergedShortcuts, initialTombstones);
+
+  const allTombstones = mergeTombstones(snapshots);
+  const shortcutTombstones = new Set(allTombstones
+    .filter(({ entityType }) => entityType === 'shortcut').map(({ id }) => id));
+  const mergedShortcuts = mergeRecord(snapshots.flatMap(({ shortcuts }) => shortcuts), mergeShortcut)
+    .filter(({ id }) => !shortcutTombstones.has(id));
+  const tombstones = allTombstones;
   const deleted = new Set(tombstones.map(({ entityType, id }) => tombstoneKey(entityType, id)));
-  const defaultGroupId = snapshots.map(({ defaultGroupId }) => defaultGroupId).reduce(choose);
-  const groups = mergeRecord(snapshots.flatMap(({ groups }) => groups), mergeGroup)
-    .filter(({ id }) => !deleted.has(tombstoneKey('group', id)));
-  const shortcuts = mergedShortcuts.filter(({ id }) => !deleted.has(tombstoneKey('shortcut', id)));
+  const folders = mergeRecord(snapshots.flatMap(({ folders }) => folders), mergeFolder)
+    .filter(({ id }) => !deleted.has(tombstoneKey('folder', id)))
+    .toSorted((left, right) => left.position.value - right.position.value
+      || registerOrder(right.position, left.position) || compareText(left.id, right.id));
+  const shortcuts = mergedShortcuts;
   const settings = mergeSettings(snapshots);
   const engines = settings.customEngines.filter(({ value }) => !deleted.has(tombstoneKey('custom-engine', value.id)));
   const liveSettings = { ...settings, customEngines: engines };
-  assertReferencesAlive({ defaultGroupId, settings: liveSettings, shortcuts, tombstones: deleted });
+  assertReferencesAlive({ settings: liveSettings, shortcuts, tombstones: deleted });
   const assetReferences = referencedAssets(shortcuts, liveSettings);
   const localLatest = snapshots.find(({ deviceId }) => deviceId === local.deviceId);
   if (!localLatest) fail('本机同步快照不存在');
   const mergedPayload = {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: first.vaultId, deviceId: local.deviceId,
-    defaultGroupId,
-    groups, shortcuts, settings: liveSettings,
+    folders, shortcuts, settings: liveSettings,
     assets: mergeAssets(snapshots, deleted, assetReferences), tombstones,
   };
   const changed = JSON.stringify(mergedPayload) !== JSON.stringify({
     schemaVersion: localLatest.schemaVersion, vaultId: localLatest.vaultId, deviceId: localLatest.deviceId,
-    defaultGroupId: localLatest.defaultGroupId, groups: localLatest.groups, shortcuts: localLatest.shortcuts,
+    folders: localLatest.folders, shortcuts: localLatest.shortcuts,
     settings: localLatest.settings, assets: localLatest.assets, tombstones: localLatest.tombstones,
   });
-  const merged: SyncSnapshotV1 = { ...mergedPayload, generation: localLatest.generation + (changed ? 1 : 0) };
+  const merged: SyncSnapshot = { ...mergedPayload, generation: localLatest.generation + (changed ? 1 : 0) };
   return parseSyncSnapshot(merged);
 }

@@ -1,9 +1,11 @@
 import { parseWebDavVaultManifest, validateStrongEtag, validateWebDavIdentity } from '@/domain/webdav/validation';
-import type { SyncObjectAddress, SyncSnapshotHead, SyncAssetReceipt, SyncPublishReceipt } from '@/domain/sync/object-types';
+import type { SyncObjectAddress, SyncSnapshotHead, SyncAssetHead, SyncAssetReceipt, SyncPublishReceipt, SyncObjectProgress } from '@/domain/sync/object-types';
 import type { SyncObjectStore } from '@/sync/objects';
 import { createWebDavClient, type WebDavInput, type WebDavClient } from '@/platform/webdav-client';
-import { base64, childIdentity, fromBase64, propfind, requireCollection, propfindIfPresent } from '@/platform/webdav-protocol';
-import { bytesBody, equalBytes, exactWebDavEntry, readObject, readResourceRevision, writeReceiptRevision } from '@/platform/webdav-resource';
+import { base64, childIdentity, fromBase64, propfind, requireCollection,
+  propfindIfPresent, strongRevision } from '@/platform/webdav-protocol';
+import { bytesBody, equalBytes, exactWebDavEntry, readObject, readObjectMetadata, readResourceRevision, writeReceiptRevision } from '@/platform/webdav-resource';
+import { measureWebDavVaultBytes } from '@/platform/webdav-size';
 import { WEBDAV_HTTP_STATUS, isMissingWebDavDescriptor } from '@/platform/webdav-http';
 import { deleteWebDavVault } from '@/platform/webdav-delete';
 
@@ -16,6 +18,7 @@ export interface WebDavRemote {
   createVault(input: { readonly vaultId: string; readonly ciphertext: Uint8Array }): Promise<void>;
   prepareCollections(input: { readonly vaultId: string; readonly deviceId: string }): Promise<void>;
   verifyConditions(input: { readonly vaultId: string; readonly deviceId: string }): Promise<void>;
+  measureVaultBytes(vaultId: string, onObjectProgress?: SyncObjectProgress): Promise<number>;
   deleteVault(vaultId: string): Promise<void>;
 }
 
@@ -37,8 +40,10 @@ function snapshotUrl(client: WebDavClient, address: SyncObjectAddress): URL {
   return client.url('vaults', address.vaultId, 'devices', address.objectId, 'snapshot.enc');
 }
 
-async function snapshotRevision(client: WebDavClient, url: URL): Promise<string | null> {
-  return readResourceRevision(client, url, '设备快照');
+async function snapshotMetadata(client: WebDavClient, url: URL): Promise<SyncAssetHead | null> {
+  if (client.consistencyMode !== 'readback-only') return readObjectMetadata(client, url, '设备快照');
+  const object = await readObject({ client, url, label: '设备快照', consistencyMode: 'readback-only' });
+  return object ? { revision: object.revision, ciphertextBytes: object.ciphertext.byteLength } : null;
 }
 
 async function listSnapshots(client: WebDavClient, input: { readonly vaultId: string }): Promise<readonly SyncSnapshotHead[]> {
@@ -56,12 +61,16 @@ async function listSnapshots(client: WebDavClient, input: { readonly vaultId: st
     deviceIds.push(deviceId);
   }
   const revisions = await Promise.all(deviceIds.map(async (deviceId) => ({ deviceId,
-    revision: await snapshotRevision(client, snapshotUrl(client, { vaultId: input.vaultId, objectId: deviceId })) })));
-  const heads = revisions.filter((head): head is SyncSnapshotHead => head.revision !== null);
+    metadata: await snapshotMetadata(client, snapshotUrl(client, { vaultId: input.vaultId, objectId: deviceId })) })));
+  const heads: SyncSnapshotHead[] = revisions.flatMap(({ deviceId, metadata }) => metadata
+    ? [{ deviceId, revision: metadata.revision, ...(metadata.ciphertextBytes === null ? {} : { ciphertextBytes: metadata.ciphertextBytes }) }]
+    : []);
   return heads.toSorted((left, right) => left.deviceId < right.deviceId ? -1 : Number(left.deviceId !== right.deviceId));
 }
 
-async function createAsset(client: WebDavClient, input: SyncObjectAddress & { readonly ciphertext: Uint8Array }): Promise<SyncAssetReceipt> {
+async function createAsset(client: WebDavClient, input: SyncObjectAddress & {
+  readonly ciphertext: Uint8Array; readonly onProgress?: (completedBytes: number, totalBytes: number | undefined) => void;
+}): Promise<SyncAssetReceipt> {
   if (input.ciphertext.length === 0) throw new Error('不能上传空的 WebDAV 媒体对象');
   const url = assetUrl(client, input);
   if (client.consistencyMode === 'readback-only') {
@@ -70,8 +79,9 @@ async function createAsset(client: WebDavClient, input: SyncObjectAddress & { re
     const response = await client.request(url, { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' },
       body: bytesBody(input.ciphertext) });
     if (!response.ok) throw new Error(`WebDAV 创建媒体失败（HTTP ${response.status}）`);
-    return { created: true, revision: await writeReceiptRevision({ client, url, label: '媒体创建回执',
-      response, expectedBytes: input.ciphertext }) };
+    const revision = await writeReceiptRevision({ client, url, label: '媒体创建回执', response, expectedBytes: input.ciphertext });
+    input.onProgress?.(input.ciphertext.byteLength, input.ciphertext.byteLength);
+    return { created: true, revision };
   }
   const response = await client.request(url, { method: 'PUT', headers: {
     'If-None-Match': '*', 'Content-Type': 'application/octet-stream',
@@ -82,8 +92,9 @@ async function createAsset(client: WebDavClient, input: SyncObjectAddress & { re
     return { created: false, revision: existing.revision };
   }
   if (!response.ok) throw new Error(`WebDAV 创建媒体失败（HTTP ${response.status}）`);
-  return { created: true, revision: await writeReceiptRevision({ client, url, label: '媒体创建回执',
-    response, expectedBytes: input.ciphertext }) };
+  const revision = await writeReceiptRevision({ client, url, label: '媒体创建回执', response, expectedBytes: input.ciphertext });
+  input.onProgress?.(input.ciphertext.byteLength, input.ciphertext.byteLength);
+  return { created: true, revision };
 }
 
 function appendByte(bytes: Uint8Array, value: number): Uint8Array {
@@ -218,12 +229,20 @@ async function prepareCollections(client: WebDavClient,
 function createObjectStore(client: WebDavClient): SyncObjectStore {
   return {
     listSnapshots: (input) => listSnapshots(client, input),
+    measureVaultBytes: ({ vaultId, onObjectProgress }) => measureWebDavVaultBytes({ client, vaultId, onProgress: onObjectProgress }),
     async readSnapshot(input) {
       const object = await readObject({ client, url: snapshotUrl(client, input), label: '设备快照', revision: input.revision });
       if (!object) throw new Error('WebDAV 设备快照不存在');
+      input.onProgress?.(object.ciphertext.byteLength, input.expectedCiphertextBytes ?? object.ciphertext.byteLength);
       return object;
     },
-    readAsset: (input) => readObject({ client, url: assetUrl(client, input), label: '媒体' }),
+    async readAsset(input) {
+      const object = await readObject({ client, url: assetUrl(client, input), label: '媒体' });
+      if (object) input.onProgress?.(object.ciphertext.byteLength,
+        input.expectedCiphertextBytes ?? object.ciphertext.byteLength);
+      return object;
+    },
+    statAsset: (input) => readObjectMetadata(client, assetUrl(client, input), '媒体'),
     createAsset: (input) => createAsset(client, input),
     publishSnapshot: (input) => publishSnapshot(client, input),
   };
@@ -241,20 +260,32 @@ async function createVault(client: WebDavClient,
   input: { readonly vaultId: string; readonly ciphertext: Uint8Array }): Promise<void> {
   validateWebDavIdentity(input.vaultId, '同步库');
   if (input.ciphertext.length === 0) throw new Error('不能创建空的 WebDAV 同步库密文');
-  const manifest = JSON.stringify({ schemaVersion: 1, vaultId: input.vaultId, ciphertext: base64(input.ciphertext) });
   const url = client.url('vault.json');
-  if (client.consistencyMode === 'readback-only' && await readVault(client)) {
-    throw new Error('WebDAV 同步库描述已存在，拒绝覆盖');
-  }
+  await assertVaultDescriptorAbsent(client);
+  const manifest = JSON.stringify({ schemaVersion: 1, vaultId: input.vaultId, ciphertext: base64(input.ciphertext) });
   const response = await client.request(url, { method: 'PUT', headers: {
     ...(client.consistencyMode === 'strong-etag' ? { 'If-None-Match': '*' } : {}),
     'Content-Type': 'application/json; charset=utf-8',
   }, body: manifest });
-  if (response.status === WEBDAV_HTTP_STATUS.preconditionFailed) throw new Error('WebDAV 同步库描述已存在，拒绝覆盖');
-  if (!response.ok) throw new Error(`WebDAV 创建同步库描述失败（HTTP ${response.status}）：${url.pathname}`);
+  validateVaultCreateResponse(response, url);
   await writeReceiptRevision({ client, url, label: '同步库创建回执', response,
     expectedBytes: new TextEncoder().encode(manifest) });
   if (client.consistencyMode === 'readback-only') return;
+  await verifyCreatedVault(client, input);
+}
+
+async function assertVaultDescriptorAbsent(client: WebDavClient): Promise<void> {
+  if (client.consistencyMode === 'readback-only' && await readVault(client)) {
+    throw new Error('WebDAV 同步库描述已存在，拒绝覆盖');
+  }
+}
+
+function validateVaultCreateResponse(response: Response, url: URL): void {
+  if (response.status === WEBDAV_HTTP_STATUS.preconditionFailed) throw new Error('WebDAV 同步库描述已存在，拒绝覆盖');
+  if (!response.ok) throw new Error(`WebDAV 创建同步库描述失败（HTTP ${response.status}）：${url.pathname}`);
+}
+
+async function verifyCreatedVault(client: WebDavClient, input: { readonly vaultId: string; readonly ciphertext: Uint8Array }): Promise<void> {
   const published = await readVault(client);
   if (!published || published.vaultId !== input.vaultId || !equalBytes(published.ciphertext, input.ciphertext)) {
     throw new Error('WebDAV 同步库创建结果与本机内容不一致');
@@ -269,6 +300,7 @@ export function createWebDavRemote(input: WebDavRemoteInput): WebDavRemote {
     createVault: (vault) => createVault(client, vault),
     prepareCollections: (collections) => prepareCollections(client, collections),
     verifyConditions: (conditions) => verifyConditions(client, conditions),
+    measureVaultBytes: (vaultId, onObjectProgress) => measureWebDavVaultBytes({ client, vaultId, onProgress: onObjectProgress }),
     deleteVault: (vaultId) => deleteWebDavVault(client, vaultId),
   };
 }

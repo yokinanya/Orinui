@@ -6,6 +6,7 @@
 |---|---|
 | [根目录 README](../README.md) | 项目概览、当前状态摘要、开发命令 |
 | [Beta 发布记录](./BETA-0.1.0.md) | 首个 Beta 实现清单、验证范围、性能观测与发布状态 |
+| [Beta 2 候选说明](./BETA-0.1.0-beta.2.md) | Beta 2 的功能、安装、数据兼容、权限与已知限制；本地候选尚未发布 |
 | [Beta 发布说明](./RELEASE-NOTES-v0.1.0-beta.1.md) | GitHub Release 的功能摘要、安装说明和已知限制 |
 | [PROJECT.md](./PROJECT.md) | 产品定位、范围、实际技术栈和开发边界 |
 | [TASKS.md](./TASKS.md) | 实现与验收进度、下一阶段顺序与完成标准、延期项的主记录 |
@@ -16,9 +17,10 @@
 | [DATA-CONTRACT.md](./DATA-CONTRACT.md) | 领域模型、校验、生命周期、资源及备份规则 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 当前实现的工具链、目录、平台/数据边界和工程注意事项 |
 | [SYNC-DESIGN.md](./SYNC-DESIGN.md) | 已定同步方向、当前实现边界和外部存储验收要求 |
-| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 同步 schema 3 字段、墓碑、加密字节格式与本地事务协议 |
+| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 同步 schema 10 文件夹字段、旧分组格式拒绝、永久墓碑和加密事务协议 |
 | [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md) | 公共对象端口、手动协调顺序、并发/失败状态及当前验证边界 |
 | [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) | HTTPS WebDAV 对象格式、连接流程、安全边界和受控真实扩展审计范围 |
+| [SYNC-S3.md](./SYNC-S3.md) | S3/R2 配置、条件操作、容量、删除边界及真实服务验收要求 |
 | [AGENTS.md](../AGENTS.md) | 开发代理的项目规则和必读入口 |
 
 ## 阅读顺序
@@ -27,7 +29,7 @@
 2. 读 TASKS.md 和 VERIFICATION.md，确认未完成项及最近验证范围。
 3. 修改界面前读 VISUAL-SPEC.md；修改领域/持久化/备份前读 DATA-CONTRACT.md。
 4. 修改工程和模块边界前读 ARCHITECTURE.md。
-5. 实施同步前读 DECISIONS.md、SYNC-DESIGN.md、SYNC-PROTOCOL.md 和 SYNC-COORDINATOR.md；修改 WebDAV 时再读 SYNC-WEBDAV.md，区分实现、受控审计和真实服务验收。
+5. 实施同步前读 DECISIONS.md、SYNC-DESIGN.md、SYNC-PROTOCOL.md 和 SYNC-COORDINATOR.md；按提供方再读 SYNC-WEBDAV.md 或 SYNC-S3.md，区分实现、受控审计和真实服务验收。
 
 ## 状态约定
 

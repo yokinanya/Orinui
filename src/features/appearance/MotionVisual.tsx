@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useMotionPlayback } from '@/app/MotionPlayback';
 
 export function MotionVisual() {
-  const { image, playing, fail } = useMotionPlayback();
+  const { image, playing, error, fail } = useMotionPlayback();
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const element = video.current;
@@ -22,5 +22,5 @@ export function MotionVisual() {
     return <img src={image.mediaUrl} alt="" className={className} onError={() => fail('动态壁纸图片解码失败')} />;
   }
   return <video ref={video} src={image.mediaUrl} poster={image.url ?? undefined} muted loop playsInline
-    className={className} hidden={!playing} onError={() => fail('动态壁纸视频读取或解码失败')} />;
+    className={className} hidden={error !== null} onError={() => fail('动态壁纸视频读取或解码失败')} />;
 }

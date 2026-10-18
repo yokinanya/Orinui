@@ -23,7 +23,7 @@ test('图标编辑以紧凑图标按钮选择上传并将图片URL操作收在�
 
   const imageUrl = page.getByLabel('自定义图片URL', { exact: true });
   await expect(imageUrl).toBeVisible();
-  const inputGroup = page.locator('[data-slot="input-group"]');
+  const inputGroup = imageUrl.locator('xpath=..');
   await expect(inputGroup.locator('[data-slot="input-group-addon"][data-align="inline-end"]')).toBeVisible();
   await expect(inputGroup.locator('[data-slot="input-group-addon"] button')).toBeDisabled();
   await expect(page.getByText('图片和链接保存在本机及备份。', { exact: true })).toHaveCount(0);
@@ -92,7 +92,7 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await page.reload();
   await expect(shortcut.locator('[role="img"]')).toHaveCSS('background-color', 'rgb(192, 32, 32)');
 
-  await page.getByRole('button', { name: '编辑分组与网站', exact: true }).click();
+  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
   await page.getByRole('button', { name: 'SVG站点 的操作' }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   await expect(page.getByRole('button', { name: 'SVG 图标颜色，当前 #c02020' })).toBeVisible();
@@ -103,7 +103,7 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await expect(shortcut.locator('img')).toBeVisible();
   await expect(shortcut.locator('[role="img"]')).toHaveCount(0);
 
-  await page.getByRole('button', { name: '编辑分组与网站', exact: true }).click();
+  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
   await page.getByRole('button', { name: 'SVG站点 的操作' }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   await page.getByRole('button', { name: '选择内置图标' }).click();
@@ -133,7 +133,7 @@ test('SVG 图片处理中颜色预览控件暂时禁用', async ({ page }) => {
   await page.getByLabel('选择图标文件').setInputFiles({ name: 'icon.svg', mimeType: 'image/svg+xml', buffer: svg });
   await expect(page.getByRole('button', { name: /^SVG 图标颜色/ })).toBeVisible();
   await visibleSubmitButton(page).click();
-  await page.getByRole('button', { name: '编辑分组与网站', exact: true }).click();
+  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
   await page.getByRole('button', { name: '忙碌中的SVG 的操作' }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   const colorPicker = page.getByRole('button', { name: /^SVG 图标颜色/ });
@@ -156,15 +156,18 @@ test('SVG 图片处理中颜色预览控件暂时禁用', async ({ page }) => {
   await expect(colorPicker).toBeEnabled();
 });
 
-test('横屏编辑采用双列且保存可见，内置图标面板只有图形并支持键盘返回', async ({ page }) => {
+test('横屏输入与网站实时预览采用双列且保存可见，内置图标面板支持键盘返回', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/newtab.html');
   await page.getByRole('button', { name: '添加第一个网站' }).click();
   const dialog = page.getByRole('dialog', { name: '添加网站', exact: true });
+  const livePreview = dialog.getByLabel('网站实时预览', { exact: true });
+  await expect(livePreview).toBeVisible();
+  await expect(dialog.getByRole('img', { name: '名称首字母预览' })).toBeVisible();
+  await expect(visibleSubmitButton(page)).toBeInViewport();
   const [box, title, preview, save] = await Promise.all([
     dialog.boundingBox(), page.getByLabel('名称', { exact: true }).boundingBox(),
-    page.getByRole('img', { name: '名称首字母预览' }).boundingBox(),
-    visibleSubmitButton(page).boundingBox(),
+    livePreview.boundingBox(), visibleSubmitButton(page).boundingBox(),
   ]);
   if (!box || !title || !preview || !save) throw new Error('编辑表单未完整显示');
   expect(box.width).toBeGreaterThan(600);

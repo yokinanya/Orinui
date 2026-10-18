@@ -14,11 +14,19 @@ export function ThemePanel() {
   return (
     <Field>
       <FieldLabel>主题</FieldLabel>
-      <ToggleGroup className="settings-segmented" value={[appearance.theme]} onValueChange={(value) => {
+      <ToggleGroup aria-label="主题" className="settings-preview-choices grid w-full grid-cols-3 gap-2" value={[appearance.theme]} onValueChange={(value) => {
         const next = value[0];
         if (next === 'system' || next === 'light' || next === 'dark') update({ theme: next });
       }}>
-        {THEME_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value}>{option.label}</ToggleGroupItem>)}
+        {THEME_OPTIONS.map((option) => <ToggleGroupItem key={option.value} value={option.value}
+          className="settings-preview-choice h-auto min-w-0 flex-col gap-2 rounded-xl border p-2 sm:p-2.5">
+          <span aria-hidden="true" className={`theme-sketch theme-sketch-${option.value}`}>
+            <span className="theme-sketch-clock">10:24</span>
+            <span className="theme-sketch-search" />
+            <span className="theme-sketch-sites"><i /><i /><i /><i /></span>
+          </span>
+          <span>{option.label}</span>
+        </ToggleGroupItem>)}
       </ToggleGroup>
     </Field>
   );

@@ -7,6 +7,11 @@ export type ColorTokenMap = Record<string, string>;
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const READABLE_SURFACE_TONE_THRESHOLD = 50;
+const HEX_CHANNEL_WIDTH = 2;
+const HEX_PREFIX_LENGTH = 1;
+const HEX_RADIX = 16;
+const RGB_CHANNELS = [0, 1, 2] as const;
+const PHOTO_MASK_COLORS = { light: '#faf8f5', dark: '#0c0a08' } as const;
 
 /** 浅色与深色的半透明表面透明度不同，玻璃层需要各自的分量。 */
 const GLASS_ALPHA = { light: 0.62, dark: 0.55 } as const;
@@ -19,10 +24,14 @@ const HOME_READABILITY = {
     '--home-readable-search-surface': 'color-mix(in oklch, rgba(250, 248, 245, 0.84) 94%, var(--home-readable-accent))',
     '--home-readable-hover': 'color-mix(in oklch, rgba(236, 232, 226, 0.86) 90%, var(--home-readable-accent))',
     '--home-readable-foreground': '#302c27',
-    '--home-readable-muted': '#514b45',
+    // 次级文字在渐变中间调上仍需 4.5:1，因此比静态令牌加深一档。
+    '--home-readable-muted': '#3d3833',
     '--home-readable-border': 'color-mix(in oklch, var(--home-readable-accent) 35%, transparent)',
     '--home-readable-focus': 'var(--home-readable-accent)',
     '--home-readable-accent': 'var(--primary)',
+    '--home-readable-text-shadow': 'none',
+    '--home-readable-text-outline': 'transparent',
+    '--home-readable-photo-foreground': '#ffffff',
   },
   dark: {
     '--home-readable-surface': 'color-mix(in oklch, rgba(12, 10, 8, 0.68) 94%, var(--home-readable-accent))',
@@ -33,6 +42,34 @@ const HOME_READABILITY = {
     '--home-readable-border': 'color-mix(in oklch, var(--home-readable-accent) 35%, transparent)',
     '--home-readable-focus': 'var(--home-readable-accent)',
     '--home-readable-accent': 'var(--primary)',
+    '--home-readable-text-shadow': 'none',
+    '--home-readable-text-outline': 'transparent',
+    '--home-readable-photo-foreground': '#ffffff',
+  },
+} as const;
+
+const PHOTO_READABILITY = {
+  light: {
+    '--home-readable-surface': 'rgba(250, 248, 245, 0.52)',
+    '--home-readable-search-surface': 'rgba(250, 248, 245, 0.72)',
+    '--home-readable-hover': 'rgba(236, 232, 226, 0.76)',
+    '--home-readable-foreground': '#000000',
+    '--home-readable-muted': '#000000',
+    '--home-readable-border': 'rgba(0, 0, 0, 0.26)',
+    '--home-readable-text-shadow': '0 1px 3px rgb(0 0 0 / 84%), 0 0 10px rgb(0 0 0 / 56%)',
+    '--home-readable-text-outline': 'rgb(0 0 0 / 92%)',
+    '--home-readable-photo-foreground': '#ffffff',
+  },
+  dark: {
+    '--home-readable-surface': 'rgba(14, 16, 20, 0.48)',
+    '--home-readable-search-surface': 'rgba(14, 16, 20, 0.58)',
+    '--home-readable-hover': 'rgba(14, 16, 20, 0.6)',
+    '--home-readable-foreground': '#ffffff',
+    '--home-readable-muted': '#ffffff',
+    '--home-readable-border': 'rgba(255, 255, 255, 0.26)',
+    '--home-readable-text-shadow': '0 1px 3px rgb(0 0 0 / 82%), 0 0 9px rgb(0 0 0 / 50%)',
+    '--home-readable-text-outline': 'rgb(0 0 0 / 90%)',
+    '--home-readable-photo-foreground': '#ffffff',
   },
 } as const;
 
@@ -47,19 +84,42 @@ function accentToken(backgroundIsDark: boolean, themeIsDark: boolean): string {
   return backgroundIsDark === themeIsDark ? 'var(--primary)' : 'var(--primary-foreground)';
 }
 
+function blendedPhotoColor(backgroundColor: string | null, maskStrength: number, isDark: boolean): string | null {
+  if (backgroundColor === null) return null;
+  const maskColor = PHOTO_MASK_COLORS[isDark ? 'dark' : 'light'];
+  const channels = RGB_CHANNELS.map((channel) => {
+    const offset = HEX_PREFIX_LENGTH + channel * HEX_CHANNEL_WIDTH;
+    const source = Number.parseInt(backgroundColor.slice(offset, offset + HEX_CHANNEL_WIDTH), HEX_RADIX);
+    const mask = Number.parseInt(maskColor.slice(offset, offset + HEX_CHANNEL_WIDTH), HEX_RADIX);
+    return Math.round(source * (1 - maskStrength) + mask * maskStrength);
+  });
+  return `#${channels.map((channel) => channel.toString(HEX_RADIX).padStart(HEX_CHANNEL_WIDTH, '0')).join('')}`;
+}
+
+function photoReadabilityTokens(backgroundIsDark: boolean, themeIsDark: boolean): ColorTokenMap {
+  const accent = accentToken(backgroundIsDark, themeIsDark);
+  return {
+    ...PHOTO_READABILITY[backgroundIsDark ? 'dark' : 'light'],
+    '--home-readable-focus': accent,
+    '--home-readable-accent': accent,
+  };
+}
+
 /** Solid and gradient backgrounds choose a readable surface from their actual color. */
-export function homeReadabilityTokens(isDark: boolean, isPhoto = false, backgroundColor: string | null = null): ColorTokenMap {
+export function homeReadabilityTokens({
+  isDark,
+  isPhoto = false,
+  backgroundColor = null,
+  photoMaskStrength = 0,
+}: {
+  readonly isDark: boolean;
+  readonly isPhoto?: boolean;
+  readonly backgroundColor?: string | null;
+  readonly photoMaskStrength?: number;
+}): ColorTokenMap {
   if (isPhoto) {
-    return {
-      '--home-readable-surface': 'rgba(14, 16, 20, 0.48)',
-      '--home-readable-search-surface': 'rgba(14, 16, 20, 0.58)',
-      '--home-readable-hover': 'rgba(14, 16, 20, 0.6)',
-      '--home-readable-foreground': '#ffffff',
-      '--home-readable-muted': '#ffffff',
-      '--home-readable-border': 'rgba(255, 255, 255, 0.24)',
-      '--home-readable-focus': '#ffffff',
-      '--home-readable-accent': 'var(--primary)',
-    };
+    const displayedColor = blendedPhotoColor(backgroundColor, photoMaskStrength, isDark);
+    return photoReadabilityTokens(isDarkBackground(displayedColor, isDark), isDark);
   }
 
   const surfaceIsDark = isDarkBackground(backgroundColor, isDark);

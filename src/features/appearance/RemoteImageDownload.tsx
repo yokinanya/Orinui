@@ -8,6 +8,7 @@ import { RedirectConfirmationRequiredError } from '@/domain/remote-image-errors'
 import { downloadRemoteImage } from '@/platform/remote-images';
 import type { NewMediaAsset } from '@/storage/assets';
 import { useImageSource } from '@/features/appearance/use-image-source';
+import { useOperations } from '@/app/operations';
 
 interface RemoteImageDownloadProps {
   readonly id: string;
@@ -20,6 +21,7 @@ interface RemoteImageDownloadProps {
 }
 
 function useDownloadState({ kind, initialSourceUrl, onReady, onBusyChange }: RemoteImageDownloadProps) {
+  const operations = useOperations();
   const { source, hasUnsavedSource, changeSource, acceptSource } = useImageSource(initialSourceUrl);
   const [error, setError] = useState<string | null>(null);
   const [redirect, setRedirect] = useState<RedirectConfirmationRequiredError | null>(null);
@@ -29,13 +31,19 @@ function useDownloadState({ kind, initialSourceUrl, onReady, onBusyChange }: Rem
     setRedirect(null);
     setBusy(true);
     onBusyChange?.(true);
+    const task = operations.begin('下载网络照片', '申请来源权限并下载图片');
     try {
       const image = await downloadRemoteImage(nextSource, kind);
+      task.update('验证图片并保存到本机');
       await onReady(image);
       acceptSource(image.sourceUrl);
+      task.succeed('网络照片已保存');
     }
     catch (cause) {
-      if (cause instanceof RedirectConfirmationRequiredError) setRedirect(cause);
+      if (cause instanceof RedirectConfirmationRequiredError) {
+        setRedirect(cause);
+        task.succeed('等待你确认新的图片来源');
+      } else task.fail(cause);
       setError(cause instanceof Error ? cause.message : String(cause));
     }
     finally { setBusy(false); onBusyChange?.(false); }

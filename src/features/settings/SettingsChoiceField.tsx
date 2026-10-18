@@ -19,7 +19,7 @@ interface SettingsChoiceFieldProps<T extends string> {
 export function SettingsChoiceField<T extends string>({ label, value, options, onChange, responsive = false }: SettingsChoiceFieldProps<T>) {
   const labelId = useId();
   return (
-    <Field orientation={responsive ? 'responsive' : 'vertical'}>
+    <Field orientation={responsive ? 'responsive' : 'vertical'} className={responsive ? 'justify-between' : undefined}>
       <FieldTitle id={labelId} className="font-normal">{label}</FieldTitle>
       <ToggleGroup className={cn('settings-segmented w-full gap-1', responsive && '@md/field-group:!w-72 @md/field-group:!flex-none')}
         aria-labelledby={labelId} value={[value]} onValueChange={(next) => {

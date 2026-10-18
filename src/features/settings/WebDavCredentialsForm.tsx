@@ -49,10 +49,13 @@ export function WebDavCredentialsForm({ connection }: WebDavCredentialsFormProps
         <FieldDescription>已有同步库才填写；新建时留空。</FieldDescription>
       </Field>
       <ConnectionFeedback connection={connection} />
-      <Button type="button" variant="outline" disabled={disabled || !connection.url || !connection.username || !connection.password}
-        onClick={() => void connection.prepare()}>
-        {busy ? '正在检查…' : '检查连接'}
-      </Button>
+      {/* 与其他表单的主操作一致：右对齐、主色按钮；连接成功后第二步的“确认并启用”在预览区。 */}
+      <div className="flex justify-end">
+        <Button type="button" disabled={disabled || !connection.url || !connection.username || !connection.password}
+          onClick={() => void connection.prepare()}>
+          {busy ? '正在检查…' : '检查连接'}
+        </Button>
+      </div>
     </FieldGroup>
   );
 }

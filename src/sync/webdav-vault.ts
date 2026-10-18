@@ -1,5 +1,5 @@
 import type { SyncCrypto } from '@/platform/sync-crypto-types';
-import type { WebDavRemote } from '@/platform/webdav-store';
+import type { SyncObjectStore } from '@/sync/objects';
 import { parseSnapshotHeads, parseObjectRead } from '@/domain/sync/object-validation';
 import type { SyncCodec } from '@/sync/ports';
 import { materializeSyncSnapshot, mergeSyncSnapshots } from '@/domain/sync';
@@ -22,11 +22,11 @@ export async function verifyWebDavVault(input: { readonly crypto: SyncCrypto; re
   validateWebDavVaultDescriptor(value, input.vaultId);
 }
 
-export async function countWebDavData(input: { readonly remote: WebDavRemote; readonly crypto: SyncCrypto;
+export async function countWebDavData(input: { readonly objects: Pick<SyncObjectStore, 'listSnapshots' | 'readSnapshot'>; readonly crypto: SyncCrypto;
   readonly key: CryptoKey; readonly vaultId: string; readonly decodeSnapshot: SyncCodec['decode'] }): Promise<WebDavCounts> {
-  const heads = parseSnapshotHeads(await input.remote.objects.listSnapshots({ vaultId: input.vaultId }));
+  const heads = parseSnapshotHeads(await input.objects.listSnapshots({ vaultId: input.vaultId }));
   const snapshots = await Promise.all(heads.map(async (head) => {
-    const object = parseObjectRead(await input.remote.objects.readSnapshot({ vaultId: input.vaultId,
+    const object = parseObjectRead(await input.objects.readSnapshot({ vaultId: input.vaultId,
       objectId: head.deviceId, revision: head.revision }));
     if (object.revision !== head.revision) throw new Error('WebDAV 快照在预览期间发生变化');
     const context = { vaultId: input.vaultId, kind: 'snapshot' as const, objectId: head.deviceId };
@@ -34,8 +34,9 @@ export async function countWebDavData(input: { readonly remote: WebDavRemote; re
     return input.decodeSnapshot(bytes, context);
   }));
   const first = snapshots[0];
-  if (!first) return { groups: 0, shortcuts: 0, assets: 0 };
+  if (!first) return { folders: 0, shortcuts: 0, assets: 0, assetBytes: 0 };
   const merged = mergeSyncSnapshots({ local: first, remotes: snapshots.slice(1) });
   const data = materializeSyncSnapshot(merged);
-  return { groups: data.groups.length, shortcuts: data.shortcuts.length, assets: data.assets.length };
+  return { folders: data.folders.length, shortcuts: data.shortcuts.length, assets: data.assets.length,
+    assetBytes: merged.assets.reduce((total, asset) => total + asset.byteLength, 0) };
 }

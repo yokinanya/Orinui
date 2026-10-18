@@ -21,8 +21,8 @@ export function WebDavDeleteDialog({ connection, forgotten = false }: {
         <AlertDialogHeader>
           <AlertDialogTitle>删除远端同步库？</AlertDialogTitle>
           <AlertDialogDescription>
-            永久删除云端配置、所有设备快照、照片和图标，无法撤销。本机数据保留。请先停止其他设备同步，避免删除期间继续写入。
-            {forgotten ? '删除后可重新检查连接并创建新库，生成新的恢复密钥。' : '删除成功后断开同步。'}
+            永久删除云端设置、所有设备快照和媒体，无法撤销；本机数据保留。请先停止其他设备同步，避免继续写入。
+            {forgotten ? '删除后可重新检查连接，创建新库和恢复密钥。' : '删除成功后断开同步。'}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <p className="break-all text-sm text-muted-foreground">{connection.status?.url ?? connection.url}</p>

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   countGraphemes,
   normalizeEngineName,
-  normalizeGroupName,
+  normalizeFolderName,
   normalizeShortcutTitle,
 } from '@/domain/text';
 
@@ -34,14 +34,14 @@ describe('normalizeShortcutTitle', () => {
   });
 });
 
-describe('normalizeGroupName', () => {
-  it('允许重名：调用方不做唯一性校验', () => {
-    expect(normalizeGroupName('常用')).toBe('常用');
-    expect(normalizeGroupName('常用')).toBe('常用');
+describe('normalizeFolderName', () => {
+  it('只做规范化：唯一性由存储层校验', () => {
+    expect(normalizeFolderName('常用')).toBe('常用');
+    expect(normalizeFolderName('常用')).toBe('常用');
   });
 
   it('拒绝超过 40 个字素簇的名称', () => {
-    expect(() => normalizeGroupName('字'.repeat(41))).toThrowError(/最多 40 个字符/);
+    expect(() => normalizeFolderName('字'.repeat(41))).toThrowError(/最多 40 个字符/);
   });
 });
 

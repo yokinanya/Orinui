@@ -14,6 +14,11 @@ export function validateObjectIdentity(value: unknown, label: string): string {
   return value;
 }
 
+function integerBytes(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) throw new Error('远端对象大小格式不正确');
+  return Number(value);
+}
+
 export function parseSnapshotHeads(value: unknown): readonly SyncSnapshotHead[] {
   if (!Array.isArray(value)) throw new Error('设备快照列表格式不正确');
   const devices = new Set<string>();
@@ -22,7 +27,9 @@ export function parseSnapshotHeads(value: unknown): readonly SyncSnapshotHead[] 
     const deviceId = validateObjectIdentity(raw.deviceId, '设备');
     if (devices.has(deviceId)) throw new Error(`设备快照重复：${deviceId}`);
     devices.add(deviceId);
-    return { deviceId, revision: validateObjectIdentity(raw.revision, '对象版本') };
+    const ciphertextBytes = raw.ciphertextBytes === undefined ? undefined : integerBytes(raw.ciphertextBytes);
+    return { deviceId, revision: validateObjectIdentity(raw.revision, '对象版本'),
+      ...(ciphertextBytes === undefined ? {} : { ciphertextBytes }) };
   }).toSorted((left, right) => left.deviceId < right.deviceId ? -1 : Number(left.deviceId !== right.deviceId));
 }
 

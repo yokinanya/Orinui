@@ -13,7 +13,7 @@ it('rejects insecure or ambiguous collection URLs and unsafe path identities', a
     expect(() => createWebDavRemote({ credentials: { url: 'https://@dav.test/root/', username: 'u', password: 'p' }, fetch, parseXml: () => documentFor([]) })).toThrow(/HTTPS/);
     expect(() => createWebDavRemote({ credentials: { url: 'https://dav.test/root/?x=1', username: 'u', password: 'p' }, fetch, parseXml: () => documentFor([]) })).toThrow(/HTTPS/);
     const { remote } = setup(() => ok());
-    expect(() => remote.objects.readAsset({ vaultId: '..', objectId: 'x' })).toThrow(/路径段/);
+    await expect(remote.objects.readAsset({ vaultId: '..', objectId: 'x' })).rejects.toThrow(/路径段/);
 });
 
 it('sends Basic UTF-8 authorization and rejects redirected responses', async () => {
@@ -200,13 +200,20 @@ it('lists direct device collections and gets strong snapshot ETags via PROPFIND'
 
     const valid = setup((url, init) => new Headers(init.headers).get('Depth') === '1'
       ? ok(xmlFor(response('/orinui/vaults/v1/devices/', { collection: true, etagStatus: 404 }), response('/orinui/vaults/v1/devices/device%20one/', { collection: true, etagStatus: 404 })), 207)
-      : ok(xmlFor(response(url.pathname, { etag: '"s1"' })), 207));
-    await expect(valid.remote.objects.listSnapshots({ vaultId: 'v1' })).resolves.toEqual([{ deviceId: 'device one', revision: '"s1"' }]);
+      : ok('', 200, { ETag: '"s1"', 'Content-Length': '8' }));
+    await expect(valid.remote.objects.listSnapshots({ vaultId: 'v1' })).resolves.toEqual([
+      { deviceId: 'device one', revision: '"s1"', ciphertextBytes: 8 },
+    ]);
 
-    const missingSnapshotTag = setup((url, init) => new Headers(init.headers).get('Depth') === '1'
-      ? ok(xmlFor(response('/orinui/vaults/v1/devices/d1/', { collection: true, etagStatus: 404 })), 207)
-      : ok(xmlFor(response(url.pathname, { collection: false, etagStatus: 404 })), 207));
-    await expect(missingSnapshotTag.remote.objects.listSnapshots({ vaultId: 'v1' })).rejects.toThrow(/getetag 属性查询未成功/);
+    const missingSnapshotTag = setup((url, init) => {
+      if (init.method === 'PROPFIND' && new Headers(init.headers).get('Depth') === '1') {
+        return ok(xmlFor(response('/orinui/vaults/v1/devices/d1/', { collection: true, etagStatus: 404 })), 207);
+      }
+      if (init.method === 'HEAD') return ok('', 200, { 'Content-Length': '8' });
+      if (init.method === 'PROPFIND') return ok(xmlFor(response(url.pathname, { collection: false, etagStatus: 404 })), 207);
+      return ok('', 200);
+    });
+    await expect(missingSnapshotTag.remote.objects.listSnapshots({ vaultId: 'v1' })).rejects.toThrow(/ETag/);
   });
 
 it('reads snapshot revisions for separate devices concurrently', async () => {
@@ -216,7 +223,7 @@ it('reads snapshot revisions for separate devices concurrently', async () => {
     const requestGate = new Promise<void>((resolve) => { releaseRequests = resolve; });
     const allStarted = new Promise<void>((resolve) => { resolveAllStarted = resolve; });
     const { remote } = setup(async (url, init) => {
-      if (new Headers(init.headers).get('Depth') === '1') {
+      if (init.method === 'PROPFIND' && new Headers(init.headers).get('Depth') === '1') {
         return ok(xmlFor(response('/orinui/vaults/v1/devices/', { collection: true }),
           response('/orinui/vaults/v1/devices/d1/', { collection: true }),
           response('/orinui/vaults/v1/devices/d2/', { collection: true }),
@@ -225,7 +232,7 @@ it('reads snapshot revisions for separate devices concurrently', async () => {
       paths.push(url.pathname);
       if (paths.length === 3) resolveAllStarted();
       await requestGate;
-      return ok(xmlFor(response(url.pathname, { etag: '"snapshot-r1"' })), 207);
+      return ok('', 200, { ETag: '"snapshot-r1"', 'Content-Length': '16' });
     });
     const loading = remote.objects.listSnapshots({ vaultId: 'v1' });
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -240,9 +247,9 @@ it('reads snapshot revisions for separate devices concurrently', async () => {
     const heads = await loading;
     expect(startedConcurrently).toBe(true);
     expect(heads).toEqual([
-      { deviceId: 'd1', revision: '"snapshot-r1"' },
-      { deviceId: 'd2', revision: '"snapshot-r1"' },
-      { deviceId: 'd3', revision: '"snapshot-r1"' },
+      { deviceId: 'd1', revision: '"snapshot-r1"', ciphertextBytes: 16 },
+      { deviceId: 'd2', revision: '"snapshot-r1"', ciphertextBytes: 16 },
+      { deviceId: 'd3', revision: '"snapshot-r1"', ciphertextBytes: 16 },
     ]);
   });
 

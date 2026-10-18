@@ -14,10 +14,9 @@ export function WebDavSyncPanel() {
   if (connection.status) return <WebDavConnectedPanel connection={connection} />;
 
   return (
-    <section aria-labelledby="webdav-sync-title" className="flex flex-col gap-4">
-      <h3 id="webdav-sync-title" className="text-sm font-medium">WebDAV 同步</h3>
+    <div className="flex flex-col gap-4">
       <WebDavCredentialsForm connection={connection} />
       <WebDavPlanReview connection={connection} />
-    </section>
+    </div>
   );
 }

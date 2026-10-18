@@ -1,9 +1,9 @@
 import type { MediaAsset } from '@/domain/asset';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { Shortcut } from '@/domain/shortcut';
-import type { SyncAsset, SyncGroup, SyncRegister, SyncSettings, SyncShortcut, SyncTombstone } from '@/domain/sync/types';
+import type { SyncAsset, SyncFolder, SyncRegister, SyncSettings, SyncShortcut, SyncTombstone } from '@/domain/sync/types';
 import { nextSyncCounter } from '@/domain/sync/version';
 import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow, SyncTombstoneRecordRow } from '@/storage/sync/types';
 
@@ -58,23 +58,22 @@ function livePrevious<K extends SyncEntityRecordRow['kind']>(
   return record?.kind === kind ? record as Extract<SyncEntityRecordRow, { readonly kind: K }> : undefined;
 }
 
-interface BuildGroupRecordInput {
-  readonly group: Group;
+interface BuildFolderRecordInput {
+  readonly folder: Folder;
   readonly previous?: SyncRecordRow;
-  readonly before?: Group;
+  readonly before?: Folder;
   readonly clock: SyncClock;
 }
 
-export function buildGroupRecord(input: BuildGroupRecordInput): Extract<SyncRecordRow, { kind: 'group' }> {
-  const { group, previous, before, clock } = input;
-  const old = livePrevious(previous, 'group');
-  const value: SyncGroup = {
-    id: group.id,
-    name: registerAfterCompare({ value: group.name, previous: old?.value.name, before: before?.name, hasBefore: before !== undefined, clock }),
-    colorRole: registerAfterCompare({ value: group.colorRole, previous: old?.value.colorRole, before: before?.colorRole, hasBefore: before !== undefined, clock }),
-    position: registerAfterCompare({ value: group.order, previous: old?.value.position, before: before?.order, hasBefore: before !== undefined, clock }),
+export function buildFolderRecord(input: BuildFolderRecordInput): Extract<SyncRecordRow, { kind: 'folder' }> {
+  const { folder, previous, before, clock } = input;
+  const old = livePrevious(previous, 'folder');
+  const value: SyncFolder = {
+    id: folder.id,
+    name: registerAfterCompare({ value: folder.name, previous: old?.value.name, before: before?.name, hasBefore: before !== undefined, clock }),
+    position: registerAfterCompare({ value: folder.order, previous: old?.value.position, before: before?.order, hasBefore: before !== undefined, clock }),
   };
-  return { id: recordId('group', group.id), kind: 'group', entityId: group.id, value };
+  return { id: recordId('folder', folder.id), kind: 'folder', entityId: folder.id, value };
 }
 
 interface BuildShortcutRecordInput {
@@ -91,8 +90,8 @@ export function buildShortcutRecord(input: BuildShortcutRecordInput): Extract<Sy
     id: shortcut.id,
     title: registerAfterCompare({ value: shortcut.title, previous: old?.value.title, before: before?.title, hasBefore: before !== undefined, clock }),
     url: registerAfterCompare({ value: shortcut.url, previous: old?.value.url, before: before?.url, hasBefore: before !== undefined, clock }),
-    placement: registerAfterCompare({ value: { groupId: shortcut.groupId, order: shortcut.order }, previous: old?.value.placement,
-      before: before && { groupId: before.groupId, order: before.order }, hasBefore: before !== undefined, clock }),
+    placement: registerAfterCompare({ value: { folderId: shortcut.folderId, order: shortcut.order }, previous: old?.value.placement,
+      before: before && { folderId: before.folderId, order: before.order }, hasBefore: before !== undefined, clock }),
     icon: registerAfterCompare({ value: shortcut.icon, previous: old?.value.icon, before: before?.icon, hasBefore: before !== undefined, clock }),
   };
   return { id: recordId('shortcut', shortcut.id), kind: 'shortcut', entityId: shortcut.id, value };
@@ -110,6 +109,7 @@ export function buildAssetRecord(asset: MediaAsset, previous: SyncRecordRow | un
   const value: Omit<SyncAsset, 'sha256'> = {
     id: asset.id, kind: asset.kind, mime: asset.mime, width: asset.width, height: asset.height, byteLength: asset.blob.size,
     sourceUrl: clock.register(asset.sourceUrl, old?.value.sourceUrl),
+    name: clock.register(asset.name ?? null, old?.value.name),
     motion: asset.motion ? { kind: asset.motion.kind, duration: asset.motion.duration } : null,
   };
   const row: Extract<SyncRecordRow, { kind: 'asset' }> = { id: recordId('asset', asset.id), kind: 'asset', entityId: asset.id, value };
@@ -138,7 +138,7 @@ export function buildEngineRecord(engine: SearchEngine, previous: SyncRecordRow 
 }
 
 interface BuildTombstoneInput {
-  readonly kind: 'group' | 'shortcut' | 'custom-engine';
+  readonly kind: 'folder' | 'shortcut' | 'asset' | 'custom-engine';
   readonly entityId: string;
   readonly previous?: SyncRecordRow;
   readonly clock: SyncClock;

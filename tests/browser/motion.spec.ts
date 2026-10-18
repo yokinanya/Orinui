@@ -61,80 +61,38 @@ test('主页首次进入时轻量淡入且内容立即可交互', async ({ page 
   await expect(page.getByRole('dialog')).toBeVisible();
 });
 
-test('分组数据加载完成后才淡入新网站，且编辑状态保留', async ({ page }) => {
-  await addShortcut(page, '常用站点', { first: true });
-  await page.getByRole('button', { name: '编辑分组与网站' }).click();
-  await page.getByRole('button', { name: '新建分组' }).click();
-  await page.getByLabel('分组名称').fill('工作');
-  await page.getByRole('button', { name: '创建', exact: true }).click();
+
+async function addFolder(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '新建文件夹' });
+  await dialog.getByLabel('文件夹名称', { exact: true }).fill(name);
+  await dialog.locator('button[type="submit"]').click();
+  await dialog.waitFor({ state: 'hidden' });
+}
+
+test('网格内容淡入使用统一动效，编辑状态保留', async ({ page }) => {
+  await addShortcut(page, '主页站点', { first: true });
+  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
+  await addFolder(page, '工作');
+
   await expect(page.getByRole('button', { name: '工作', exact: true })).toBeVisible();
-  await addShortcut(page, '工作站点', { editing: true });
-
-  await page.getByRole('button', { name: '常用', exact: true }).click();
-  await expect(page.getByText('常用站点', { exact: true })).toBeVisible();
-  await expect(page.getByText('工作站点', { exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '工作', exact: true }).click();
-  await expect(page.getByText('工作站点', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '添加网站', exact: true })).toBeVisible();
-
-  const calls = await page.evaluate(() => window.__motionCalls);
-  expect(calls.at(-1)).toMatchObject({ target: 'shortcut-group-content', duration: 180 });
-  expect(calls.at(-1)?.keyframes[0]).toMatchObject({ opacity: 0, transform: 'translateY(5px)' });
+  await expect(page.getByRole('button', { name: '完成编辑', exact: true })).toBeVisible();
+  await expect(page.locator('[data-shortcut-frame]').getByRole('button', { name: '主页站点', exact: true })).toBeVisible();
+  // 新建文件夹后网格仍是同一个列表，条数为「网站 + 文件夹 + 添加网站」。
+  await expect(page.locator('[data-shortcut-frame] li')).toHaveCount(3);
 });
 
-test('减少动态效果时保留淡化反馈并取消空间位移', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
-  const animationName = await page.locator('.motion-home-enter').evaluate((element) => getComputedStyle(element).animationName);
-  expect(animationName).toBe('home-content-fade');
-
-  await addShortcut(page, '常用站点', { first: true });
-  await page.getByRole('button', { name: '编辑分组与网站' }).click();
-  await page.getByRole('button', { name: '新建分组' }).click();
-  await page.getByLabel('分组名称').fill('工作');
-  await page.getByRole('button', { name: '创建', exact: true }).click();
-  await addShortcut(page, '工作站点', { editing: true });
-  await page.getByRole('button', { name: '常用', exact: true }).click();
-  await expect(page.getByText('常用站点', { exact: true })).toBeVisible();
+test('打开文件夹弹层显示其中的网站，主页网格不显示它们', async ({ page }) => {
+  await addFolder(page, '工作');
   await page.getByRole('button', { name: '工作', exact: true }).click();
-  await expect(page.getByText('工作站点', { exact: true })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: '工作' });
+  await dialog.getByRole('button', { name: '添加网站', exact: true }).click();
+  await page.getByLabel('名称', { exact: true }).fill('文档');
+  await page.getByLabel('网址', { exact: true }).fill('example.com');
+  await visibleSubmitButton(page).click();
+  await expect(dialog.getByRole('link', { name: '文档', exact: true })).toBeVisible();
 
-  const calls = await page.evaluate(() => window.__motionCalls);
-  expect(calls.at(-1)).toMatchObject({ target: 'shortcut-group-content', duration: 150 });
-  expect(calls.at(-1)?.keyframes[0]).toMatchObject({ opacity: 0 });
-  expect(calls.at(-1)?.keyframes[0]).not.toHaveProperty('transform');
-});
-
-test('快速切组只显示最终分组，并正确显示空组', async ({ page }) => {
-  await addShortcut(page, '常用站点', { first: true });
-  await page.getByRole('button', { name: '编辑分组与网站' }).click();
-  await page.getByRole('button', { name: '新建分组' }).click();
-  await page.getByLabel('分组名称').fill('工作');
-  await page.getByRole('button', { name: '创建', exact: true }).click();
-  await addShortcut(page, '工作站点', { editing: true });
-  await page.getByRole('button', { name: '新建分组' }).click();
-  await page.getByLabel('分组名称').fill('空组');
-  await page.getByRole('button', { name: '创建', exact: true }).click();
-  await page.getByRole('button', { name: '完成编辑' }).click();
-  await page.getByRole('button', { name: '工作', exact: true }).click();
-  await expect(page.getByText('工作站点', { exact: true })).toBeVisible();
-  await page.evaluate(() => { window.__motionCalls = []; });
-
-  await page.evaluate(() => {
-    const tabs = [...document.querySelectorAll<HTMLButtonElement>('nav[aria-label="分组"] button')];
-    const select = (name: string) => {
-      const tab = tabs.find((candidate) => candidate.textContent?.trim() === name);
-      if (!tab) throw new Error(`缺少分组标签：${name}`);
-      tab.click();
-    };
-    select('常用');
-    select('空组');
-  });
-
-  await expect(page.getByText('还没有网站', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: '工作站点', exact: true })).toHaveCount(0);
-  await expect(page.getByText('正在读取分组网站…', { exact: true })).toHaveCount(0);
-  const calls = await page.evaluate(() => window.__motionCalls);
-  expect(calls).toHaveLength(1);
-  expect(await page.getByTestId('shortcut-group-content').isVisible()).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-shortcut-frame] a', { hasText: '文档' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '工作', exact: true })).toBeVisible();
 });

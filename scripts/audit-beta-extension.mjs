@@ -103,7 +103,8 @@ async function runMediaCycle(input) {
   const syncAms = await manuallySync(profileA.page);
   const snapshotA = snapshotSummary(await decryptSnapshot(fixture, { vaultId: fixture.vaultId,
     deviceId: storedA.syncState.deviceId, recoveryKey: input.recoveryKey }));
-  if (snapshotA.background.kind !== 'motion' || snapshotA.assets[0]?.mime !== mime) {
+  const activeAsset = snapshotA.assets.find(({ id }) => id === snapshotA.background.assetId);
+  if (snapshotA.background.kind !== 'motion' || activeAsset?.mime !== mime) {
     throw new Error(`${name}没有出现在 A 设备的已发布快照：${JSON.stringify(snapshotA)}`);
   }
   const encrypted = await verifyEncryptedMedia({ fixture, stored: storedA, filePath: path, label: name });

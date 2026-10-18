@@ -1,10 +1,9 @@
-import type { SyncSnapshotV1 } from '@/domain/sync/types';
+import type { SyncSnapshot } from '@/domain/sync/types';
 
 /** Reads all observed logical clocks without depending on the wall clock. */
-export function maximumSyncClock(snapshot: SyncSnapshotV1): number {
+export function maximumSyncClock(snapshot: SyncSnapshot): number {
   const clocks = [
-    snapshot.defaultGroupId.clock,
-    ...snapshot.groups.flatMap((group) => [group.name.clock, group.colorRole.clock, group.position.clock]),
+    ...snapshot.folders.flatMap((folder) => [folder.name.clock, folder.position.clock]),
     ...snapshot.shortcuts.flatMap((shortcut) => [
       shortcut.title.clock, shortcut.url.clock, shortcut.placement.clock, shortcut.icon.clock,
     ]),

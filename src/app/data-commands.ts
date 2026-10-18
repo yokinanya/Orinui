@@ -1,104 +1,101 @@
 import type { DataContextValue } from '@/app/data-context';
-import { getMediaAsset, pruneUnreferencedAssets } from '@/storage/assets';
+import { getMediaAsset, listLibraryAssets, reorderBackgroundAsset, moveBackgroundAsset, pruneUnreferencedAssets, renameBackgroundAsset } from '@/storage/assets';
 import type { Database } from '@/storage/db';
-import * as groups from '@/storage/groups';
-import { setPhotoBackground, setMotionBackground } from '@/storage/image-operations';
+import * as folders from '@/storage/folders';
+import { activateBackgroundAsset, deleteBackgroundAsset, setPhotoBackground, setMotionBackground } from '@/storage/image-operations';
 import { clearImageSourceUrl } from '@/storage/source-metadata';
 import { readSettings, updateSettings } from '@/storage/settings';
 import * as shortcuts from '@/storage/shortcuts';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { AppSettings } from '@/domain/settings';
 import { DEFAULT_LAYOUT } from '@/domain/layout';
 import type { ClockFormat } from '@/domain/settings';
 import { newId } from '@/domain/id';
 import { validateEngineTemplate } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
-import type { GroupColorRole } from '@/domain/group';
 import { createBackupSnapshot, replaceAllData, resetLocalData } from '@/storage/backup';
 import { serializeBackup } from '@/platform/backup-file';
 import type { RestorableBackup } from '@/platform/backup-file';
 
 interface CommandDependencies {
   readonly db: Database;
-  readonly activeGroupId: string | null;
-  readonly loadGroups: () => Promise<Group[]>;
-  readonly loadShortcuts: (groupId: string | null) => Promise<void>;
-  readonly setActiveGroupId: (id: string | null) => void;
+  readonly loadFolders: () => Promise<Folder[]>;
+  readonly loadShortcuts: () => Promise<void>;
   readonly setSettings: (settings: AppSettings) => void;
 }
 
-type ShortcutCommands = Pick<DataContextValue, 'createShortcut' | 'updateShortcut' | 'deleteShortcut' | 'restoreShortcut' | 'moveShortcut' | 'reorderShortcut' | 'moveShortcutToGroup' | 'countShortcutsInGroup'>;
+type ShortcutCommands = Pick<DataContextValue, 'createShortcut' | 'updateShortcut' | 'deleteShortcut' | 'restoreShortcut' | 'moveShortcut' | 'reorderShortcut' | 'moveShortcutToFolder' | 'countShortcutsInFolder' | 'listAllShortcuts'>;
 
-function shortcutCommands({ db, activeGroupId, loadShortcuts }: CommandDependencies): ShortcutCommands {
+function shortcutCommands({ db, loadShortcuts }: CommandDependencies): ShortcutCommands {
   return {
     async createShortcut(input) {
       await shortcuts.createShortcut(db, input);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
     },
     async updateShortcut(id, patch) {
       await shortcuts.updateShortcut(db, id, patch);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
     },
     async deleteShortcut(id) {
       const removed = await shortcuts.deleteShortcut(db, id);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
       return removed;
     },
     async restoreShortcut(shortcut) {
       await shortcuts.restoreShortcut(db, shortcut);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
     },
     async moveShortcut(id, direction) {
       await shortcuts.moveShortcut(db, id, direction);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
     },
     async reorderShortcut(id, index) {
       await shortcuts.reorderShortcut(db, id, index);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
     },
-    async moveShortcutToGroup(id, groupId) {
-      await shortcuts.moveShortcutToGroup(db, id, groupId);
-      await loadShortcuts(activeGroupId);
+    async moveShortcutToFolder(id, folderId) {
+      await shortcuts.moveShortcutToFolder(db, id, folderId);
+      await loadShortcuts();
     },
-    countShortcutsInGroup: (groupId) => shortcuts.countShortcutsInGroup(db, groupId),
+    countShortcutsInFolder: (folderId) => folders.countShortcutsInFolder(db, folderId),
+    listAllShortcuts: () => shortcuts.listAllShortcuts(db),
   };
 }
 
-type GroupCommands = Pick<DataContextValue, 'createGroup' | 'renameGroup' | 'deleteGroup' | 'moveGroup' | 'reorderGroup'>;
+type FolderCommands = Pick<DataContextValue, 'createFolder' | 'renameFolder' | 'deleteFolder' | 'moveFolder' | 'reorderFolder'>;
 
-function groupCommands({ db, activeGroupId, loadGroups, setActiveGroupId }: CommandDependencies): GroupCommands {
+function folderCommands({ db, loadFolders, loadShortcuts }: CommandDependencies): FolderCommands {
   return {
-    async createGroup(name) {
-      const created = await groups.createGroup(db, name);
-      await loadGroups();
-      setActiveGroupId(created.id);
+    async createFolder(name) {
+      await folders.createFolder(db, name);
+      await loadFolders();
     },
-    async renameGroup(id, name) {
-      await groups.renameGroup(db, id, name);
-      await loadGroups();
+    async renameFolder(id, name) {
+      await folders.renameFolder(db, id, name);
+      await loadFolders();
     },
-    async deleteGroup(id) {
-      await groups.deleteGroup(db, id);
-      const remaining = await loadGroups();
-      if (activeGroupId !== id) return;
-      const defaultGroup = remaining.find((group) => group.isDefault);
-      if (!defaultGroup) throw new Error('分组数据缺少默认分组');
-      setActiveGroupId(defaultGroup.id);
+    async deleteFolder(id) {
+      // 删除文件夹会把其中的网站移回主页网格，两处都要重新读取。
+      await folders.deleteFolder(db, id);
+      await loadFolders();
+      await loadShortcuts();
     },
-    async moveGroup(id, direction) {
-      await groups.moveGroup(db, id, direction);
-      await loadGroups();
+    async moveFolder(id, direction) {
+      await folders.moveFolder(db, id, direction);
+      await loadFolders();
     },
-    async reorderGroup(id, index) {
-      await groups.reorderGroup(db, id, index);
-      await loadGroups();
+    async reorderFolder(id, index) {
+      await folders.reorderFolder(db, id, index);
+      await loadFolders();
     },
   };
 }
 
 type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings' | 'updateSearchPreferences' | 'updateShortcutPreferences' | 'setPhotoBackground' | 'setMotionBackground' | 'clearImageSourceUrl'>;
+type WallpaperCommands = Pick<DataContextValue, 'activateBackgroundAsset' | 'deleteBackgroundAsset' | 'listBackgroundAssets'
+  | 'renameBackgroundAsset' | 'reorderBackgroundAsset' | 'moveBackgroundAsset'>;
 
-function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: CommandDependencies): AppearanceCommands {
+function appearanceCommands({ db, setSettings, loadShortcuts }: CommandDependencies): AppearanceCommands {
   return {
     async updateAppearance(patch) {
       await db.transaction('rw', db.settings, db.assets, db.shortcuts, async () => {
@@ -142,7 +139,28 @@ function appearanceCommands({ db, setSettings, loadShortcuts, activeGroupId }: C
     },
     async clearImageSourceUrl(assetId) {
       await clearImageSourceUrl(db, assetId);
-      await loadShortcuts(activeGroupId);
+      await loadShortcuts();
+    },
+  };
+}
+
+function wallpaperCommands({ db, setSettings }: CommandDependencies): WallpaperCommands {
+  return {
+    async activateBackgroundAsset(id) {
+      await activateBackgroundAsset(db, id);
+      setSettings(await readSettings(db));
+    },
+    async deleteBackgroundAsset(id) {
+      await deleteBackgroundAsset(db, id);
+      setSettings(await readSettings(db));
+    },
+    listBackgroundAssets: () => listLibraryAssets(db),
+    async renameBackgroundAsset(id, name) {
+      await renameBackgroundAsset(db, id, name);
+    },
+    async reorderBackgroundAsset(id, targetId) { return reorderBackgroundAsset(db, { id, targetId }); },
+    async moveBackgroundAsset(id, direction) {
+      return moveBackgroundAsset(db, { id, direction });
     },
   };
 }
@@ -179,26 +197,12 @@ function searchCommands({ db, setSettings }: CommandDependencies): SearchCommand
   };
 }
 
-type ColorCommands = Pick<DataContextValue, 'updateGroupColor'>;
-
-function colorCommands({ db, loadGroups }: CommandDependencies): ColorCommands {
-  return {
-    async updateGroupColor(id, colorRole) {
-      await groups.updateGroupColor(db, id, colorRole);
-      await loadGroups();
-    },
-  };
-}
-
 type BackupCommands = Pick<DataContextValue, 'exportBackup' | 'restoreBackup' | 'resetLocalData'>;
 
-function backupCommands({ db, setSettings, setActiveGroupId, loadGroups, loadShortcuts }: CommandDependencies): BackupCommands {
-  const activateDefaultGroup = async () => {
-    const remaining = await loadGroups();
-    const primary = remaining.find((group) => group.isDefault);
-    if (!primary) throw new Error('数据中缺少默认分组');
-    setActiveGroupId(primary.id);
-    await loadShortcuts(primary.id);
+function backupCommands({ db, setSettings, loadFolders, loadShortcuts }: CommandDependencies): BackupCommands {
+  const reloadAll = async () => {
+    await loadFolders();
+    await loadShortcuts();
     setSettings(await readSettings(db));
   };
   return {
@@ -207,19 +211,19 @@ function backupCommands({ db, setSettings, setActiveGroupId, loadGroups, loadSho
     },
     async restoreBackup(backup: RestorableBackup) {
       await replaceAllData(db, { document: backup.document, assets: backup.assets });
-      await activateDefaultGroup();
+      await reloadAll();
     },
     async resetLocalData() {
       await resetLocalData(db);
-      await activateDefaultGroup();
+      await reloadAll();
     },
   };
 }
 
 /** 绑定由数据桥注入的数据库与刷新方法，不持有全局数据库。 */
 export function createDataCommands(dependencies: CommandDependencies) {
-  return { ...shortcutCommands(dependencies), ...groupCommands(dependencies), ...appearanceCommands(dependencies),
-    ...searchCommands(dependencies), ...colorCommands(dependencies), ...backupCommands(dependencies) };
+  return { ...shortcutCommands(dependencies), ...folderCommands(dependencies), ...appearanceCommands(dependencies),
+    ...wallpaperCommands(dependencies), ...searchCommands(dependencies), ...backupCommands(dependencies) };
 }
 
 export function imageReader(db: Database) {

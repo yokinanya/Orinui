@@ -3,9 +3,10 @@ import type { ReactNode } from 'react';
 import { useData } from '@/app/data-context';
 import { Button } from '@/components/ui/button';
 import { FieldGroup } from '@/components/ui/field';
-import { Separator } from '@/components/ui/separator';
+import { SettingsSection } from '@/features/settings/SettingsSection';
 import type { OpenTarget } from '@/domain/settings';
 import { ClockSettingsPanel } from '@/features/settings/ClockSettingsPanel';
+import { LayoutStylePicker } from '@/features/settings/LayoutStylePicker';
 import { LayoutSlotList } from '@/features/settings/LayoutSlotList';
 import { SettingsChoiceField, type ChoiceOption } from '@/features/settings/SettingsChoiceField';
 import { SettingsSwitchField } from '@/features/settings/SettingsSwitchField';
@@ -26,10 +27,9 @@ const TARGET_OPTIONS: readonly ChoiceOption<OpenTarget>[] = [
 
 function LayoutSection({ id, title, children }: { readonly id: string; readonly title: string; readonly children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4">
-      <h3 id={id} className="text-base font-semibold">{title}</h3>
-      <div className="w-full max-w-xl">{children}</div>
-    </section>
+    <SettingsSection title={title}>
+      <div id={id} className="w-full min-w-0">{children}</div>
+    </SettingsSection>
   );
 }
 
@@ -40,6 +40,7 @@ function PageSettings() {
   return (
     <LayoutSection id="layout-page-heading" title="页面">
       <FieldGroup className="gap-4">
+        <LayoutStylePicker />
         <SettingsChoiceField responsive label="页面宽度" value={layout.pageWidth} options={WIDTH_OPTIONS}
           onChange={(pageWidth) => update({ pageWidth })} />
         <SettingsChoiceField responsive label="区域间距" value={layout.regionSpacing} options={GAP_OPTIONS}
@@ -72,14 +73,15 @@ function WebsiteSettings() {
 export function LayoutPanel() {
   const { resetLayout } = useData();
   return (
-    <div className="flex flex-col gap-6 pb-2">
+    <div className="settings-columns settings-layout-columns grid items-start gap-4 pb-2">
       <PageSettings />
-      <Separator />
-      <LayoutSection id="layout-clock-heading" title="时钟"><ClockSettingsPanel /></LayoutSection>
-      <Separator />
-      <WebsiteSettings />
-      <Separator />
-      <Button type="button" variant="outline" size="sm" className="self-start"
+
+      <div className="flex min-w-0 flex-col gap-4">
+        <LayoutSection id="layout-clock-heading" title="时钟"><ClockSettingsPanel /></LayoutSection>
+        <WebsiteSettings />
+      </div>
+
+      <Button type="button" variant="outline" size="sm" className="settings-layout-reset justify-self-start"
         onClick={() => void resetLayout().catch(notifyError)}>
         恢复默认布局
       </Button>

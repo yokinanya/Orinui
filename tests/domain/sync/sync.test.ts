@@ -3,19 +3,20 @@ import { createDefaultAppearance } from '@/domain/appearance';
 import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { createDefaultSettings } from '@/domain/settings';
 import { shortcutIconOccupancy } from '@/domain/shortcut-icon';
-import { mergeSyncSnapshots, materializeSyncSnapshot, parseSyncSnapshot, SyncMergeConflictError, SYNC_SCHEMA_VERSION } from '@/domain/sync';
-import type { SyncRegister, SyncSnapshotV1 } from '@/domain/sync';
+import { LEGACY_LAYOUT_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, LEGACY_SYNC_SCHEMA_VERSION, mergeSyncSnapshots,
+  materializeSyncSnapshot, parseSyncSnapshot, PREVIOUS_SYNC_SCHEMA_VERSION, SyncMergeConflictError,
+  SYNC_SCHEMA_VERSION } from '@/domain/sync';
+import type { SyncRegister, SyncSnapshot } from '@/domain/sync';
 
 function register<T>(value: T, clock = 1, deviceId = 'device-a'): SyncRegister<T> {
   return { value, clock, deviceId };
 }
 
-function snapshot(deviceId: string, changes: Partial<SyncSnapshotV1> = {}): SyncSnapshotV1 {
+function snapshot(deviceId: string, changes: Partial<SyncSnapshot> = {}): SyncSnapshot {
   const defaults = createDefaultSettings();
   return {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: 'vault-1', deviceId, generation: 1,
-    defaultGroupId: register('group-default'),
-    groups: [{ id: 'group-default', name: register('常用'), colorRole: register('primary' as const), position: register(0) }],
+    folders: [],
     shortcuts: [],
     settings: {
       appearance: register(createDefaultAppearance()), defaultEngineId: register('google'),
@@ -27,10 +28,11 @@ function snapshot(deviceId: string, changes: Partial<SyncSnapshotV1> = {}): Sync
   };
 }
 
-function shortcut(input: { readonly title: string; readonly url: string; readonly deviceId: string; readonly clock: number }) {
-  const { title, url, deviceId, clock } = input;
+function shortcut(input: { readonly title: string; readonly url: string; readonly deviceId: string; readonly clock: number;
+  readonly folderId?: string | null }) {
+  const { title, url, deviceId, clock, folderId = null } = input;
   return { id: 'shortcut-1', title: register(title, clock, deviceId), url: register(url, clock, deviceId),
-    placement: register({ groupId: 'group-default', order: 0 }, clock, deviceId),
+    placement: register({ folderId, order: 0 }, clock, deviceId),
     icon: register({ kind: 'letter' } as const, clock, deviceId) };
 }
 
@@ -60,6 +62,47 @@ it('rejects the pre-beta sync schema without migrating it', () => {
   const current = snapshot('device-a');
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: 1 })).toThrow(/版本不受支持/);
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: 2 })).toThrow(/版本不受支持/);
+  expect(() => parseSyncSnapshot({ ...current, schemaVersion: 3 })).toThrow(/版本不受支持/);
+});
+
+it.each([4, 5, 6, 7, 8, 9])('rejects legacy group sync schema %s without remote mutation', (schemaVersion) => {
+  const current = snapshot('device-a');
+  const legacyEnvelope = { ...current, schemaVersion,
+    defaultGroupId: register('legacy-default'),
+    groups: [{ id: 'legacy-default', name: register('常用'), colorRole: register('primary'), position: register(0) }],
+    folders: undefined,
+  };
+  expect(() => parseSyncSnapshot(legacyEnvelope)).toThrow(/旧分组同步协议|字段不正确/);
+});
+
+it('accepts the current folder schema and validates folder references', () => {
+  const folder = { id: 'work', name: register('工作'), position: register(0) };
+  const site = shortcut({ title: '文档', url: 'https://example.test/', deviceId: 'device-a', clock: 1, folderId: folder.id });
+  const parsed = parseSyncSnapshot(snapshot('device-a', { folders: [folder], shortcuts: [site] }));
+  expect(parsed.folders).toEqual([folder]);
+  expect(parsed.shortcuts[0]?.placement.value.folderId).toBe(folder.id);
+});
+
+it.each([4, 5, 6, 7, 8, 9])('rejects old group or intermediate wire schema %s', (schemaVersion) => {
+  const legacy = { ...snapshot('device-a'), schemaVersion, defaultGroupId: register('legacy'),
+    groups: [{ id: 'legacy', name: register('常用'), colorRole: register('primary'), position: register(0) }] };
+  expect(() => parseSyncSnapshot(legacy)).toThrow(/旧分组同步协议/);
+});
+it.each(['left-stack', 'split'] as const)('merges and materializes layout %s through the layout register', (style) => {
+  const base = snapshot('device-a');
+  const local = { ...base, settings: { ...base.settings,
+    layout: register({ ...base.settings.layout.value, style }, 2, 'device-a') } };
+  const remote = snapshot('device-b');
+  const parsed = parseSyncSnapshot(local);
+  expect(materializeSyncSnapshot(mergeSyncSnapshots({ local: parsed, remotes: [remote] })).settings.layout.style).toBe(style);
+});
+
+it('retains unselected background assets in the full synchronized library', () => {
+  const wallpaper = { id: 'wallpaper-1', kind: 'background' as const, mime: 'image/png' as const,
+    width: 1, height: 1, byteLength: 5, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null), motion: null };
+  const local = snapshot('device-a', { assets: [wallpaper] });
+  expect(parseSyncSnapshot(local).assets).toEqual([wallpaper]);
+  expect(mergeSyncSnapshots({ local, remotes: [] }).assets).toEqual([wallpaper]);
 });
 
 it('merges new preference registers independently', () => {
@@ -81,57 +124,81 @@ it('prefers an entity tombstone to a live replica and rejects the same tombstone
   expect(() => parseSyncSnapshot({ ...live, tombstones: deleted.tombstones })).toThrow(/同时处于存活和删除状态/);
 });
 
-it('cascades a live shortcut still pointing to a deleted group', () => {
-  const extraGroup = { id: 'group-extra', name: register('额外'), colorRole: register(null), position: register(1) };
-  const child = { ...shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 2 }),
-    placement: register({ groupId: 'group-extra', order: 0 }, 2, 'device-a') };
-  const local = snapshot('device-a', { groups: [...snapshot('device-a').groups, extraGroup], shortcuts: [child] });
-  const deletedGroup = snapshot('device-b', { tombstones: [{ entityType: 'group', id: 'group-extra', clock: 3, deviceId: 'device-b' }] });
-  const result = mergeSyncSnapshots({ local, remotes: [deletedGroup] });
-  expect(result.shortcuts).toEqual([]);
-  expect(result.tombstones).toContainEqual({ entityType: 'shortcut', id: 'shortcut-1', clock: 3, deviceId: 'device-b' });
+it('deleted folder moves an unchanged child to homepage without a shortcut tombstone', () => {
+  const folder = { id: 'folder-extra', name: register('额外'), position: register(1) };
+  const child = shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 2, folderId: folder.id });
+  const local = snapshot('device-a', { folders: [folder], shortcuts: [child] });
+  const deletedFolder = snapshot('device-b', {
+    tombstones: [{ entityType: 'folder', id: folder.id, clock: 3, deviceId: 'device-b' }],
+  });
+  const result = mergeSyncSnapshots({ local, remotes: [deletedFolder] });
+
+  expect(result.folders).toEqual([]);
+  expect(result.shortcuts).toHaveLength(1);
+  expect(result.shortcuts[0]?.placement).toEqual(child.placement);
+  expect(materializeSyncSnapshot(result).shortcuts[0]?.folderId).toBeNull();
+  expect(result.tombstones).toContainEqual(expect.objectContaining({ entityType: 'folder', id: folder.id }));
+  expect(result.tombstones).not.toContainEqual(expect.objectContaining({ entityType: 'shortcut', id: child.id }));
 });
 
-it('preserves a child moved out of a deleted group when the placement register wins', () => {
-  const extraGroup = { id: 'group-extra', name: register('额外'), colorRole: register(null), position: register(1) };
-  const child = { ...shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 2 }),
-    placement: register({ groupId: 'group-extra', order: 0 }, 2, 'device-a') };
-  const local = snapshot('device-a', { groups: [...snapshot('device-a').groups, extraGroup], shortcuts: [child] });
-  const deletedGroup = snapshot('device-b', { tombstones: [{ entityType: 'group', id: 'group-extra', clock: 3, deviceId: 'device-b' }] });
+it('permanent folder deletion wins even a newer placement without rewriting the register', () => {
+  const folder = { id: 'folder-extra', name: register('额外'), position: register(1) };
+  const child = shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 8, folderId: folder.id });
+  const local = snapshot('device-a', { folders: [folder], shortcuts: [child] });
+  const deletedFolder = snapshot('device-b', {
+    tombstones: [{ entityType: 'folder', id: folder.id, clock: 3, deviceId: 'device-b' }],
+  });
+  const result = mergeSyncSnapshots({ local, remotes: [deletedFolder] });
+
+  expect(result.folders).toEqual([]);
+  expect(result.shortcuts[0]?.placement).toEqual(child.placement);
+  expect(materializeSyncSnapshot(result).shortcuts[0]?.folderId).toBeNull();
+  expect(result.tombstones).toContainEqual(expect.objectContaining({ entityType: 'folder', id: folder.id }));
+});
+
+it('moving a child to homepage wins a newer folder tombstone', () => {
+  const folder = { id: 'folder-extra', name: register('额外'), position: register(1) };
+  const child = shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 2, folderId: folder.id });
+  const local = snapshot('device-a', { folders: [folder], shortcuts: [child] });
+  const deletedFolder = snapshot('device-b', {
+    tombstones: [{ entityType: 'folder', id: folder.id, clock: 3, deviceId: 'device-b' }],
+  });
   const moved = snapshot('device-c', { shortcuts: [{ ...child,
-    placement: register({ groupId: 'group-default', order: 0 }, 4, 'device-c') }] });
-  const result = mergeSyncSnapshots({ local, remotes: [deletedGroup, moved] });
-  expect(result.shortcuts[0]?.placement.value.groupId).toBe('group-default');
-  expect(result.tombstones.some(({ entityType, id }) => entityType === 'shortcut' && id === 'shortcut-1')).toBe(false);
+    placement: register({ folderId: null, order: 0 }, 4, 'device-c') }] });
+  const result = mergeSyncSnapshots({ local, remotes: [deletedFolder, moved] });
+
+  expect(result.folders).toEqual([]);
+  expect(result.shortcuts[0]?.placement.value.folderId).toBeNull();
 });
 
 it('derives contiguous deterministic positions without changing register clocks', () => {
-  const groups = [
-    { id: 'g2', name: register('二'), colorRole: register(null), position: register(0, 2, 'device-b') },
-    { id: 'group-default', name: register('常用'), colorRole: register('primary' as const), position: register(0) },
+  const folders = [
+    { id: 'g2', name: register('二'), position: register(0, 2, 'device-b') },
+    { id: 'folder-default', name: register('常用'), position: register(0) },
   ];
-  const merged = mergeSyncSnapshots({ local: snapshot('device-a', { groups }), remotes: [] });
-  expect(materializeSyncSnapshot(merged).groups.map(({ id, order }) => [id, order])).toEqual([['g2', 0], ['group-default', 1]]);
-  expect(merged.groups.find(({ id }) => id === 'g2')?.position.clock).toBe(2);
+  const merged = mergeSyncSnapshots({ local: snapshot('device-a', { folders }), remotes: [] });
+  expect(materializeSyncSnapshot(merged).folders.map(({ id, order }) => [id, order])).toEqual([['g2', 0], ['folder-default', 1]]);
+  expect(merged.folders.find(({ id }) => id === 'g2')?.position.clock).toBe(2);
 });
 
-it('rejects unknown versions, unknown fields, excess entities and broken references', () => {
+it('rejects removed group wire schemas, unknown versions and malformed references', () => {
   const valid = snapshot('device-a');
   expect(() => parseSyncSnapshot({ ...valid, schemaVersion: SYNC_SCHEMA_VERSION + 1 })).toThrow(/版本不受支持/);
+  expect(() => parseSyncSnapshot({ ...valid, schemaVersion: 4 })).toThrow(/旧分组同步协议/);
+  expect(() => parseSyncSnapshot({ ...valid, schemaVersion: 9 })).toThrow(/旧分组同步协议/);
   expect(() => parseSyncSnapshot({ ...valid, extra: true })).toThrow(/字段不正确/);
-  expect(() => parseSyncSnapshot({ ...valid, defaultGroupId: register('missing') })).toThrow(/默认分组引用不存在/);
-  const groups = Array.from({ length: 51 }, (_, index) => ({ id: `group-${index}`, name: register(`分组${index}`),
-    colorRole: register(null), position: register(index) }));
-  expect(() => parseSyncSnapshot({ ...valid, groups, defaultGroupId: register('group-0') })).toThrow(/分组数量超限/);
-  const brokenReference = { ...shortcut({ title: 'Title', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
-    placement: register({ groupId: 'missing', order: 0 }) };
-  expect(() => parseSyncSnapshot({ ...valid, shortcuts: [brokenReference] }))
-    .toThrow(/所属分组引用不存在/);
+  const folderId = (value: string) => ({ ...shortcut({ title: 'Title', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
+    placement: register({ folderId: value, order: 0 }) });
+  expect(() => parseSyncSnapshot({ ...valid, shortcuts: [folderId('missing')] }))
+    .toThrow(/所属文件夹引用不存在/);
+  const folders = Array.from({ length: 51 }, (_, index) => ({ id: `folder-${index}`, name: register(`文件夹${index}`),
+    position: register(index) }));
+  expect(() => parseSyncSnapshot({ ...valid, folders })).toThrow(/文件夹数量超限/);
 });
 
 it('rejects conflicting immutable metadata for the same asset id', () => {
   const asset = { id: 'asset-1', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
+    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null), motion: null };
   const local = snapshot('device-a', { assets: [asset], shortcuts: [{ ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: 'asset-1' }) }] });
   const remote = snapshot('device-b', { assets: [{ ...asset, sha256: 'b'.repeat(64) }], shortcuts: local.shortcuts });
@@ -140,7 +207,7 @@ it('rejects conflicting immutable metadata for the same asset id', () => {
 
 it('validates motion metadata and requires motion backgrounds to reference dynamic media', () => {
   const dynamic = { id: 'video-1', kind: 'background' as const, mime: 'video/mp4' as const, width: 1920, height: 1080,
-    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null),
+    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null),
     motion: { kind: 'video' as const, duration: 8 } };
   const base = snapshot('device-a');
   const withMotion = { ...base,
@@ -163,7 +230,7 @@ it('rejects absent media references and accepts large assets without a total cap
     icon: register({ kind: 'asset' as const, assetId: 'missing' }) };
   expect(() => parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [missingImage] })).toThrow(/图标资源引用不存在/);
   const asset = { id: 'asset-1', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
+    byteLength: 80 * 1024 * 1024, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null), motion: null };
   const shortcutWithAsset = { ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: 'asset-1' }) };
   expect(parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithAsset], assets: [asset] }).assets).toHaveLength(1);
@@ -171,7 +238,7 @@ it('rejects absent media references and accepts large assets without a total cap
 
 it('accepts SVG icon colors only for SVG icon assets in snapshots', () => {
   const asset = { id: 'svg-1', kind: 'icon' as const, mime: 'image/svg+xml' as const, width: 512, height: 512,
-    byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
+    byteLength: 20, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null), motion: null };
   const shortcutWithSvg = { ...shortcut({ title: 'SVG', url: 'https://svg.example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id, color: '#12abef', occupancy: 75 }) };
   const restoredIcon = parseSyncSnapshot({ ...snapshot('device-a'), shortcuts: [shortcutWithSvg], assets: [asset] })
@@ -201,7 +268,7 @@ it('reports a typed conflict when a concurrently deleted custom engine remains s
 
 it('reports a typed conflict when a concurrently deleted asset remains referenced', () => {
   const asset = { id: 'asset-e', kind: 'icon' as const, mime: 'image/png' as const, width: 64, height: 64,
-    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), motion: null };
+    byteLength: 100, sha256: 'a'.repeat(64), sourceUrl: register(null), name: register(null), motion: null };
   const shortcutWithAsset = { ...shortcut({ title: 'Icon', url: 'https://example.test/', deviceId: 'device-a', clock: 1 }),
     icon: register({ kind: 'asset' as const, assetId: asset.id }) };
   const local = snapshot('device-a', { shortcuts: [shortcutWithAsset], assets: [asset] });
@@ -210,11 +277,24 @@ it('reports a typed conflict when a concurrently deleted asset remains reference
   expectMergeConflict(() => mergeSyncSnapshots({ local, remotes: [remote] }), 'asset-deleted-while-referenced', asset.id);
 });
 
-it('reports a typed conflict when the selected default group is concurrently deleted', () => {
-  const extra = { id: 'group-extra', name: register('额外'), colorRole: register('primary' as const), position: register(1) };
-  const local = snapshot('device-a', { groups: [...snapshot('device-a').groups, extra],
-    defaultGroupId: register(extra.id, 8, 'device-a') });
-  const remote = snapshot('device-b', { tombstones: [{ entityType: 'group', id: extra.id, clock: 9, deviceId: 'device-b' }] });
+it('requires a permanent folder tombstone for a dangling placement', () => {
+  const child = shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 8, folderId: 'deleted-folder' });
+  const input = snapshot('device-a', { shortcuts: [child] });
+  expect(() => parseSyncSnapshot(input)).toThrow(/文件夹引用不存在/);
+  const deleted = { ...input, tombstones: [{ entityType: 'folder' as const, id: 'deleted-folder', clock: 1, deviceId: 'device-b' }] };
+  expect(parseSyncSnapshot(deleted).shortcuts[0]?.placement).toEqual(child.placement);
+  expect(materializeSyncSnapshot(deleted).shortcuts[0]?.folderId).toBeNull();
+});
 
-  expectMergeConflict(() => mergeSyncSnapshots({ local, remotes: [remote] }), 'default-group-deleted', extra.id);
+it('converges after remerging a deleted-folder projection with an offline live replica', () => {
+  const folder = { id: 'gone', name: register('工作'), position: register(0) };
+  const child = shortcut({ title: 'Child', url: 'https://child.test/', deviceId: 'device-a', clock: 8, folderId: folder.id });
+  const offline = snapshot('device-a', { folders: [folder], shortcuts: [child] });
+  const deleted = snapshot('device-b', { tombstones: [{ entityType: 'folder', id: folder.id, clock: 2, deviceId: 'device-b' }] });
+  const first = mergeSyncSnapshots({ local: offline, remotes: [deleted] });
+  const repeated = mergeSyncSnapshots({ local: first, remotes: [offline, deleted] });
+  expect(repeated).toEqual(first);
+  expect(repeated.shortcuts[0]?.placement).toEqual(child.placement);
+  expect(repeated.folders).toEqual([]);
+  expect(materializeSyncSnapshot(repeated).shortcuts[0]?.folderId).toBeNull();
 });

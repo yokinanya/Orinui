@@ -56,3 +56,85 @@
 .settings-slot-list > li {
   background: transparent;
 }
+
+.settings-preview-choice {
+  border-color: color-mix(in oklch, var(--border) 65%, transparent);
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.settings-preview-choice[data-pressed] {
+  border-color: color-mix(in oklch, var(--primary) 65%, var(--border));
+  background: color-mix(in oklch, var(--primary) 7%, var(--background));
+  color: var(--foreground);
+}
+
+.theme-sketch {
+  display: flex;
+  width: 100%;
+  height: 5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+}
+
+.theme-sketch-light {
+  color-scheme: light;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.theme-sketch-dark {
+  color-scheme: dark;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.theme-sketch-system {
+  background: linear-gradient(115deg, var(--background) 50%, var(--foreground) 50%);
+  color: var(--muted-foreground);
+}
+
+.background-type-sketch {
+  display: grid;
+  width: 100%;
+  height: 3rem;
+  place-items: center;
+  border-radius: 0.5rem;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.background-type-default, .background-type-gradient {
+  background: linear-gradient(145deg, var(--muted), color-mix(in oklch, var(--primary) 30%, var(--background)));
+}
+.background-type-photo { background: linear-gradient(155deg, var(--background) 40%, var(--muted) 41%, var(--accent)); }
+.background-type-motion { background: color-mix(in oklch, var(--primary) 14%, var(--background)); }
+
+.theme-sketch-clock { font-size: 0.8rem; font-weight: 500; }
+.theme-sketch-search { width: 70%; height: 0.5rem; border-radius: 1rem; background: currentColor; opacity: 0.2; }
+.theme-sketch-sites { display: flex; gap: 0.3rem; }
+.theme-sketch-sites i { width: 0.4rem; height: 0.4rem; border-radius: 0.15rem; background: currentColor; opacity: 0.35; }
+
+@media (min-width: 48rem) {
+  .settings-panel-scroll:has(.wallpaper-page) { overflow: hidden; padding-top: 0.5rem; padding-bottom: 0.75rem; }
+  .wallpaper-workspace > .grid { height: 100%; }
+  .wallpaper-workspace [aria-label="壁纸预览和编辑"] { max-height: 100%; }
+  .wallpaper-workspace [aria-label="壁纸详情"] img { max-height: 8rem; object-fit: contain; }
+  .wallpaper-library-scroll { overscroll-behavior: contain; }
+}
+
+.settings-panel-scroll { container-type: inline-size; }
+
+@container (min-width: 52rem) {
+  .settings-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-layout-reset { grid-column: 1 / -1; }
+  .settings-appearance-columns > .settings-section:nth-child(3) { grid-column: 2; grid-row: 1 / 3; }
+  .settings-data-columns > .settings-section:last-child { grid-column: 2; grid-row: 1; }
+  .settings-columns [data-slot='field'][data-orientation='responsive'] { flex-direction: column; align-items: stretch; }
+  .settings-columns .settings-segmented { width: 100% !important; }
+}

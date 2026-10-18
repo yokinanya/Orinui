@@ -7,8 +7,9 @@ export function createWebDavLocalConnection(db: Database): WebDavLocalConnection
     scope: db.name,
     read: () => db.sync_state.get('app'),
     readKey: (vaultId) => readSyncKey(db, vaultId),
-    count: () => db.transaction('r', db.groups, db.shortcuts, db.assets, async () => ({
-      groups: await db.groups.count(), shortcuts: await db.shortcuts.count(), assets: await db.assets.count(),
+    count: () => db.transaction('r', db.folders, db.shortcuts, db.assets, async () => ({
+      folders: await db.folders.count(), shortcuts: await db.shortcuts.count(), assets: await db.assets.count(),
+      assetBytes: (await db.assets.toArray()).reduce((total, asset) => total + asset.blob.size, 0),
     })),
     async initialize(input) { await initializeSyncVault(db, input); },
     disconnect: () => disconnectSyncVault(db),

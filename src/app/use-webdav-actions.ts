@@ -16,13 +16,13 @@ export function useWebDavActions(input: { readonly service: WebDavSyncService;
       const preparation = service.prepare(value).catch((cause: unknown) => {
         setRecoveryRequired(cause instanceof WebDavRecoveryRequiredError); throw cause;
       });
-      return run(async () => { setPlan(await preparation); });
+      return run(async () => { setPlan(await preparation); }, false, '检查 WebDAV 连接');
     },
-    connect: () => run(async () => { try { await service.connect(); } finally { setPlan(null); } }),
+    connect: () => run(async (reportProgress) => { try { await service.connect(reportProgress); } finally { setPlan(null); } }, false, '连接 WebDAV 同步'),
     cancelPlan: () => { service.cancelPlan(); setPlan(null); setError(null); setRecoveryRequired(false); },
-    resetRemote: () => run(async () => { await service.resetRemote(); setRecoveryRequired(false); }),
-    syncNow: () => run(() => service.syncNow()),
-    disconnect: () => run(async () => { await service.disconnect(); setPlan(null); }),
+    resetRemote: () => run(async () => { await service.resetRemote(); setRecoveryRequired(false); }, false, '重置 WebDAV 同步库'),
+    syncNow: () => run((reportProgress) => service.syncNow(reportProgress), false, '同步 WebDAV 数据'),
+    disconnect: () => run(async () => { await service.disconnect(); setPlan(null); }, false, '断开 WebDAV 同步'),
     run,
   };
 }

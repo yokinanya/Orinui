@@ -6,12 +6,14 @@ import type { SyncCrypto } from '@/platform/sync-crypto-types';
 import type { WebDavRemote } from '@/platform/webdav-store';
 import type { SyncLock, SyncCodec } from '@/sync/ports';
 import type { SyncObjectStore } from '@/sync/objects';
+import type { SyncProgressReporter, SyncSizePreview } from '@/sync/ports';
 import type { SyncRunResult } from '@/sync/types';
 
 export interface WebDavCounts {
-  readonly groups: number;
+  readonly folders: number;
   readonly shortcuts: number;
   readonly assets: number;
+  readonly assetBytes: number;
 }
 
 export interface WebDavConnectionPlan {
@@ -22,6 +24,7 @@ export interface WebDavConnectionPlan {
   readonly recoveryKey?: string;
   readonly local: WebDavCounts;
   readonly remote: WebDavCounts;
+  readonly remoteObjectBytes: number;
 }
 
 export interface WebDavSyncStatus {
@@ -63,17 +66,22 @@ export interface WebDavConnectionDependencies {
   readonly lock: SyncLock;
   readonly requestPermission: (url: string) => Promise<void>;
   readonly checkPermission: (url: string) => Promise<void>;
+  readonly hasOtherProviderConfiguration?: () => Promise<boolean>;
   readonly remote: (credentials: WebDavCredentials, consistencyMode: WebDavConsistencyMode) => WebDavRemote;
-  readonly synchronize: (objects: SyncObjectStore, identity: { readonly vaultId: string; readonly deviceId: string }) => Promise<SyncRunResult>;
+  readonly synchronize: (objects: SyncObjectStore, identity: { readonly vaultId: string; readonly deviceId: string },
+    reportProgress?: SyncProgressReporter) => Promise<SyncRunResult>;
+  readonly previewSizes: (objects: SyncObjectStore, identity: { readonly vaultId: string; readonly deviceId: string },
+    reportProgress?: SyncProgressReporter) => Promise<SyncSizePreview>;
   readonly createId: () => string;
 }
 
 export interface WebDavSyncService {
   read(): Promise<WebDavSyncStatus | null>;
   prepare(input: WebDavPrepareInput): Promise<WebDavConnectionPlan>;
-  connect(): Promise<void>;
+  connect(reportProgress?: SyncProgressReporter): Promise<void>;
   cancelPlan(): void;
-  syncNow(): Promise<SyncRunResult>;
+  syncNow(reportProgress?: SyncProgressReporter): Promise<SyncRunResult>;
+  previewSizes(reportProgress?: SyncProgressReporter): Promise<SyncSizePreview>;
   deleteRemote(): Promise<void>;
   resetRemote(): Promise<void>;
   disconnect(): Promise<void>;

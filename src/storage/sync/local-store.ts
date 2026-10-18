@@ -5,7 +5,7 @@ import type { SyncStateRow } from '@/storage/sync/types';
 import { exportSyncSnapshot } from '@/storage/sync/export';
 import type { SyncApplyDependencies } from '@/storage/sync/apply-validation';
 import type { SyncRunRecord } from '@/sync/types';
-import type { SyncLocalExport, SyncLocalStore, SyncRunIdentity } from '@/sync/ports';
+import type { SyncLocalExport, SyncLocalPreview, SyncLocalStore, SyncRunIdentity } from '@/sync/ports';
 
 const STATE_ID = 'app' as const;
 
@@ -32,6 +32,7 @@ export function createSyncLocalStore(db: Database, dependencies: SyncApplyDepend
   return {
     scope: db.name,
     begin: (input) => beginRun(db, input),
+    preview: () => previewLocal(db, dependencies),
     export: (input) => exportLocal(db, dependencies, input),
     assertCurrent: (input) => assertCurrent(db, input),
     markPhase: (input) => updatePhase(db, input),
@@ -39,6 +40,25 @@ export function createSyncLocalStore(db: Database, dependencies: SyncApplyDepend
     finish: (input) => finishRun(db, input),
     fail: (input) => failRun(db, input),
   };
+}
+
+async function previewLocal(db: Database, dependencies: SyncApplyDependencies): Promise<SyncLocalPreview> {
+  const before = await db.transaction('r', [db.sync_state, db.sync_keys], async () => {
+    const state = await db.sync_state.get(STATE_ID);
+    if (!state) fail('本机尚未配置同步库');
+    if (state.suspended) fail('正在接收远端数据，暂时无法生成容量预览');
+    const key = await db.sync_keys.get(state.vaultId);
+    if (!key) fail('本机同步密钥不存在，需要恢复密钥');
+    return { state, key: key.key };
+  });
+  const local = await exportSyncSnapshot(db, dependencies.crypto, { finalizeExpiredDeletes: false });
+  const after = await db.sync_state.get(STATE_ID);
+  if (!after || after.vaultId !== before.state.vaultId || after.deviceId !== before.state.deviceId
+    || after.generation !== before.state.generation || after.suspended) {
+    fail('本机数据在容量预览期间已变化，请重新预览');
+  }
+  return { session: { vaultId: before.state.vaultId, deviceId: before.state.deviceId, key: before.key,
+    hasBaseline: before.state.hasAcceptedSnapshot === true || before.state.lastSuccessfulSync !== undefined }, local };
 }
 
 async function beginRun(db: Database, input: Parameters<SyncLocalStore['begin']>[0]): Promise<Awaited<ReturnType<SyncLocalStore['begin']>>> {

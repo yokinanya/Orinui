@@ -3,7 +3,7 @@
  * 用户新增与导入使用同一组上限，避免两条路径出现不同规则。
  */
 export const LIMITS = {
-  groups: 50,
+  folders: 50,
   shortcuts: 1000,
   customEngines: 20,
   titleGraphemes: 80,

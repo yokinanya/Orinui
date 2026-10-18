@@ -1,17 +1,16 @@
 import { fail } from '@/domain/errors';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { MediaAsset } from '@/domain/asset';
 import type { AppSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
-import type { SyncRegister, SyncSnapshotV1 } from '@/domain/sync/types';
+import type { SyncRegister, SyncSnapshot } from '@/domain/sync/types';
 import { parseSyncSnapshot } from '@/domain/sync/validate';
 
 export interface MaterializedSyncData {
-  readonly groups: readonly Group[];
+  readonly folders: readonly Folder[];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
   readonly assets: readonly Omit<MediaAsset, 'blob'>[];
-  readonly defaultGroupId: string;
 }
 
 interface OrderBy<T> {
@@ -30,25 +29,27 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : 1;
 }
 
-export function materializeSyncSnapshot(input: SyncSnapshotV1): MaterializedSyncData {
+export function materializeSyncSnapshot(input: SyncSnapshot): MaterializedSyncData {
   const snapshot = parseSyncSnapshot(input);
-  const defaultGroupId = snapshot.defaultGroupId.value;
-  const groups = ordered(snapshot.groups, { position: ({ position }) => position.value, version: ({ position }) => position, id: ({ id }) => id })
-    .map((group, order) => ({ id: group.id, name: group.name.value, colorRole: group.id === defaultGroupId ? 'primary' : group.colorRole.value,
-      order, isDefault: group.id === defaultGroupId } satisfies Group));
-  if (groups.filter(({ isDefault }) => isDefault).length !== 1) fail('合并结果必须恰好包含一个默认分组');
-  const nextOrderByGroup = new Map<string, number>();
+  const folders: Folder[] = ordered(snapshot.folders, {
+    position: ({ position }) => position.value, version: ({ position }) => position, id: ({ id }) => id,
+  }).map((folder, order) => ({ id: folder.id, name: folder.name.value, order }));
+  const liveFolderIds = new Set(folders.map(({ id }) => id));
+  const nextOrderByContainer = new Map<string, number>();
   const shortcuts: Shortcut[] = [];
   for (const shortcut of ordered(snapshot.shortcuts, {
     position: ({ placement }) => placement.value.order, version: ({ placement }) => placement, id: ({ id }) => id,
   })) {
     const placement = shortcut.placement.value;
-    const order = nextOrderByGroup.get(placement.groupId) ?? 0;
-    nextOrderByGroup.set(placement.groupId, order + 1);
+    // 墓碑永久保留；回主页仅是投影，不改写 placement 的值或逻辑版本。
+    const folderId = placement.folderId !== null && liveFolderIds.has(placement.folderId) ? placement.folderId : null;
+    const key = folderId ?? '';
+    const order = nextOrderByContainer.get(key) ?? 0;
+    nextOrderByContainer.set(key, order + 1);
     const icon = shortcut.icon.value;
     const asset = icon.kind === 'asset' ? snapshot.assets.find(({ id }) => id === icon.assetId) : undefined;
     if (icon.kind === 'asset' && !asset) fail(`网站图标资源不存在：${icon.assetId}`);
-    shortcuts.push({ id: shortcut.id, groupId: placement.groupId, order, title: shortcut.title.value, url: shortcut.url.value,
+    shortcuts.push({ id: shortcut.id, folderId, order, title: shortcut.title.value, url: shortcut.url.value,
       icon, iconSourceUrl: asset?.sourceUrl.value ?? null });
   }
   const settings: AppSettings = {
@@ -59,7 +60,7 @@ export function materializeSyncSnapshot(input: SyncSnapshotV1): MaterializedSync
     shortcuts: snapshot.settings.shortcutPreferences.value,
     layout: snapshot.settings.layout.value, clock: snapshot.settings.clock.value,
   };
-  const assets = snapshot.assets.map(({ id, kind, mime, width, height, sourceUrl, motion }) => ({ id, kind, mime, width, height,
-    sourceUrl: sourceUrl.value, ...(motion ? { motion } : {}) }));
-  return { groups, shortcuts, settings, assets, defaultGroupId };
+  const assets = snapshot.assets.map(({ id, kind, mime, width, height, sourceUrl, name, motion }) => ({ id, kind, mime, width, height,
+    sourceUrl: sourceUrl.value, name: name.value, ...(motion ? { motion } : {}) }));
+  return { folders, shortcuts, settings, assets };
 }

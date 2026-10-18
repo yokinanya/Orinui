@@ -1,5 +1,5 @@
 import type { MediaAsset } from '@/domain/asset';
-import type { SyncAsset, SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncAsset, SyncSnapshot } from '@/domain/sync';
 import type { SyncCrypto } from '@/platform/sync-crypto-types';
 import type { Database } from '@/storage/db';
 import { finalizePendingDeletes } from '@/storage/sync/capture';
@@ -8,7 +8,7 @@ import type { SyncRecordRow } from '@/storage/sync/types';
 import { readSyncState } from '@/storage/sync/vault';
 
 export interface SyncExport {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly assets: readonly MediaAsset[];
   readonly localGeneration: number;
 }
@@ -44,14 +44,15 @@ async function describeAsset(input: {
   const meta = row.value;
   const normalizedMeta = { ...meta, motion: meta.motion ?? null };
   verifyLocalMedia(normalizedMeta, asset);
-  const sha256 = await input.crypto.hash(new Uint8Array(await asset.blob.arrayBuffer()));
+  const sha256 = row.sha256 ?? await input.crypto.hash(new Uint8Array(await asset.blob.arrayBuffer()));
   if (row.sha256 && row.sha256 !== sha256) throw new Error('同一图片标识的内容已改变');
   return { reference: { ...normalizedMeta, sha256 }, asset: { ...asset, sourceUrl: meta.sourceUrl.value } };
 }
 
 /** Reads a consistent local view; expensive hashing runs outside the IndexedDB transaction. */
-export async function exportSyncSnapshot(db: Database, crypto: Pick<SyncCrypto, 'hash'>): Promise<SyncExport> {
-  await finalizePendingDeletes(db);
+export async function exportSyncSnapshot(db: Database, crypto: Pick<SyncCrypto, 'hash'>,
+  options: { readonly finalizeExpiredDeletes?: boolean } = {}): Promise<SyncExport> {
+  if (options.finalizeExpiredDeletes !== false) await finalizePendingDeletes(db);
   const current = await db.transaction('r', db.sync_state, db.sync_records, db.assets, async () => ({
     state: await readSyncState(db), rows: await db.sync_records.toArray(), assets: await db.assets.toArray(),
   }));

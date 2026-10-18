@@ -1,11 +1,11 @@
 import { createDefaultSettings } from '@/domain/settings';
 import { fail } from '@/domain/errors';
 import type { AppSettings } from '@/domain/settings';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { Shortcut } from '@/domain/shortcut';
 import type { MediaAsset } from '@/domain/asset';
 import type { SyncEntityRecordRow, SyncRecordRow, SyncStateRow } from '@/storage/sync/types';
-import { buildAssetRecord, buildEngineRecord, buildGroupRecord, buildSettingsRecord, buildShortcutRecord,
+import { buildAssetRecord, buildEngineRecord, buildFolderRecord, buildSettingsRecord, buildShortcutRecord,
   recordId, SyncClock } from '@/storage/sync/builders';
 import type { Database, SettingsRow } from '@/storage/db';
 
@@ -26,7 +26,7 @@ function settingsValue(row: SettingsRow | undefined): AppSettings {
 }
 
 interface SeedRecordsInput {
-  readonly groups: readonly Group[];
+  readonly folders: readonly Folder[];
   readonly shortcuts: readonly Shortcut[];
   readonly settings: AppSettings;
   readonly assets: readonly MediaAsset[];
@@ -36,11 +36,11 @@ interface SeedRecordsInput {
 }
 
 function seedEntityRecords(input: SeedRecordsInput): Map<string, SyncRecordRow> {
-  const { groups, shortcuts, settings, assets, prior, clock, now } = input;
+  const { folders, shortcuts, settings, assets, prior, clock, now } = input;
   let changes = new Map<string, SyncRecordRow>();
-  for (const group of groups) {
-    const previous = prior.get(recordId('group', group.id));
-    changes = addIfChanged({ records: changes, previous, next: buildGroupRecord({ group, previous, clock }), clock });
+  for (const folder of folders) {
+    const previous = prior.get(recordId('folder', folder.id));
+    changes = addIfChanged({ records: changes, previous, next: buildFolderRecord({ folder, previous, clock }), clock });
   }
   for (const shortcut of shortcuts) {
     const previous = prior.get(recordId('shortcut', shortcut.id));
@@ -71,28 +71,23 @@ function seedSettingsAndAssets(input: { readonly changes: Map<string, SyncRecord
 
 /** Seed every current local entity once after creating sync_state; preserves UUIDs and existing stamps. */
 export async function seedSyncRecords(db: Database): Promise<SyncStateRow> {
-  const scope = [db.sync_state, db.sync_records, db.groups, db.shortcuts, db.settings, db.assets] as const;
+  const scope = [db.sync_state, db.sync_records, db.folders, db.shortcuts, db.settings, db.assets] as const;
   return db.transaction('rw', scope, async () => {
     const state = await db.sync_state.get('app');
     if (!state) fail('创建同步状态后才能初始化同步记录');
     if (state.suspended) fail('接收远端数据期间不能初始化本机同步记录');
 
-    const [groups, shortcuts, settingsRow, assets, previousRows] = await Promise.all([
-      db.groups.toArray(), db.shortcuts.toArray(), db.settings.get('app'), db.assets.toArray(), db.sync_records.toArray(),
+    const [folders, shortcuts, settingsRow, assets, previousRows] = await Promise.all([
+      db.folders.toArray(), db.shortcuts.toArray(), db.settings.get('app'), db.assets.toArray(), db.sync_records.toArray(),
     ]);
     const prior = new Map(previousRows.map((row) => [row.id, row]));
     const clock = new SyncClock(state);
     const settings = settingsValue(settingsRow);
-    let defaultGroupId = state.defaultGroupId;
-    const defaultGroup = groups.find(({ isDefault }) => isDefault);
-    if (!defaultGroup) fail('本地数据中缺少默认分组');
-    if (defaultGroupId.value !== defaultGroup.id) defaultGroupId = clock.register(defaultGroup.id, defaultGroupId);
+    const changes = seedEntityRecords({ folders, shortcuts, settings, assets, prior, clock, now: db.now() });
 
-    const changes = seedEntityRecords({ groups, shortcuts, settings, assets, prior, clock, now: db.now() });
-
-    if (changes.size > 0 || JSON.stringify(defaultGroupId) !== JSON.stringify(state.defaultGroupId)) {
-      if (changes.size > 0) await db.sync_records.bulkPut([...changes.values()]);
-      const nextState = clock.state({ ...state, defaultGroupId });
+    if (changes.size > 0) {
+      await db.sync_records.bulkPut([...changes.values()]);
+      const nextState = clock.state({ ...state });
       await db.sync_state.put(nextState);
       return nextState;
     }

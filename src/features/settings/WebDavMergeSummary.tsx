@@ -1,18 +1,20 @@
 import { FieldDescription } from '@/components/ui/field';
 import type { WebDavCounts } from '@/sync/webdav-types';
+import { formatBytes } from '@/lib/format-bytes';
 
 const COUNT_FIELDS = [
-  { key: 'groups', label: '分组' },
+  { key: 'folders', label: '文件夹' },
   { key: 'shortcuts', label: '网站' },
-  { key: 'assets', label: '图片' },
+  { key: 'assets', label: '媒体' },
 ] as const;
 
 interface WebDavMergeSummaryProps {
   readonly local: WebDavCounts;
   readonly remote: WebDavCounts;
+  readonly remoteObjectBytes: number;
 }
 
-export function WebDavMergeSummary({ local, remote }: WebDavMergeSummaryProps) {
+export function WebDavMergeSummary({ local, remote, remoteObjectBytes }: WebDavMergeSummaryProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="rounded-xl bg-muted/25 px-3 py-2.5">
@@ -37,7 +39,9 @@ export function WebDavMergeSummary({ local, remote }: WebDavMergeSummaryProps) {
           </tbody>
         </table>
       </div>
-      <FieldDescription>本机和云端的分组、网站与图片会合并；已删除的项目不会恢复。</FieldDescription>
+      <p className="text-xs text-muted-foreground">本机素材：{formatBytes(local.assetBytes)} · 云端已引用素材：{formatBytes(remote.assetBytes)}</p>
+      <p className="text-xs text-muted-foreground">云端总占用：{formatBytes(remoteObjectBytes)}（连接检查时）</p>
+      <FieldDescription>合并本机与云端数据；已删除项目不会恢复。</FieldDescription>
     </div>
   );
 }

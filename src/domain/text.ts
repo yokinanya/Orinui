@@ -1,4 +1,5 @@
 import { fail } from '@/domain/errors';
+import { LIMITS } from '@/domain/limits';
 
 /**
  * 数据契约 §2.2：文本按 Unicode 字素簇计数，而不是 UTF-16 长度，
@@ -44,8 +45,18 @@ export function normalizeShortcutTitle(value: string): string {
   return normalize(value, { label: '网站名称', maxGraphemes: 80 });
 }
 
-export function normalizeGroupName(value: string): string {
-  return normalize(value, { label: '分组名称', maxGraphemes: 40 });
+/** 网站名称允许空字符串，表示显示时改用地址域名。 */
+export function normalizeOptionalShortcutTitle(value: string): string {
+  return value.trim() === '' ? '' : normalizeShortcutTitle(value);
+}
+
+export function normalizeFolderName(value: string): string {
+  return normalize(value, { label: '文件夹名称', maxGraphemes: 40 });
+}
+
+/** 壁纸素材名称为空表示沿用默认名称。 */
+export function normalizeOptionalAssetName(value: string): string {
+  return value.trim() === '' ? '' : normalize(value, { label: '素材名称', maxGraphemes: LIMITS.nameGraphemes });
 }
 
 export function normalizeEngineName(value: string): string {

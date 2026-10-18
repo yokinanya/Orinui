@@ -1,11 +1,11 @@
 import { fail } from '@/domain/errors';
 import { parseSyncSnapshot } from '@/domain/sync';
-import type { SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncSnapshot } from '@/domain/sync';
 import type { MediaAsset } from '@/domain/asset';
 import type { SyncCrypto } from '@/platform/sync-crypto-types';
 
 export interface ValidatedSyncPayload {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly assets: ReadonlyMap<string, MediaAsset>;
 }
 
@@ -14,7 +14,7 @@ export interface SyncApplyDependencies {
   readonly validateStoredMediaAsset: (asset: MediaAsset) => Promise<MediaAsset>;
 }
 
-function verifyIdentityMetadata(expected: SyncSnapshotV1['assets'][number], asset: MediaAsset): void {
+function verifyIdentityMetadata(expected: SyncSnapshot['assets'][number], asset: MediaAsset): void {
   if (expected.id !== asset.id || expected.kind !== asset.kind || expected.mime !== asset.mime ||
       expected.width !== asset.width || expected.height !== asset.height || expected.byteLength !== asset.blob.size ||
       expected.sourceUrl.value !== asset.sourceUrl) {
@@ -22,12 +22,12 @@ function verifyIdentityMetadata(expected: SyncSnapshotV1['assets'][number], asse
   }
 }
 
-function verifyMotionMetadata(expected: SyncSnapshotV1['assets'][number], asset: MediaAsset): void {
+function verifyMotionMetadata(expected: SyncSnapshot['assets'][number], asset: MediaAsset): void {
   const motion = asset.motion ? { kind: asset.motion.kind, duration: asset.motion.duration } : null;
   if (JSON.stringify(expected.motion) !== JSON.stringify(motion)) fail(`同步媒体动态属性与快照不一致：${expected.id}`);
 }
 
-function verifyMetadata(expected: SyncSnapshotV1['assets'][number], asset: MediaAsset): void {
+function verifyMetadata(expected: SyncSnapshot['assets'][number], asset: MediaAsset): void {
   verifyIdentityMetadata(expected, asset);
   verifyMotionMetadata(expected, asset);
   if (asset.blob.type !== asset.mime) fail(`同步媒体 MIME 与 Blob 不一致：${asset.id}`);

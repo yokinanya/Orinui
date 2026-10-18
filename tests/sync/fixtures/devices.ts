@@ -36,8 +36,8 @@ export async function createTestDevice(input: {
 }): Promise<TestDevice> {
   const db = createDatabase(`sync-coordinator-${input.deviceId}-${cryptoRandomId()}`, { now: input.now });
   try {
-    const initial = await ensureInitialized(db);
-    if (input.seedWebsite || input.seedImage) await seedWebsite(db, initial.defaultGroup.id, input.seedImage ?? false);
+    await ensureInitialized(db);
+    if (input.seedWebsite || input.seedImage) await seedWebsite(db, input.seedImage ?? false);
     const key = await createDeviceKey(input.recoveryKey);
     await initializeSyncVault(db, { vaultId, deviceId: input.deviceId, key });
     return { db, deviceId: input.deviceId, dependencies: coordinatorDependencies(db, input) };
@@ -48,8 +48,8 @@ export async function createTestDevice(input: {
 }
 
 export async function addFixtureImageShortcut(db: Database, title: string): Promise<void> {
-  const { defaultGroup } = await ensureInitialized(db);
-  await createShortcut(db, { groupId: defaultGroup.id, title, url: `https://${title.toLowerCase().replaceAll(' ', '-')}.example.test/`,
+  await ensureInitialized(db);
+  await createShortcut(db, { folderId: null, title, url: `https://${title.toLowerCase().replaceAll(' ', '-')}.example.test/`,
     image: { kind: 'icon', mime: 'image/png', width: 1, height: 1, blob: makePngBlob() } });
 }
 
@@ -58,9 +58,9 @@ async function createDeviceKey(recoveryKey?: string): Promise<CryptoKey> {
   return (await crypto.createKey()).key;
 }
 
-async function seedWebsite(db: Database, groupId: string, withImage: boolean): Promise<void> {
+async function seedWebsite(db: Database, withImage: boolean): Promise<void> {
   const image = withImage ? makePngBlob() : undefined;
-  await createShortcut(db, { groupId, title: 'Seed website', url: 'https://seed.example.test/',
+  await createShortcut(db, { folderId: null, title: 'Seed website', url: 'https://seed.example.test/',
     ...(image ? { image: { kind: 'icon' as const, mime: 'image/png' as const, width: 1, height: 1, blob: image } } : {}) });
 }
 

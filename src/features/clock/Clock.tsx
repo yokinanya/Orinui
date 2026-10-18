@@ -27,7 +27,7 @@ function useClockTime(showSeconds: boolean): Date {
   return now;
 }
 
-export function Clock() {
+export function Clock({ alignment = 'center' }: { readonly alignment?: 'center' | 'start' | 'end' } = {}) {
   const { settings } = useData();
   const { clock } = settings;
   const now = useClockTime(clock.showSeconds);
@@ -36,7 +36,7 @@ export function Clock() {
     clock.showWeekday ? formatWeekday(now, clock.weekdayFormat) : '',
   ].filter(Boolean);
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div data-clock-size={clock.size} className={`min-w-0 max-w-full flex flex-col gap-1 ${alignment === 'start' ? 'items-start' : alignment === 'end' ? 'items-end' : 'items-center'}`}>
       <time dateTime={now.toISOString()}
         className={`home-readable-ink ${CLOCK_SIZE_CLASSES[clock.size]} font-light tracking-tight text-glass-foreground tabular-nums`}>
         {formatClockTime(now, clock.format, clock.showSeconds)}

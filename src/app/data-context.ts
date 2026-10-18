@@ -1,7 +1,7 @@
 import { createContext, use } from 'react';
 
 import type { AppearanceSettings } from '@/domain/appearance';
-import type { Group, GroupColorRole } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import type { LayoutConfig } from '@/domain/layout';
 import type { AppSettings, SearchPreferences, ShortcutPreferences } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
@@ -18,16 +18,14 @@ export interface DataContextValue {
   status: DataStatus;
   /** 初始化失败的原因；仅在 status 为 error 时有值。 */
   error: string | null;
-  groups: Group[];
-  /** 当前分组的网站，按组内顺序排列。 */
+  folders: Folder[];
+  /** 主页网格上的网站（不含文件夹内的网站），按网格顺序排列。 */
   shortcuts: Shortcut[];
-  /** 当前网站数组所属分组，防止异步切组显示旧组内容。 */
-  loadedShortcutsGroupId: string | null;
   settings: AppSettings;
-  activeGroupId: string | null;
   /** 当前生效的深浅模式，已合并“跟随系统” */
   isDark: boolean;
-  setActiveGroupId: (id: string) => void;
+  /** 打开文件夹弹层时，按需读取其中的网站。 */
+  loadFolderShortcuts: (folderId: string) => Promise<Shortcut[]>;
 
   updateAppearance: (patch: Partial<AppearanceSettings>) => Promise<void>;
   updateLayout: (patch: Partial<LayoutConfig>) => Promise<void>;
@@ -40,12 +38,17 @@ export interface DataContextValue {
   createSearchEngine: (input: Pick<SearchEngine, 'name' | 'template'>) => Promise<void>;
   updateSearchEngine: (id: string, input: Pick<SearchEngine, 'name' | 'template'>) => Promise<void>;
   deleteSearchEngine: (id: string) => Promise<void>;
-  updateGroupColor: (id: string, colorRole: GroupColorRole | null) => Promise<void>;
   exportBackup: () => Promise<Blob>;
   restoreBackup: (backup: RestorableBackup) => Promise<void>;
   resetLocalData: () => Promise<void>;
   setPhotoBackground: (image: NewMediaAsset) => Promise<void>;
   setMotionBackground: (media: NewMediaAsset) => Promise<void>;
+  activateBackgroundAsset: (id: string) => Promise<void>;
+  deleteBackgroundAsset: (id: string) => Promise<void>;
+  listBackgroundAssets: () => Promise<MediaAsset[]>;
+  renameBackgroundAsset: (id: string, name: string) => Promise<void>;
+  reorderBackgroundAsset: (id: string, targetId: string) => Promise<void>;
+  moveBackgroundAsset: (id: string, direction: -1 | 1) => Promise<boolean>;
   clearImageSourceUrl: (assetId: string) => Promise<void>;
   readMediaAsset: (id: string) => Promise<MediaAsset>;
 
@@ -54,17 +57,19 @@ export interface DataContextValue {
   deleteShortcut: (id: string) => Promise<RemovedShortcut>;
   restoreShortcut: (shortcut: RemovedShortcut) => Promise<void>;
   moveShortcut: (id: string, direction: 'up' | 'down') => Promise<void>;
-  /** 拖动排序：移动到组内指定下标 */
+  /** 拖动排序：移动到同一容器内的指定下标 */
   reorderShortcut: (id: string, index: number) => Promise<void>;
-  moveShortcutToGroup: (id: string, groupId: string) => Promise<void>;
+  /** 移动到某个文件夹；folderId 为 null 表示移回主页网格 */
+  moveShortcutToFolder: (id: string, folderId: string | null) => Promise<void>;
 
-  createGroup: (name: string) => Promise<void>;
-  renameGroup: (id: string, name: string) => Promise<void>;
-  deleteGroup: (id: string) => Promise<void>;
-  moveGroup: (id: string, direction: 'up' | 'down') => Promise<void>;
+  createFolder: (name: string) => Promise<void>;
+  renameFolder: (id: string, name: string) => Promise<void>;
+  deleteFolder: (id: string) => Promise<void>;
+  moveFolder: (id: string, direction: 'up' | 'down') => Promise<void>;
   /** 拖动排序：移动到全局指定下标 */
-  reorderGroup: (id: string, index: number) => Promise<void>;
-  countShortcutsInGroup: (groupId: string) => Promise<number>;
+  reorderFolder: (id: string, index: number) => Promise<void>;
+  countShortcutsInFolder: (folderId: string) => Promise<number>;
+  listAllShortcuts: () => Promise<Shortcut[]>;
 }
 
 export const DataContext = createContext<DataContextValue | null>(null);

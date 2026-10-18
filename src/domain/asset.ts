@@ -22,6 +22,10 @@ export interface MediaAsset {
   blob: Blob;
   /** 外链下载的来源地址；本地上传为 null。不保存许可信息。 */
   sourceUrl: string | null;
+  /** 素材库显示名；null 表示使用按格式与尺寸生成的默认名称。 */
+  name?: string | null;
+  /** 素材加入素材库的时间；用于素材库排序（顺序可被用户调整）。 */
+  createdAt?: number;
   /** 有此字段才是动态媒体；WebP 动图通过 animation 标识。 */
   motion?: MediaAssetMotion;
 }

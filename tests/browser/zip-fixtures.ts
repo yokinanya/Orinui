@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 interface ZipFixtureManifest extends Record<string, unknown> {
   readonly formatVersion: number;
-  readonly groups: Array<{ readonly name: string; readonly isDefault: boolean }>;
+  readonly folders: Array<{ readonly name: string; readonly order: number }>;
   readonly assets: Array<{ readonly id: string; readonly mime: string; readonly kind: string; readonly sourceUrl: string | null }>;
   readonly shortcuts: Array<{ readonly id: string; readonly iconSourceUrl: string | null; readonly icon: { readonly color?: string } }>;
   readonly settings: { readonly appearance: { readonly background: Record<string, unknown> }; readonly clock: Record<string, unknown> };

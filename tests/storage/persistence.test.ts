@@ -4,9 +4,9 @@ import { newId } from '@/domain/id';
 import { createDefaultSettings, type AppSettings } from '@/domain/settings';
 import { createDataCommands } from '@/app/data-commands';
 import { createDatabase, SETTINGS_ID, type OrinuiDatabase, type SettingsRow } from '@/storage/db';
-import { listGroups } from '@/storage/groups';
+import { createFolder, listFolders } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
-import { createShortcut, listShortcuts } from '@/storage/shortcuts';
+import { createShortcut, listFolderShortcuts } from '@/storage/shortcuts';
 import { readSettings, updateSettings } from '@/storage/settings';
 
 let db: OrinuiDatabase;
@@ -24,20 +24,19 @@ afterEach(async () => {
 });
 
 describe('ensureInitialized', () => {
-  it('首次运行建立默认分组与默认设置', async () => {
+  it('首次运行只建立默认设置，不预置文件夹', async () => {
     const state = await ensureInitialized(db);
 
-    expect(state.defaultGroup.isDefault).toBe(true);
     expect(state.settings).toEqual(createDefaultSettings());
     expect(await db.settings.count()).toBe(1);
+    expect(await db.folders.count()).toBe(0);
   });
 
   it('重复调用保持幂等', async () => {
     const first = await ensureInitialized(db);
     const second = await ensureInitialized(db);
 
-    expect(second.defaultGroup.id).toBe(first.defaultGroup.id);
-    expect(await db.groups.count()).toBe(1);
+    expect(second.settings).toEqual(first.settings);
     expect(await db.settings.count()).toBe(1);
   });
 
@@ -102,9 +101,8 @@ describe('主页布局命令', () => {
       search: { ...current.search, autoFocus: true, openTarget: 'new-tab' },
       shortcuts: { showNames: false, openTarget: 'new-tab' },
     }));
-    const commands = createDataCommands({ db, activeGroupId: null,
-      loadGroups: async () => [], loadShortcuts: async () => undefined,
-      setActiveGroupId: () => undefined, setSettings: () => undefined });
+    const commands = createDataCommands({ db, loadFolders: async () => [], loadShortcuts: async () => undefined,
+      setSettings: () => undefined });
 
     await commands.updateLayout({ pageWidth: 'wide' });
     expect((await readSettings(db)).layout).toMatchObject({ pageWidth: 'wide', regionSpacing: 'relaxed', columns: 8 });
@@ -120,23 +118,20 @@ describe('主页布局命令', () => {
 
 describe('持久化', () => {
   it('关闭并重新打开后数据仍在', async () => {
-    const state = await ensureInitialized(db);
-    await createShortcut(db, {
-      groupId: state.defaultGroup.id,
-      title: '文档',
-      url: 'https://example.com/docs',
-    });
+    await ensureInitialized(db);
+    const folder = await createFolder(db, '文档');
+    await createShortcut(db, { folderId: folder.id, title: '文档', url: 'https://example.com/docs' });
     await updateSettings(db, (current) => ({ ...current, appearance: { ...current.appearance, theme: 'dark' } }));
     db.close();
 
     const reopened = createDatabase(name);
     await reopened.open();
     try {
-      const groups = await listGroups(reopened);
-      const shortcuts = await listShortcuts(reopened, groups[0]!.id);
+      const folders = await listFolders(reopened);
+      const shortcuts = await listFolderShortcuts(reopened, folders[0]!.id);
       const settings = await readSettings(reopened);
 
-      expect(groups.map((group) => group.name)).toEqual(['常用']);
+      expect(folders.map((folder) => folder.name)).toEqual(['文档']);
       expect(shortcuts.map((shortcut) => shortcut.title)).toEqual(['文档']);
       expect(shortcuts[0]?.url).toBe('https://example.com/docs');
       expect(settings.appearance.theme).toBe('dark');

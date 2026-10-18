@@ -54,9 +54,9 @@ describe('colorTokensFromSeed', () => {
 
 describe('home readability tokens', () => {
   it('纯色背景按亮度选择阅读表面，并在主题反转时选择配对强调色', () => {
-    const lightSurface = homeReadabilityTokens(false, false, '#ffffff');
-    const darkSurface = homeReadabilityTokens(false, false, '#000000');
-    const inverseLightSurface = homeReadabilityTokens(true, false, '#ffffff');
+    const lightSurface = homeReadabilityTokens({ isDark: false, backgroundColor: '#ffffff' });
+    const darkSurface = homeReadabilityTokens({ isDark: false, backgroundColor: '#000000' });
+    const inverseLightSurface = homeReadabilityTokens({ isDark: true, backgroundColor: '#ffffff' });
 
     expect(lightSurface['--home-readable-surface']).toContain('color-mix(in oklch');
     expect(darkSurface['--home-readable-surface']).toContain('color-mix(in oklch');
@@ -68,18 +68,31 @@ describe('home readability tokens', () => {
   });
 
   it('跟随主题切换，不读取动态种子色', () => {
-    expect(homeReadabilityTokens(false)).toEqual(homeReadabilityTokens(false));
-    expect(homeReadabilityTokens(false)['--home-readable-foreground']).not.toBe(
-      homeReadabilityTokens(true)['--home-readable-foreground'],
+    expect(homeReadabilityTokens({ isDark: false })).toEqual(homeReadabilityTokens({ isDark: false }));
+    expect(homeReadabilityTokens({ isDark: false })['--home-readable-foreground']).not.toBe(
+      homeReadabilityTokens({ isDark: true })['--home-readable-foreground'],
     );
   });
 
-  it('照片背景用白色无底文字与轻透控件表面，不改变默认/纯色主题令牌', () => {
-    const photo = homeReadabilityTokens(false, true);
-    expect(photo['--home-readable-foreground']).toBe('#ffffff');
-    expect(photo['--home-readable-surface']).toBe('rgba(14, 16, 20, 0.48)');
-    expect(photo['--home-readable-search-surface']).toBe('rgba(14, 16, 20, 0.58)');
-    expect(homeReadabilityTokens(false)).toEqual(homeReadabilityTokens(false, false));
+  it('照片和动态封面按叠加遮罩后的明暗调整文字、控件和焦点色', () => {
+    const brightPhoto = homeReadabilityTokens({ isDark: true, isPhoto: true, backgroundColor: '#ffffff' });
+    const darkPhoto = homeReadabilityTokens({ isDark: false, isPhoto: true, backgroundColor: '#000000' });
+    const lightMask = homeReadabilityTokens({ isDark: false, isPhoto: true, backgroundColor: '#000000', photoMaskStrength: 1 });
+    const darkMask = homeReadabilityTokens({ isDark: true, isPhoto: true, backgroundColor: '#ffffff', photoMaskStrength: 1 });
+
+    expect(brightPhoto['--home-readable-foreground']).toBe('#000000');
+    expect(brightPhoto['--home-readable-photo-foreground']).toBe('#ffffff');
+    expect(brightPhoto['--home-readable-surface']).toBe('rgba(250, 248, 245, 0.52)');
+    expect(brightPhoto['--home-readable-search-surface']).toBe('rgba(250, 248, 245, 0.72)');
+    expect(brightPhoto['--home-readable-focus']).toBe('var(--primary-foreground)');
+    expect(darkPhoto['--home-readable-foreground']).toBe('#ffffff');
+    expect(darkPhoto['--home-readable-photo-foreground']).toBe('#ffffff');
+    expect(darkPhoto['--home-readable-surface']).toBe('rgba(14, 16, 20, 0.48)');
+    expect(darkPhoto['--home-readable-search-surface']).toBe('rgba(14, 16, 20, 0.58)');
+    expect(lightMask['--home-readable-foreground']).toBe('#000000');
+    expect(darkMask['--home-readable-foreground']).toBe('#ffffff');
+    expect(darkPhoto['--home-readable-text-outline']).toBe('rgb(0 0 0 / 90%)');
+    expect(homeReadabilityTokens({ isDark: false })).toEqual(homeReadabilityTokens({ isDark: false, isPhoto: false }));
   });
 });
 

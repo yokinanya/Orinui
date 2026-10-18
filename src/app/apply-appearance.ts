@@ -18,6 +18,8 @@ export interface ApplyAppearanceInput {
   systemPrefersDark: boolean;
   /** 照片背景提取出的种子色；未就绪时为 null */
   photoSeed?: string | null;
+  /** 照片或动态封面的平均色；独立于动态配色，用于局部可读性 */
+  photoColor?: string | null;
   /** 照片背景的对象地址 */
   photoUrl?: string | null;
 }
@@ -32,6 +34,7 @@ export function applyAppearance({
   appearance,
   systemPrefersDark,
   photoSeed = null,
+  photoColor = null,
   photoUrl = null,
 }: ApplyAppearanceInput): void {
   const root = document.documentElement;
@@ -48,7 +51,7 @@ export function applyAppearance({
   root.style.setProperty('--wallpaper-color', wallpaper.wallpaperColor);
   root.style.setProperty('--wallpaper-mask', wallpaper.wallpaperMask);
   root.toggleAttribute('data-home-photo', appearance.background.kind === 'photo' || appearance.background.kind === 'motion');
-  applyHomeReadability(root, appearance, isDark);
+  applyHomeReadability({ root, appearance, isDark, photoColor });
 
   const seed = appearance.dynamicColor.enabled ? resolveSeed(appearance, photoSeed) : null;
 
@@ -66,11 +69,14 @@ export function applyAppearance({
   }
 }
 
-function applyHomeReadability(
-  root: HTMLElement,
-  appearance: AppearanceSettings,
-  isDark: boolean,
-): void {
+interface HomeReadabilityInput {
+  readonly root: HTMLElement;
+  readonly appearance: AppearanceSettings;
+  readonly isDark: boolean;
+  readonly photoColor: string | null;
+}
+
+function applyHomeReadability({ root, appearance, isDark, photoColor }: HomeReadabilityInput): void {
   if (!requiresHomeReadabilitySurface(appearance.background)) {
     root.removeAttribute('data-home-readable');
     for (const token of HOME_READABILITY_TOKEN_NAMES) root.style.removeProperty(token);
@@ -78,9 +84,15 @@ function applyHomeReadability(
   }
 
   root.setAttribute('data-home-readable', 'true');
-  for (const [token, value] of Object.entries(homeReadabilityTokens(
-    isDark, appearance.background.kind === 'photo' || appearance.background.kind === 'motion', backgroundSeed(appearance.background),
-  ))) {
+  const photoBackground = appearance.background.kind === 'photo' || appearance.background.kind === 'motion'
+    ? appearance.background : null;
+  const backgroundColor = photoBackground ? photoColor : backgroundSeed(appearance.background);
+  for (const [token, value] of Object.entries(homeReadabilityTokens({
+    isDark,
+    isPhoto: photoBackground !== null,
+    backgroundColor,
+    photoMaskStrength: photoBackground === null ? 0 : photoBackground.maskStrength,
+  }))) {
     root.style.setProperty(token, value);
   }
 }

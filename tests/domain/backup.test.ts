@@ -6,28 +6,28 @@ function backup(overrides: Record<string, unknown> = {}) {
   return {
     formatVersion: BACKUP_VERSION,
     exportedAt: '2026-10-10T00:00:00.000Z',
-    groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: true }],
+    folders: [{ id: 'main', name: '常用', order: 0 }],
     shortcuts: [], settings: createDefaultSettings(), assets: [], ...overrides,
   };
 }
 
 const metadata = (values: Record<string, unknown> = {}) => ({
-  id: 'a', kind: 'icon', mime: 'image/png', width: 10, height: 10, sourceUrl: null,
+  id: 'a', kind: 'icon', mime: 'image/png', width: 10, height: 10, sourceUrl: null, name: null,
   motion: null, byteLength: 4, sha256: '0'.repeat(64), ...values,
 });
 
 describe('ZIP backup manifest', () => {
   it('validates a complete manifest and returns its replacement preview', () => {
-    expect(parseBackup(backup())).toMatchObject({ groupCount: 1, shortcutCount: 0, assetCount: 0, defaultGroup: '常用', engine: 'Google' });
+    expect(parseBackup(backup())).toMatchObject({ folderCount: 1, shortcutCount: 0, assetCount: 0, engine: 'Google' });
   });
 
   it.each([
-    [{ groups: [] }, /分组数量/],
-    [{ groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: false }] }, /恰好/],
+    [{ folders: 'none' }, /文件夹数量/],
+    [{ folders: [{ id: 'main', name: ' 常用', order: 0 }] }, /规范格式/],
     [{ unknown: true }, /字段/],
-    [{ formatVersion: 2 }, /版本/],
-    [{ shortcuts: [{ id: 's', groupId: 'missing', title: '站点', url: 'https://example.com', icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }] }, /所属分组/],
-    [{ shortcuts: [{ id: 's', groupId: 'main', title: '站点', url: 'https://example.com', icon: { kind: 'asset', assetId: 'missing' }, iconSourceUrl: null, order: 0 }] }, /引用不存在/],
+    [{ formatVersion: 1 }, /版本/],
+    [{ shortcuts: [{ id: 's', folderId: 'missing', title: '站点', url: 'https://example.com', icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }] }, /所属文件夹/],
+    [{ shortcuts: [{ id: 's', folderId: 'main', title: '站点', url: 'https://example.com', icon: { kind: 'asset', assetId: 'missing' }, iconSourceUrl: null, order: 0 }] }, /引用不存在/],
     [{ assets: [{ ...metadata(), sha256: 'bad' }] }, /摘要格式/],
     [{ assets: [{ ...metadata(), byteLength: 0 }] }, /媒体大小/],
   ] as const)('rejects invalid manifests', (overrides, message) => {
@@ -35,13 +35,13 @@ describe('ZIP backup manifest', () => {
   });
 
   it('preserves built-in icon references', () => {
-    const value = backup({ shortcuts: [{ id: 's', groupId: 'main', title: '站点', url: 'https://example.com',
+    const value = backup({ shortcuts: [{ id: 's', folderId: 'main', title: '站点', url: 'https://example.com',
       icon: { kind: 'built-in', iconId: 'heart' }, iconSourceUrl: null, order: 0 }] });
     expect(parseBackup(value).document.shortcuts[0]?.icon).toEqual({ kind: 'built-in', iconId: 'heart' });
   });
 
   it('permits icon color only for referenced SVG assets', () => {
-    const shortcut = { id: 's', groupId: 'main', title: '站点', url: 'https://example.com',
+    const shortcut = { id: 's', folderId: 'main', title: '站点', url: 'https://example.com',
       icon: { kind: 'asset', assetId: 'a', color: '#12abef' }, iconSourceUrl: null, order: 0 };
     const asset = metadata({ mime: 'image/svg+xml' });
     expect(parseBackup(backup({ shortcuts: [shortcut], assets: [asset] })).document.shortcuts[0]?.icon)
@@ -77,4 +77,32 @@ describe('ZIP media and settings validation', () => {
       customEngines: [{ id: 'google', name: '坏数据', template: 'https://example.com?q={query}', builtIn: false }] } } })))
       .toThrow(/内置标识/);
   });
+});
+
+describe('ZIP folder format boundary', () => {
+  it('round-trips a folder v8 manifest', () => {
+    const parsed = parseBackup(backup({ folders: [{ id: 'work', name: '工作', order: 0 }],
+      shortcuts: [{ id: 'site', folderId: 'work', title: '文档', url: 'https://example.com/',
+        icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }] }));
+    expect(parsed.document.folders).toEqual([{ id: 'work', name: '工作', order: 0 }]);
+    expect(parsed.document.shortcuts[0]?.folderId).toBe('work');
+  });
+
+  it.each([2, 3, 4, 5, 6, 7])('rejects old group ZIP formatVersion %s without mapping or clearing', (formatVersion) => {
+    const legacy = { formatVersion, exportedAt: '2026-10-10T00:00:00.000Z',
+      groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: true }],
+      shortcuts: [], settings: createDefaultSettings(), assets: [] };
+    expect(() => parseBackup(legacy)).toThrow(/清单字段不正确/);
+  });
+
+  it('keeps the saved media name in the current format', () => {
+    const parsed = parseBackup(backup({ assets: [metadata({ kind: 'background', name: '城市夜景' })] }));
+    expect(parsed.document.assets).toMatchObject([{ id: 'a', name: '城市夜景' }]);
+  });
+});
+
+
+it('preserves same-named folders as independent backup identities', () => {
+  const folders = [{ id: 'work-a', name: '工作', order: 0 }, { id: 'work-b', name: '工作', order: 1 }];
+  expect(parseBackup(backup({ folders })).document.folders).toEqual(folders);
 });

@@ -1,4 +1,4 @@
-import type { SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncSnapshot } from '@/domain/sync';
 import { SyncCoordinatorError } from '@/sync/errors';
 import { prepareSyncMedia, uploadSyncMedia } from '@/sync/media';
 import type { SyncCoordinatorDependencies, SyncLocalExport } from '@/sync/ports';
@@ -6,13 +6,16 @@ import { publishSyncSnapshot } from '@/sync/publish';
 import { readRemoteSnapshots, type RemoteSnapshots } from '@/sync/read-snapshots';
 import { failSyncRun, runSyncStep, type SyncRunContext } from '@/sync/run-context';
 import type { SyncRunResult } from '@/sync/types';
+import type { SyncProgressReporter, SyncSizePreview } from '@/sync/ports';
+import { previewSyncSize } from '@/sync/preview';
 import { validateObjectIdentity } from '@/domain/sync/object-validation';
 
 export interface SyncCoordinator {
   syncNow(): Promise<SyncRunResult>;
+  previewSizes(reportProgress?: SyncProgressReporter): Promise<SyncSizePreview>;
 }
 
-function mergeRemoteData(context: SyncRunContext, local: SyncLocalExport, remote: RemoteSnapshots): SyncSnapshotV1 {
+function mergeRemoteData(context: SyncRunContext, local: SyncLocalExport, remote: RemoteSnapshots): SyncSnapshot {
   const input = { local: local.snapshot, remotes: remote.snapshots };
   const ownSnapshot = remote.heads.some((head) => head.deviceId === context.identity.deviceId);
   if (!context.session.hasBaseline && !ownSnapshot && input.remotes.length > 0) return context.dependencies.algorithms.join(input);
@@ -57,5 +60,8 @@ async function runLocked(dependencies: SyncCoordinatorDependencies): Promise<Syn
 
 /** The caller supplies a real provider; constructing the coordinator does not contact it. */
 export function createSyncCoordinator(dependencies: SyncCoordinatorDependencies): SyncCoordinator {
-  return { syncNow: () => dependencies.lock.runExclusive(dependencies.local.scope, () => runLocked(dependencies)) };
+  return {
+    syncNow: () => dependencies.lock.runExclusive(dependencies.local.scope, () => runLocked(dependencies)),
+    previewSizes: (reportProgress) => previewSyncSize({ dependencies, now: dependencies.now, reporter: reportProgress }),
+  };
 }

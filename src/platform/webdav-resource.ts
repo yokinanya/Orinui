@@ -55,6 +55,17 @@ async function requireResourceRevision(input: ResourceRevisionInput): Promise<st
 
 export async function readObject(input: ReadObjectInput): Promise<SyncObjectRead | null> {
   if ((input.consistencyMode ?? input.client.consistencyMode) === 'readback-only') return readObjectByDigest(input);
+  const received = await readStrongObject(input);
+  if (!received) return null;
+  const revision = await responseRevision(input, received.response);
+  assertObservedRevision(input, revision.value, revision.fromResponse);
+  if (input.revision || revision.fromResponse) return { revision: revision.value, ciphertext: received.ciphertext };
+  return verifyUnconditionalRead(input, received.ciphertext, revision.value);
+}
+
+interface ReceivedObject { readonly response: Response; readonly ciphertext: Uint8Array }
+
+async function readStrongObject(input: ReadObjectInput): Promise<ReceivedObject | null> {
   const headers = input.revision === undefined ? undefined : { 'If-Match': validateStrongEtag(input.revision, '对象版本') };
   const response = await input.client.request(input.url, { method: 'GET', headers });
   if (response.status === WEBDAV_HTTP_STATUS.notFound) return null;
@@ -62,24 +73,28 @@ export async function readObject(input: ReadObjectInput): Promise<SyncObjectRead
   if (response.status !== WEBDAV_HTTP_STATUS.ok) throw new Error(`WebDAV 读取${input.label}失败（HTTP ${response.status}）`);
   const ciphertext = new Uint8Array(await response.arrayBuffer());
   if (ciphertext.length === 0) throw new Error(`WebDAV ${input.label}内容为空`);
-  let revision: string | null = null;
+  return { response, ciphertext };
+}
+
+async function responseRevision(input: ReadObjectInput, response: Response): Promise<{ readonly value: string; readonly fromResponse: boolean }> {
   let responseProblem = '响应未包含 ETag';
-  if (response.headers.get('ETag') !== null) {
-    try {
-      revision = await strongRevision(response, input.label);
-    } catch (cause) {
-      responseProblem = cause instanceof Error ? cause.message : String(cause);
-    }
+  if (response.headers.has('ETag')) {
+    try { return { value: await strongRevision(response, input.label), fromResponse: true }; }
+    catch (cause) { responseProblem = cause instanceof Error ? cause.message : String(cause); }
   }
-  if (revision !== null) {
-    if (input.revision && revision !== input.revision) throw new Error(`WebDAV ${input.label}返回版本与 If-Match 不一致`);
-    return { revision, ciphertext };
+  return { value: await requireResourceRevision({ client: input.client, url: input.url, label: input.label, responseProblem }),
+    fromResponse: false };
+}
+
+function assertObservedRevision(input: ReadObjectInput, revision: string, responseHasEtag: boolean): void {
+  if (input.revision && revision !== input.revision) {
+    const detail = responseHasEtag ? '返回版本与 If-Match 不一致' : '版本已变化';
+    throw new Error(`WebDAV ${input.label}${detail}`);
   }
-  const observedRevision = await requireResourceRevision({ client: input.client, url: input.url,
-    label: input.label, responseProblem });
-  if (input.revision && observedRevision !== input.revision) throw new Error(`WebDAV ${input.label}版本已变化`);
-  if (input.revision) return { revision: observedRevision, ciphertext };
-  const verified = await readObject({ ...input, revision: observedRevision });
+}
+
+async function verifyUnconditionalRead(input: ReadObjectInput, ciphertext: Uint8Array, revision: string): Promise<SyncObjectRead> {
+  const verified = await readObject({ ...input, revision });
   if (!verified || !equalBytes(verified.ciphertext, ciphertext)) throw new Error(`WebDAV ${input.label}条件读取内容与初次读取不一致`);
   return verified;
 }
@@ -107,6 +122,22 @@ export async function readResourceRevision(client: WebDavClient, url: URL, label
       throw new Error(`WebDAV ${label}无法从 DAV:getetag 或 GET 获取有效强 ETag：${propertyDetail}；${getDetail}`, { cause: getCause });
     }
   }
+}
+
+export async function readObjectMetadata(client: WebDavClient, url: URL, label: string): Promise<{
+  readonly revision: string; readonly ciphertextBytes: number;
+} | null> {
+  const response = await client.request(url, { method: 'HEAD' });
+  if (response.status === WEBDAV_HTTP_STATUS.notFound) return null;
+  if (!response.ok) throw new Error(`WebDAV 查询${label}元数据失败（HTTP ${response.status}）`);
+  const rawLength = response.headers.get('Content-Length');
+  const size = rawLength === null ? Number.NaN : Number(rawLength);
+  if (!Number.isSafeInteger(size) || size <= 0) throw new Error(`WebDAV ${label}缺少准确 Content-Length`);
+  const revision = client.consistencyMode === 'readback-only' ? `size:${size}`
+    : response.headers.has('ETag') ? await strongRevision(response, label)
+      : await readResourceRevision(client, url, label);
+  if (revision === null) throw new Error(`WebDAV ${label}在大小查询期间消失`);
+  return { revision, ciphertextBytes: size };
 }
 
 export function bytesBody(bytes: Uint8Array): ArrayBuffer {

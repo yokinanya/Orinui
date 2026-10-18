@@ -1,5 +1,7 @@
 # WebDAV 提供方实施说明
 
+本文件保留 WebDAV 的提供方细节和历史审计记录。当前为 Dexie 11、ZIP formatVersion 8、快照 schema 10；旧分组格式明确拒绝，不自动迁移、清理本地数据/同步身份或删除远端库。本轮文件夹协议与界面尚未验收，历史服务结果不外推。当前规则见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)、[SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 与 [TASKS.md](./TASKS.md)。
+
 状态：WebDAV 适配器、连接流程与事件触发已实现，并通过受控本机 HTTPS 服务的真实扩展审计。用户已确认真实 WebDAV 服务验收完成；动态媒体同步组合仍待本轮验证。受控服务使用预授权来源和自签测试证书，不代替新增媒体组合及用户权限弹窗检查。总同步决策见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)，对象端口顺序见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，密文格式见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
 2026-10-14 用户已另行确认当前 UI、既有功能扩展权限和屏幕吸管验收；用户于 2026-10-15 确认真实 WebDAV 服务验收完成，依据与范围见 [VERIFICATION.md](./VERIFICATION.md)。本轮新增动态媒体同步与真实用户设备仍需独立验证；Google Drive 适配器与 OAuth 验收延期。下方保留历史受控审计的原始范围。
@@ -16,8 +18,8 @@
 - 此处描述代码行为；第三方服务的 collection DELETE、删除后检查和真实扩展界面仍待验收。
 
 - 用户选择一个 HTTPS WebDAV 目录承载一个同步库；应用只在用户启用后连接。
-- 目录下的 `vault.json` 保存库 ID 和加密库描述（该 descriptor 自身的 schemaVersion 仍为 1）；`vaults/<vaultId>/devices/<deviceId>/snapshot.enc` 保存每设备 schema 3 加密快照，`vaults/<vaultId>/assets/<assetId>.enc` 保存独立加密媒体。静态图片、MP4、WebM、GIF 和动画 WebP 原件都逐文件使用现有 AES-256-GCM envelope 加密；动态 poster 作为接收设备本地缓存重建，不上传。不开启明文模式。
-- 开发期 schema 1、2 快照在远端读取时明确拒绝；不自动转换、合并或删除本机/远端内容。备份仅支持 ZIP formatVersion 1，旧开发期 JSON 备份不兼容。
+- 目录下的 `vault.json` 保存库 ID 和加密库描述（该 descriptor 自身的 schemaVersion 仍为 1）；`vaults/<vaultId>/devices/<deviceId>/snapshot.enc` 保存每设备 schema 8 加密快照，`vaults/<vaultId>/assets/<assetId>.enc` 保存独立加密媒体。整个壁纸素材库和被引用网站图标原件都逐文件使用 AES-256-GCM envelope 加密；动态 poster 作为接收设备本地缓存重建，不上传。不开启明文模式。
+- schema 4/5/6/7 快照的布局设置显式迁移到当前样式，并将缺少的唯一分组名称偏好设为显示；开发期 schema 1、2 及 Beta 1 schema 3 快照明确拒绝，不自动删除本机/远端内容。ZIP formatVersion 6 导入器支持 Beta 2 v2 与旧源码 v3/v4/v5；开发期 JSON 与 Beta 1 ZIP v1 均不兼容。
 - 账号名与应用密码只保存在当前 Chrome 配置文件的 `chrome.storage.local`。不得写入 URL、Dexie 同步表、快照、日志、ZIP 备份或任何其他设备。
 - 连接检查和用户手动同步只申请配置 URL 的精确 origin 权限；自动触发只检查已有权限，不弹授权。不得要求所有站点权限。
 - 本阶段不处理 Google Drive、远端媒体 GC、设备集合治理或密钥轮换。

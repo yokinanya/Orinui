@@ -23,13 +23,12 @@ function validateConfiguration(input: InitializeSyncVaultInput): void {
 /** Creates local sync metadata without changing existing domain IDs or contacting a provider. */
 export async function initializeSyncVault(db: Database, input: InitializeSyncVaultInput): Promise<SyncStateRow> {
   validateConfiguration(input);
-  const initial = await ensureInitialized(db);
-  return db.transaction('rw', [db.groups, db.shortcuts, db.settings, db.assets,
+  await ensureInitialized(db);
+  return db.transaction('rw', [db.folders, db.shortcuts, db.settings, db.assets,
     db.sync_state, db.sync_records, db.sync_keys], async () => {
       if (await db.sync_state.get(STATE_ID)) throw new Error('本机已经连接同步库');
       await db.sync_state.add({
         id: STATE_ID, vaultId: input.vaultId, deviceId: input.deviceId, clock: 0, generation: 0,
-        defaultGroupId: { value: initial.defaultGroup.id, clock: 0, deviceId: input.deviceId },
         suspended: false,
       });
       await db.sync_keys.add({ id: input.vaultId, key: input.key });

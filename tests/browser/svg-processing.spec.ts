@@ -38,6 +38,9 @@ test('用户的 bilibili SVG 支持根布局 style 和 em 尺寸，保存后刷�
   await page.getByLabel('名称', { exact: true }).fill('哔哩哔哩SVG');
   await page.getByLabel('网址', { exact: true }).fill('https://www.bilibili.com');
   await visibleSubmitButton(page).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  // 等图标资源与网站记录一起写入后再刷新，避免读取到尚未就绪的本地资源。
+  await page.getByRole('link', { name: '哔哩哔哩SVG', exact: true }).locator('img').waitFor();
   await page.reload();
   const image = page.getByRole('link', { name: '哔哩哔哩SVG', exact: true }).locator('img');
   await expect(image).toBeVisible();

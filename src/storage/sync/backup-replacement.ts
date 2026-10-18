@@ -30,7 +30,7 @@ export async function prepareSyncReplacement(db: Database, input: ReplacementDat
   if (!await db.sync_state.get('app')) return input;
   const known = new Set((await db.sync_records.toArray()).map(({ id }) => id));
   const maps = {
-    groups: replacementIds({ ids: input.document.groups.map(({ id }) => id), kind: 'group', known, ...dependencies }),
+    folders: replacementIds({ ids: input.document.folders.map(({ id }) => id), kind: 'folder', known, ...dependencies }),
     shortcuts: replacementIds({ ids: input.document.shortcuts.map(({ id }) => id), kind: 'shortcut', known, ...dependencies }),
     assets: replacementIds({ ids: input.assets.map(({ id }) => id), kind: 'asset', known, ...dependencies }),
     engines: replacementIds({ ids: input.document.settings.search.customEngines.map(({ id }) => id),
@@ -39,10 +39,10 @@ export async function prepareSyncReplacement(db: Database, input: ReplacementDat
   const settings = input.document.settings;
   const document: BackupDocument = {
     ...input.document,
-    groups: input.document.groups.map((group) => ({ ...group, id: maps.groups.get(group.id) ?? group.id })),
+    folders: input.document.folders.map((folder) => ({ ...folder, id: maps.folders.get(folder.id) ?? folder.id })),
     shortcuts: input.document.shortcuts.map((shortcut) => ({
       ...shortcut, id: maps.shortcuts.get(shortcut.id) ?? shortcut.id,
-      groupId: maps.groups.get(shortcut.groupId) ?? shortcut.groupId,
+      folderId: shortcut.folderId === null ? null : maps.folders.get(shortcut.folderId) ?? shortcut.folderId,
       icon: shortcut.icon.kind === 'asset'
         ? { ...shortcut.icon, assetId: maps.assets.get(shortcut.icon.assetId) ?? shortcut.icon.assetId } : shortcut.icon,
     })),

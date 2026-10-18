@@ -5,7 +5,6 @@ import { isExtensionPage, subscribeWebDavConfiguration } from '@/platform/webdav
 import { createWebDavScheduler } from '@/sync/webdav-scheduler';
 import type { WebDavSyncService, WebDavSyncStatus } from '@/sync/webdav-types';
 import type { useWebDavActions } from '@/app/use-webdav-actions';
-import { notifyError } from '@/lib/notify';
 
 interface ObservationInput {
   readonly db: Database;
@@ -60,7 +59,8 @@ function subscribeConnection(current: () => ObservationInput): () => void {
   let identity: string | undefined;
   const scheduler = createWebDavScheduler({ now: Date.now,
     setTimer: (operation, delay) => setTimeout(operation, delay), clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-    synchronize: async () => { await current().actions.run(() => current().service.syncNow(), true); }, onError: notifyError });
+    synchronize: async () => { await current().actions.run((reportProgress) => current().service.syncNow(reportProgress), false, '自动同步 WebDAV 数据'); },
+    onError: (cause) => current().actions.setError(cause instanceof Error ? cause.message : String(cause)) });
   const refresh = createRefresh({ current, observation: () => latest, scheduler });
   const unsubscribeLocal = observeWebDavLocal(current().db, { next(value) {
     const nextIdentity = value.state ? `${value.state.vaultId}:${value.state.deviceId}` : undefined;

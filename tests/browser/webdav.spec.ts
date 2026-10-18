@@ -24,7 +24,8 @@ test('普通网页预览的 WebDAV 检查明确报告缺少扩展环境', async 
   await page.getByLabel('账号').fill('test-user');
   await page.getByLabel('应用密码').fill('test-password');
   await page.getByLabel('恢复密钥（可选）').fill('test-recovery-key');
-  await page.getByRole('button', { name: '检查连接', exact: true }).click();
+  const webDavPanel = page.getByRole('region', { name: 'WebDAV 同步' });
+  await webDavPanel.getByRole('button', { name: '检查连接', exact: true }).click();
 
   const error = page.getByRole('alert');
   await expect(error).toBeVisible();
@@ -44,5 +45,6 @@ test('320px 数据页的 WebDAV 设置不产生横向溢出', async ({ page }) =
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
   await expect(page.getByLabel('WebDAV 地址')).toBeVisible();
-  await expect(page.getByRole('button', { name: '检查连接', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'WebDAV 同步' })
+    .getByRole('button', { name: '检查连接', exact: true })).toBeVisible();
 });

@@ -1,48 +1,39 @@
 import { createDefaultSettings } from '@/domain/settings';
 import {
   materializeSyncSnapshot, mergeSyncSnapshots, parseSyncSnapshot,
-  type SyncRegister, type SyncSnapshotV1,
+  type SyncRegister, type SyncSnapshot,
 } from '@/domain/sync';
 import { maximumSyncClock, nextSyncCounter } from '@/domain/sync/version';
-import { DEFAULT_GROUP_NAME } from '@/storage/groups';
 
-function isPristine(snapshot: SyncSnapshotV1): boolean {
+/** 本地没有任何用户内容：未建文件夹、没有网站与媒体、设置仍是默认值。 */
+function isPristine(snapshot: SyncSnapshot): boolean {
   const data = materializeSyncSnapshot(snapshot);
-  const group = data.groups[0];
-  return data.groups.length === 1 && group?.name === DEFAULT_GROUP_NAME
-    && group.colorRole === 'primary' && data.shortcuts.length === 0 && data.assets.length === 0
+  return data.folders.length === 0 && data.shortcuts.length === 0 && data.assets.length === 0
     && snapshot.tombstones.length === 0
     && JSON.stringify(data.settings) === JSON.stringify(createDefaultSettings());
 }
 
-function remoteBaseline(remotes: readonly SyncSnapshotV1[]): SyncSnapshotV1 {
+function remoteBaseline(remotes: readonly SyncSnapshot[]): SyncSnapshot {
   const first = remotes[0];
   if (!first) throw new Error('已有同步库没有可连接的快照');
-  return remotes.reduce((latest, next) => {
-    const left = latest.defaultGroupId;
-    const right = next.defaultGroupId;
-    if (right.clock !== left.clock) return right.clock > left.clock ? next : latest;
-    return right.deviceId > left.deviceId ? next : latest;
-  }, first);
+  return remotes.reduce((latest, next) =>
+    (next.generation > latest.generation ? next : latest), first);
 }
 
 function promoteLocal(input: {
-  readonly local: SyncSnapshotV1;
-  readonly remote: SyncSnapshotV1;
+  readonly local: SyncSnapshot;
+  readonly remote: SyncSnapshot;
   readonly clock: number;
-}): SyncSnapshotV1 {
+}): SyncSnapshot {
   const { local, remote, clock } = input;
   const register = <T>(item: SyncRegister<T>): SyncRegister<T> => ({
     value: item.value, clock, deviceId: local.deviceId,
   });
-  const primary = remote.groups.find(({ id }) => id === remote.defaultGroupId.value);
-  if (!primary) throw new Error('已有同步库缺少默认分组');
-  const groups = local.groups.map((group) => ({
-    id: group.id, name: register(group.name), colorRole: register(group.colorRole), position: register(group.position),
-  }));
   return parseSyncSnapshot({
-    ...local, generation: nextSyncCounter(local.generation), defaultGroupId: remote.defaultGroupId,
-    groups: groups.some(({ id }) => id === primary.id) ? groups : [...groups, primary],
+    ...local, generation: nextSyncCounter(local.generation),
+    folders: local.folders.map((folder) => ({
+      id: folder.id, name: register(folder.name), position: register(folder.position),
+    })),
     shortcuts: local.shortcuts.map((shortcut) => ({
       id: shortcut.id, title: register(shortcut.title), url: register(shortcut.url),
       placement: register(shortcut.placement), icon: register(shortcut.icon),
@@ -55,14 +46,16 @@ function promoteLocal(input: {
       shortcutPreferences: register(local.settings.shortcutPreferences),
       customEngines: local.settings.customEngines.map(register),
     },
+    // 远端快照已存在的实体必须一并带上，否则首次连接会丢掉同一同步库里其他设备的内容。
+    tombstones: remote.tombstones,
   });
 }
 
 /** Plans the first merge; changing domain data requires a separate validated transaction. */
 export function planSyncJoin(input: {
-  readonly local: SyncSnapshotV1;
-  readonly remotes: readonly SyncSnapshotV1[];
-}): SyncSnapshotV1 {
+  readonly local: SyncSnapshot;
+  readonly remotes: readonly SyncSnapshot[];
+}): SyncSnapshot {
   const local = parseSyncSnapshot(input.local);
   const remotes = input.remotes.map(parseSyncSnapshot);
   if (remotes.some((remote) => remote.vaultId !== local.vaultId || remote.deviceId === local.deviceId)) {
@@ -79,7 +72,7 @@ export function planSyncJoin(input: {
   return parseSyncSnapshot({ ...joined, generation: nextSyncCounter(local.generation) });
 }
 
-function sameContent(left: SyncSnapshotV1, right: SyncSnapshotV1): boolean {
+function sameContent(left: SyncSnapshot, right: SyncSnapshot): boolean {
   const { generation: _leftGeneration, ...leftContent } = left;
   const { generation: _rightGeneration, ...rightContent } = right;
   return JSON.stringify(leftContent) === JSON.stringify(rightContent);

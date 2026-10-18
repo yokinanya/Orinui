@@ -23,12 +23,32 @@ export async function setPhotoMask(page: Page, percent: number) {
   await expect(page.getByLabel('当前照片遮罩强度')).toHaveText(`${percent}%`);
 }
 
+/** 用真实导入界面写入展示数据。 */
+export async function importShortcutFixture(page: Page, fixture: Record<string, unknown> & { shortcuts: readonly object[] }): Promise<void> {
+  // 备份校验要求字段完全一致；未指定的字段按新建网站的默认值补齐，字段顺序与导出保持一致。
+  const manifest = {
+    formatVersion: fixture.formatVersion,
+    exportedAt: fixture.exportedAt,
+    folders: fixture.folders,
+    shortcuts: fixture.shortcuts.map((shortcut) => ({
+      iconSourceUrl: null, icon: { kind: 'letter' }, ...shortcut,
+    })),
+    settings: fixture.settings,
+    assets: fixture.assets,
+  };
+  await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({
+    name: 'fixture.zip', mimeType: 'application/zip', buffer: createZipFixture(manifest),
+  });
+  await page.getByRole('button', { name: '确认替换', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toBeHidden();
+}
+
 function fixture(input: BackgroundCase) {
   const defaults = createDefaultSettings();
   return {
     formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(), assets: [],
-    groups: [{ id: 'contrast-group', name: '常用', order: 0, isDefault: true, colorRole: 'primary' }],
-    shortcuts: [{ id: 'contrast-site', groupId: 'contrast-group', title: '对比度站点', url: 'https://example.com/',
+    folders: [{ id: 'contrast-folder', name: '常用', order: 0 }],
+    shortcuts: [{ id: 'contrast-site', folderId: null, title: '对比度站点', url: 'https://example.com/',
       icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }],
     settings: { ...defaults, appearance: { ...defaults.appearance, theme: input.theme, background: input.background,
       dynamicColor: { ...defaults.appearance.dynamicColor, enabled: input.dynamic } } },
@@ -54,6 +74,8 @@ export async function configureBackground(page: Page, input: BackgroundCase) {
 export async function uploadContrastPhoto(page: Page, input: { readonly color: 'black' | 'white'; readonly mask: number }) {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '外观', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
   await page.getByRole('button', { name: '图片', exact: true }).click();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="${input.color}"/></svg>`;
   await page.getByLabel('上传照片').setInputFiles({ name: 'contrast.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });

@@ -37,9 +37,9 @@ export function WebDavPlanReview({ connection }: WebDavPlanReviewProps) {
     <section aria-labelledby="webdav-plan-title" className="@container/webdav-plan flex min-w-0 flex-col gap-4">
       <Separator />
       <h3 id="webdav-plan-title" className="text-base font-medium">首次合并预览</h3>
-      <WebDavMergeSummary local={plan.local} remote={plan.remote} />
-      {plan.consistencyMode === 'readback-only' ? <p role="note" className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-        如复制了浏览器配置，请勿让多个副本同时同步同一个库，以免数据被覆盖。
+      <WebDavMergeSummary local={plan.local} remote={plan.remote} remoteObjectBytes={plan.remoteObjectBytes} />
+      {plan.consistencyMode === 'readback-only' ? <p role="note" className="rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+        复制浏览器配置后，请勿让副本同时同步同一库，以免覆盖数据。
       </p> : null}
       {newRecoveryKey ? <WebDavRecoveryKeyPanel value={newRecoveryKey} acknowledged={connection.keyAcknowledged}
         disabled={connection.busy || connection.loading} onAcknowledgedChange={connection.setKeyAcknowledged} /> : null}

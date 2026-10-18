@@ -223,7 +223,7 @@ function ColorPickerPanel({
           />
         }
       />
-      <PopoverContent align="end" className="w-[min(16rem,calc(75vw_-_3rem))] gap-3 p-3">
+      <PopoverContent side="top" align="end" className="w-[min(16rem,calc(75vw_-_3rem))] gap-3 p-3">
         <PopoverTitle className="sr-only">{label}</PopoverTitle>
         <ColorPickerEditor
           hsv={hsv}

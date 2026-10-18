@@ -18,3 +18,16 @@ export function subscribePageVisible(listener: () => void): () => void {
   document.addEventListener('visibilitychange', listener);
   return () => document.removeEventListener('visibilitychange', listener);
 }
+
+export function readWindowFocused(): boolean {
+  return document.hasFocus();
+}
+
+export function subscribeWindowFocus(listener: () => void): () => void {
+  window.addEventListener('focus', listener);
+  window.addEventListener('blur', listener);
+  return () => {
+    window.removeEventListener('focus', listener);
+    window.removeEventListener('blur', listener);
+  };
+}

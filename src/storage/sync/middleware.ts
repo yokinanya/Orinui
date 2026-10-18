@@ -2,7 +2,7 @@ import type { DBCore } from 'dexie';
 import { isTrackedTable, mutateWithCapture } from '@/storage/sync/capture';
 
 const SYNC_TABLES = ['sync_state', 'sync_records'] as const;
-const BUSINESS_TABLES = ['groups', 'shortcuts', 'settings', 'assets'] as const;
+const BUSINESS_TABLES = ['folders', 'shortcuts', 'settings', 'assets'] as const;
 
 export function createSyncCaptureMiddleware(now: () => number) {
   return {

@@ -5,30 +5,36 @@ import { DataContext, type DataContextValue } from '@/app/data-context';
 import { useSystemPrefersDark } from '@/app/theme';
 import { useDataState } from '@/app/use-data-state';
 import { db } from '@/storage/db';
+import { listFolderShortcuts } from '@/storage/shortcuts';
 import { readSettings } from '@/storage/settings';
 import { WebDavSyncProvider } from '@/app/WebDavSyncProvider';
+import { S3SyncProvider } from '@/app/S3SyncProvider';
+import { useOperations } from '@/app/operations';
+import { withOperationFeedback } from '@/app/operation-feedback';
 
 /** 数据桥把存储实例注入状态加载与操作模块，界面只访问 useData。 */
 export function DataProvider({ children }: { readonly children: ReactNode }) {
   const state = useDataState(db);
   const systemPrefersDark = useSystemPrefersDark();
   const readMediaAsset = useMemo(() => imageReader(db), []);
-  const { status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId,
-    loadGroups, loadShortcuts, setSettings } = state;
+  const operations = useOperations();
+  const { status, error, folders, shortcuts, settings, loadFolders, loadShortcuts, setSettings } = state;
+  const commands = useMemo(() => createDataCommands({ db, loadFolders, loadShortcuts, setSettings }),
+    [loadFolders, loadShortcuts, setSettings]);
+  const reportedCommands = useMemo(() => withOperationFeedback(commands, operations.begin), [commands, operations.begin]);
+  const loadFolderShortcuts = useCallback((folderId: string) => listFolderShortcuts(db, folderId), []);
   const refreshData = useCallback(async () => {
-    const nextGroups = await loadGroups();
+    await loadFolders();
     setSettings(await readSettings(db));
-    const selected = nextGroups.some((group) => group.id === activeGroupId) ? activeGroupId
-      : nextGroups.find((group) => group.isDefault)?.id;
-    if (!selected) throw new Error('同步后的本机数据缺少默认分组');
-    if (selected !== activeGroupId) setActiveGroupId(selected);
-    await loadShortcuts(selected);
-  }, [loadGroups, setSettings, activeGroupId, setActiveGroupId, loadShortcuts]);
+    await loadShortcuts();
+  }, [loadFolders, setSettings, loadShortcuts]);
   const value = useMemo<DataContextValue>(() => ({
-    status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId, readMediaAsset,
+    status, error, folders, shortcuts, settings, loadFolderShortcuts,
+    readMediaAsset,
     isDark: isDarkActive(settings.appearance.theme, systemPrefersDark),
-    ...createDataCommands({ db, activeGroupId, loadGroups, loadShortcuts, setActiveGroupId, setSettings }),
-  }), [status, error, groups, shortcuts, loadedShortcutsGroupId, settings, activeGroupId, setActiveGroupId,
-    readMediaAsset, systemPrefersDark, loadGroups, loadShortcuts, setSettings]);
-  return <DataContext value={value}><WebDavSyncProvider db={db} refreshData={refreshData}>{children}</WebDavSyncProvider></DataContext>;
+    ...reportedCommands,
+  }), [status, error, folders, shortcuts, settings, loadFolderShortcuts, readMediaAsset, systemPrefersDark, reportedCommands]);
+  return <DataContext value={value}><WebDavSyncProvider db={db} refreshData={refreshData}>
+    <S3SyncProvider db={db} refreshData={refreshData}>{children}</S3SyncProvider>
+  </WebDavSyncProvider></DataContext>;
 }

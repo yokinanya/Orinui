@@ -12,7 +12,8 @@ export function WebDavTemplateSelector({ template, disabled, onSelect }: WebDavT
   return (
     <Field data-disabled={disabled}>
       <FieldTitle id="webdav-template-label">服务模板</FieldTitle>
-      <ToggleGroup className="grid w-full grid-cols-2" variant="outline" size="sm" multiple={false}
+      {/* 与设置面板其他分段选项共用 settings-segmented 的容器与选中态，不叠加 outline 描边。 */}
+      <ToggleGroup className="settings-segmented grid w-full grid-cols-2" size="sm" multiple={false}
         aria-labelledby="webdav-template-label" aria-describedby={template.helpUrl ? 'webdav-template-help' : undefined}
         value={[template.id]} disabled={disabled} onValueChange={(values) => {
           const id = values[0];

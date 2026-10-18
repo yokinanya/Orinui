@@ -1,5 +1,5 @@
 import type { SyncCrypto } from '@/platform/sync-crypto-types';
-import type { SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncSnapshot } from '@/domain/sync';
 import type { Database } from '@/storage/db';
 import { exportSyncSnapshot } from '@/storage/sync/export';
 import { readSyncKey } from '@/storage/sync/vault';
@@ -19,7 +19,7 @@ export interface SealedSyncExport {
 /** Provider-independent encrypted objects; this does not upload or simulate a network success. */
 export async function sealSyncExport(db: Database, dependencies: {
   readonly crypto: SyncCrypto;
-  readonly encodeSnapshot: (snapshot: SyncSnapshotV1) => Uint8Array;
+  readonly encodeSnapshot: (snapshot: SyncSnapshot) => Uint8Array;
 }): Promise<SealedSyncExport> {
   const { crypto } = dependencies;
   const prepared = await exportSyncSnapshot(db, crypto);

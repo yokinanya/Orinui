@@ -1,10 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { MediaAsset } from '@/domain/asset';
-import { mergeSyncSnapshots, type SyncSnapshotV1 } from '@/domain/sync';
+import { mergeSyncSnapshots, type SyncSnapshot } from '@/domain/sync';
 import { createSyncCrypto } from '@/platform/sync-crypto';
 import { validateStoredMediaAsset } from '@/platform/sync-images';
 import { createDatabase, type Database } from '@/storage/db';
-import { createShortcut, deleteShortcut } from '@/storage/shortcuts';
+import { createFolder } from '@/storage/folders';
+import { createShortcut, deleteShortcut, updateShortcut } from '@/storage/shortcuts';
 import { applySyncSnapshot } from '@/storage/sync/apply';
 import { exportSyncSnapshot } from '@/storage/sync/export';
 import { initializeSyncVault } from '@/storage/sync/vault';
@@ -34,11 +35,7 @@ async function exported(database: Database) {
 }
 
 async function addImageShortcut(database: Database, title: string) {
-  const state = await database.sync_state.get('app');
-  if (!state) throw new Error('缺少同步状态');
-  const group = await database.groups.get(state.defaultGroupId.value);
-  if (!group) throw new Error('缺少默认分组');
-  return createShortcut(database, { groupId: group.id, title, url: 'https://image.test', image: {
+  return createShortcut(database, { folderId: null, title, url: 'https://image.test', image: {
     kind: 'icon', mime: 'image/png', width: 1, height: 1, blob: new Blob([TEST_PNG], { type: 'image/png' }),
   } });
 }
@@ -48,22 +45,23 @@ function dependencies(hash?: (bytes: Uint8Array) => Promise<string>) {
     validateStoredMediaAsset: vi.fn(async (asset: MediaAsset) => asset) };
 }
 
-function remoteSnapshot(local: SyncSnapshotV1, changes: Partial<SyncSnapshotV1>): SyncSnapshotV1 {
+function remoteSnapshot(local: SyncSnapshot, changes: Partial<SyncSnapshot>): SyncSnapshot {
   return { ...local, deviceId: 'device-remote', generation: 1, ...changes };
 }
 
 it('atomically applies a merged snapshot and retains the non-exported crypto key', async () => {
   const database = await freshDatabase(() => 1_000);
+  await createFolder(database, '常用');
   const before = await exported(database);
-  const group = before.snapshot.groups[0];
-  if (!group) throw new Error('缺少初始分组');
-  const remote = remoteSnapshot(before.snapshot, { groups: [{ ...group,
-    name: { value: '跨设备名称', clock: group.name.clock + 1, deviceId: 'device-remote' } }] });
+  const folder = before.snapshot.folders[0];
+  if (!folder) throw new Error('缺少初始文件夹');
+  const remote = remoteSnapshot(before.snapshot, { folders: [{ ...folder,
+    name: { value: '跨设备名称', clock: folder.name.clock + 1, deviceId: 'device-remote' } }] });
   const merged = mergeSyncSnapshots({ local: before.snapshot, remotes: [remote] });
 
   await applySyncSnapshot(database, { snapshot: merged, assets: [], expectedGeneration: before.localGeneration }, dependencies());
 
-  expect((await database.groups.get(group.id))?.name).toBe('跨设备名称');
+  expect((await database.folders.get(folder.id))?.name).toBe('跨设备名称');
   expect((await database.sync_state.get('app'))?.generation).toBe(merged.generation);
   expect(await database.sync_keys.count()).toBe(1);
 });
@@ -71,12 +69,12 @@ it('atomically applies a merged snapshot and retains the non-exported crypto key
 it('rejects a stale local generation before replacing any domain data', async () => {
   const database = await freshDatabase(() => 1_000);
   const before = await exported(database);
-  const groupBefore = await database.groups.toArray();
+  const foldersBefore = await database.folders.toArray();
 
   await expect(applySyncSnapshot(database, { snapshot: before.snapshot, assets: [],
     expectedGeneration: before.localGeneration + 1 }, dependencies())).rejects.toThrow(/本机数据在同步期间已变化/);
 
-  expect(await database.groups.toArray()).toEqual(groupBefore);
+  expect(await database.folders.toArray()).toEqual(foldersBefore);
   expect((await database.sync_state.get('app'))?.suspended).toBe(false);
 });
 
@@ -86,12 +84,12 @@ it('rolls back suspension and data replacement if a local grave is missing from 
   const tombstone = { entityType: 'shortcut' as const, id: 'shortcut-deleted', clock: 2, deviceId: TEST_DEVICE_ID };
   const grave: SyncRecordRow = { id: `shortcut:${tombstone.id}`, kind: 'tombstone', entityId: tombstone.id, tombstone };
   await database.sync_records.bulkPut([grave]);
-  const groupsBefore = await database.groups.toArray();
+  const foldersBefore = await database.folders.toArray();
 
   await expect(applySyncSnapshot(database, { snapshot: { ...before.snapshot, tombstones: [] }, assets: [],
     expectedGeneration: before.localGeneration }, dependencies())).rejects.toThrow(/缺少本地删除墓碑/);
 
-  expect(await database.groups.toArray()).toEqual(groupsBefore);
+  expect(await database.folders.toArray()).toEqual(foldersBefore);
   expect((await database.sync_state.get('app'))?.suspended).toBe(false);
   expect((await database.sync_records.get(`shortcut:${tombstone.id}`))?.kind).toBe('tombstone');
 });
@@ -99,11 +97,7 @@ it('rolls back suspension and data replacement if a local grave is missing from 
 it('keeps an unexpired undo deletion hidden while preserving its pending metadata', async () => {
   let now = 10_000;
   const database = await freshDatabase(() => now);
-  const state = await database.sync_state.get('app');
-  if (!state) throw new Error('缺少同步状态');
-  const group = await database.groups.get(state.defaultGroupId.value);
-  if (!group) throw new Error('缺少默认分组');
-  const shortcut = await createShortcut(database, { groupId: group.id, title: '稍后撤销', url: 'https://undo.test' });
+  const shortcut = await createShortcut(database, { folderId: null, title: '稍后撤销', url: 'https://undo.test' });
   expect((await database.sync_records.get(`shortcut:${shortcut.id}`))?.kind).toBe('shortcut');
   await deleteShortcut(database, shortcut.id);
   expect((await database.sync_records.get(`shortcut:${shortcut.id}`))?.kind).toBe('shortcut');
@@ -121,11 +115,7 @@ it('keeps an unexpired undo deletion hidden while preserving its pending metadat
 
 it('lets a remote grave cancel a pending undo and prevents local resurrection', async () => {
   const database = await freshDatabase(() => 10_000);
-  const state = await database.sync_state.get('app');
-  if (!state) throw new Error('缺少同步状态');
-  const group = await database.groups.get(state.defaultGroupId.value);
-  if (!group) throw new Error('缺少默认分组');
-  const shortcut = await createShortcut(database, { groupId: group.id, title: '远端删除', url: 'https://grave.test' });
+  const shortcut = await createShortcut(database, { folderId: null, title: '远端删除', url: 'https://grave.test' });
   await deleteShortcut(database, shortcut.id);
   const before = await exported(database);
   const grave = { entityType: 'shortcut' as const, id: shortcut.id, clock: before.snapshot.shortcuts[0]!.title.clock + 10, deviceId: 'device-remote' };
@@ -189,4 +179,40 @@ it('checks real image bytes and decoded dimensions at the production verifier bo
   expect(close).toHaveBeenCalledOnce();
   await expect(validateStoredMediaAsset({ ...asset,
     blob: new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/png' }) })).rejects.toThrow(/文件签名/);
+});
+
+it('projects deleted-folder children to homepage while preserving wire placement through apply, edit and export', async () => {
+  const database = await freshDatabase(() => 10_000);
+  const folder = await createFolder(database, '工作');
+  const child = await createShortcut(database, { folderId: folder.id, title: '文档', url: 'https://child.test' });
+  const before = await exported(database);
+  const placement = before.snapshot.shortcuts[0]!.placement;
+  const remote = remoteSnapshot(before.snapshot, { folders: [], shortcuts: [],
+    tombstones: [{ entityType: 'folder', id: folder.id, clock: 1, deviceId: 'device-remote' }] });
+  const merged = mergeSyncSnapshots({ local: before.snapshot, remotes: [remote] });
+  await applySyncSnapshot(database, { snapshot: merged, assets: [], expectedGeneration: before.localGeneration }, dependencies());
+  expect(await database.folders.count()).toBe(0);
+  expect((await database.shortcuts.get(child.id))?.folderId).toBeNull();
+  const unchanged = await exported(database);
+  expect(unchanged.snapshot.shortcuts[0]?.placement).toEqual(placement);
+  expect(mergeSyncSnapshots({ local: unchanged.snapshot, remotes: [before.snapshot] }).shortcuts[0]?.placement).toEqual(placement);
+  await updateShortcut(database, child.id, { title: '新名称' });
+  expect((await exported(database)).snapshot.shortcuts[0]?.placement).toEqual(placement);
+  await expect(database.transaction('rw', database.folders, database.sync_state, database.sync_records, async () => {
+    await database.folders.add(folder);
+  })).rejects.toThrow(/不能复活/);
+  expect((await database.sync_records.get(`folder:${folder.id}`))?.kind).toBe('tombstone');
+});
+
+it('rejects a regressed local folder tombstone version without changing records', async () => {
+  const database = await freshDatabase(() => 10_000);
+  const before = await exported(database);
+  const tombstone = { entityType: 'folder' as const, id: 'deleted-folder', clock: 9, deviceId: TEST_DEVICE_ID };
+  const grave: SyncRecordRow = { id: 'folder:deleted-folder', kind: 'tombstone', entityId: tombstone.id, tombstone };
+  await database.sync_records.bulkPut([grave]);
+  const incoming = { ...before.snapshot, tombstones: [{ ...tombstone, clock: 8 }] };
+  await expect(applySyncSnapshot(database, { snapshot: incoming, assets: [], expectedGeneration: before.localGeneration }, dependencies()))
+    .rejects.toThrow(/回退本地删除墓碑版本/);
+  expect(await database.sync_records.get('folder:deleted-folder')).toMatchObject({ tombstone });
+  expect((await database.sync_state.get('app'))?.suspended).toBe(false);
 });

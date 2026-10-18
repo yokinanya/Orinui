@@ -1,4 +1,4 @@
-import type { Shortcut } from '@/domain/shortcut';
+import { shortcutDisplayName, type Shortcut } from '@/domain/shortcut';
 import type { OpenTarget } from '@/domain/settings';
 import { cn } from '@/lib/utils';
 import { ShortcutIcon } from '@/features/shortcuts/ShortcutIcon';
@@ -25,23 +25,25 @@ export function ShortcutTile({ shortcut, editing = false, showName = true, openT
     'home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none md:p-3',
     editing
       ? 'bg-glass/30 ring-1 ring-glass-border'
-      : 'hover:bg-glass/60 focus-visible:ring-2 focus-visible:ring-ring/50',
+      : 'hover:bg-glass/60',
   );
 
+  const name = shortcutDisplayName(shortcut);
   const content = (
     <>
       <span
         aria-hidden="true"
         style={iconFrameStyle()}
-        className="home-readable-surface flex shrink-0 items-center justify-center rounded-2xl bg-glass font-medium text-glass-foreground"
+        className="home-readable-surface flex shrink-0 items-center justify-center rounded-2xl border border-glass-border/60 bg-glass font-medium text-glass-foreground shadow-sm shadow-black/[0.04]"
       >
         <ShortcutIcon shortcut={shortcut} />
       </span>
-      <span className={showName
-        ? 'home-readable-chip home-readable-muted max-w-full truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground'
-        : 'sr-only'}>
-        {shortcut.title}
-      </span>
+      {/* 名称容器必须是零宽基准，长名称才会在格子宽度内省略，而不会把网格列撑宽。 */}
+      {showName
+        ? <span className="home-readable-chip home-readable-muted block w-full min-w-0 truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground">
+            {name}
+          </span>
+        : <span className="sr-only">{name}</span>}
     </>
   );
 
@@ -50,7 +52,7 @@ export function ShortcutTile({ shortcut, editing = false, showName = true, openT
   }
 
   return (
-    <a href={shortcut.url} className={className} title={shortcut.title}
+    <a href={shortcut.url} className={className} title={name}
       target={openTarget === 'new-tab' ? '_blank' : undefined}
       rel={openTarget === 'new-tab' ? 'noopener noreferrer' : undefined}>
       {content}

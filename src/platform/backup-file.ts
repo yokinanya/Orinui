@@ -22,7 +22,8 @@ interface ZipReadState {
 
 function toAssetMetadata(asset: MediaAsset, sha256: string): BackupAsset {
   return { id: asset.id, kind: asset.kind, mime: asset.mime, width: asset.width, height: asset.height,
-    sourceUrl: asset.sourceUrl, motion: asset.motion ? { kind: asset.motion.kind, duration: asset.motion.duration } : null,
+    sourceUrl: asset.sourceUrl, name: asset.name ?? null,
+    motion: asset.motion ? { kind: asset.motion.kind, duration: asset.motion.duration } : null,
     byteLength: asset.blob.size, sha256 };
 }
 
@@ -33,7 +34,7 @@ async function sha256(blob: Blob): Promise<string> {
 
 function createManifest(snapshot: BackupSnapshot, assets: readonly BackupAsset[]): BackupDocument {
   return parseBackup({ formatVersion: BACKUP_VERSION, exportedAt: snapshot.exportedAt,
-    groups: snapshot.groups, shortcuts: snapshot.shortcuts, settings: snapshot.settings, assets }).document;
+    folders: snapshot.folders, shortcuts: snapshot.shortcuts, settings: snapshot.settings, assets }).document;
 }
 
 function zipOutput(): { readonly archive: Zip; readonly chunks: Uint8Array[]; readonly complete: Promise<void> } {
@@ -98,7 +99,8 @@ function parseManifest(source: string): BackupDocument {
   let input: unknown;
   try { input = JSON.parse(source); }
   catch (cause) { throw new Error(`ZIP 清单格式不正确：${cause instanceof Error ? cause.message : String(cause)}`); }
-  return parseBackup(input).document;
+  try { return parseBackup(input).document; }
+  catch (cause) { throw new Error(`ZIP 清单校验失败：${cause instanceof Error ? cause.message : String(cause)}`); }
 }
 
 function entryPathAllowed(path: string, state: ZipReadState): void {
@@ -193,7 +195,7 @@ async function restoreAssets(document: BackupDocument, entries: ReadonlyMap<stri
     if (!SHA256_HEX.test(metadata.sha256) || await sha256(blob) !== metadata.sha256) fail(`媒体摘要校验失败：${path}`);
     const typedBlob = blob.slice(0, blob.size, metadata.mime);
     assets.push(await validateStoredMediaAsset({ id: metadata.id, kind: metadata.kind, mime: metadata.mime,
-      width: metadata.width, height: metadata.height, sourceUrl: metadata.sourceUrl, blob: typedBlob,
+      width: metadata.width, height: metadata.height, sourceUrl: metadata.sourceUrl, name: metadata.name, blob: typedBlob,
       ...(metadata.motion ? { motion: metadata.motion } : {}) }));
   }
   return assets;
@@ -211,6 +213,6 @@ export async function readBackupFile(file: File): Promise<RestorableBackup> {
   if (archive.seen.size !== expectedPaths.size || [...expectedPaths].some((path) => !archive.seen.has(path))) fail('ZIP 条目与清单资源不匹配');
   const assets = await restoreAssets(archive.manifest, archive.entries);
   return { ...parseBackup({ formatVersion: archive.manifest.formatVersion, exportedAt: archive.manifest.exportedAt,
-    groups: archive.manifest.groups, shortcuts: archive.manifest.shortcuts, settings: archive.manifest.settings,
+    folders: archive.manifest.folders, shortcuts: archive.manifest.shortcuts, settings: archive.manifest.settings,
     assets: archive.manifest.assets }), assets };
 }

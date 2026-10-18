@@ -1,29 +1,27 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { DataStatus } from '@/app/data-context';
-import type { Group } from '@/domain/group';
+import type { Folder } from '@/domain/folder';
 import { createDefaultSettings } from '@/domain/settings';
 import type { Shortcut } from '@/domain/shortcut';
 import type { Database } from '@/storage/db';
-import { listGroups } from '@/storage/groups';
+import { listFolders } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
-import { listShortcuts } from '@/storage/shortcuts';
+import { listHomepageShortcuts } from '@/storage/shortcuts';
 
 function useInitialization(db: Database) {
   const [status, setStatus] = useState<DataStatus>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [settings, setSettings] = useState(createDefaultSettings);
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const initialized = await ensureInitialized(db);
-        const nextGroups = await listGroups(db);
+        const nextFolders = await listFolders(db);
         if (cancelled) return;
-        setGroups(nextGroups);
+        setFolders(nextFolders);
         setSettings(initialized.settings);
-        setActiveGroupId(initialized.defaultGroup.id);
         setStatus('ready');
       } catch (cause) {
         if (cancelled) return;
@@ -33,54 +31,35 @@ function useInitialization(db: Database) {
     })();
     return () => { cancelled = true; };
   }, [db]);
-  return { status, setStatus, error, setError, groups, setGroups, settings, setSettings, activeGroupId, setActiveGroupId };
+  return { status, setStatus, error, setError, folders, setFolders, settings, setSettings };
 }
 
-function useShortcutLoader(db: Database, activeGroupId: string | null) {
+/** 主页网格内容：文件夹与不属于任何文件夹的网站一起读出来。 */
+function useHomepageLoader(db: Database) {
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
-  const [loadedShortcutsGroupId, setLoadedShortcutsGroupId] = useState<string | null>(null);
-  const currentGroup = useRef(activeGroupId);
-  const request = useRef(0);
-  useLayoutEffect(() => { currentGroup.current = activeGroupId; }, [activeGroupId]);
-  const loadShortcuts = useCallback(async (groupId: string | null) => {
-    if (currentGroup.current !== groupId) return;
-    const version = ++request.current;
-    try {
-      const next = groupId ? await listShortcuts(db, groupId) : [];
-      if (request.current !== version || currentGroup.current !== groupId) return;
-      setShortcuts(next);
-      setLoadedShortcutsGroupId(groupId);
-    } catch (cause) {
-      // A superseded group request is cancelled; the current request still exposes its failure.
-      if (request.current === version && currentGroup.current === groupId) throw cause;
-    }
+  const loadShortcuts = useCallback(async () => {
+    setShortcuts(await listHomepageShortcuts(db));
   }, [db]);
-  return { shortcuts, loadedShortcutsGroupId, loadShortcuts, currentGroup, request };
+  const loadFolders = useCallback(async () => listFolders(db), [db]);
+  return { shortcuts, setShortcuts, loadShortcuts, loadFolders };
 }
 
 export function useDataState(db: Database) {
   const state = useInitialization(db);
-  const loader = useShortcutLoader(db, state.activeGroupId);
-  const setActiveGroupId = useCallback((id: string | null) => {
-    loader.currentGroup.current = id;
-    loader.request.current += 1;
-    state.setActiveGroupId(id);
-  }, [loader.currentGroup, loader.request, state.setActiveGroupId]);
-  const loadGroups = useCallback(async () => {
-    const next = await listGroups(db);
-    state.setGroups(next);
+  const homepage = useHomepageLoader(db);
+  const loadFolders = useCallback(async () => {
+    const next = await homepage.loadFolders();
+    state.setFolders(next);
     return next;
-  }, [db, state.setGroups]);
-  const { loadShortcuts } = loader;
-  const { activeGroupId, status, setError, setStatus } = state;
+  }, [homepage.loadFolders, state.setFolders]);
+  const loadShortcuts = homepage.loadShortcuts;
+  const { status, setError, setStatus } = state;
   useEffect(() => {
     if (status !== 'ready') return;
-    void loadShortcuts(activeGroupId).catch((cause: unknown) => {
+    void loadShortcuts().catch((cause: unknown) => {
       setError(cause instanceof Error ? cause.message : String(cause));
       setStatus('error');
     });
-    return () => { loader.request.current += 1; };
-  }, [activeGroupId, status, loadShortcuts, setError, setStatus]);
-  return { ...state, shortcuts: loader.shortcuts, loadedShortcutsGroupId: loader.loadedShortcutsGroupId,
-    setActiveGroupId, loadGroups, loadShortcuts };
+  }, [status, loadShortcuts, setError, setStatus]);
+  return { ...state, shortcuts: homepage.shortcuts, loadFolders, loadShortcuts };
 }

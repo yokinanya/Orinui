@@ -8,6 +8,7 @@ import type { MediaAssetKind } from '@/domain/asset';
 import { IMAGE_ACCEPT } from '@/domain/image';
 import { prepareImage } from '@/platform/images';
 import type { NewMediaAsset } from '@/storage/assets';
+import { useOperations } from '@/app/operations';
 
 interface ImageUploadProps {
   readonly id: string;
@@ -68,6 +69,7 @@ function fileInputTabIndex(compact: boolean) {
 }
 
 function useImageUpload({ kind, onReady, onBusyChange }: ImageUploadProps) {
+  const operations = useOperations();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -79,10 +81,14 @@ function useImageUpload({ kind, onReady, onBusyChange }: ImageUploadProps) {
     setBusy(true);
     setError(null);
     onBusyChange?.(true);
+    const task = operations.begin(kind === 'background' ? '导入照片壁纸' : '导入网站图标', '读取并校验图片');
     try {
       const image = await prepareImage({ blob: file, kind });
+      task.update('保存图片');
       if (mounted.current) await onReady(image);
+      task.succeed('图片已保存');
     } catch (cause) {
+      task.fail(cause);
       if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (mounted.current) { setBusy(false); onBusyChange?.(false); }

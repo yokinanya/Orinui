@@ -27,8 +27,8 @@ function remoteHarness() {
   const events: string[] = [];
   const remote: WebDavRemote = {
     objects: { async listSnapshots() { return []; }, async readSnapshot() { throw new Error('unused'); },
-      async readAsset() { return null; }, async createAsset() { throw new Error('unused'); },
-      async publishSnapshot() { throw new Error('unused'); } },
+      async readAsset() { return null; }, async statAsset() { return null; }, async createAsset() { throw new Error('unused'); },
+      async publishSnapshot() { throw new Error('unused'); }, async measureVaultBytes() { return 0; } },
     async readVault() { return vault && { ...vault, ciphertext: vault.ciphertext.slice() }; },
     async createVault(input) {
       events.push('createVault');
@@ -37,6 +37,7 @@ function remoteHarness() {
     },
     async prepareCollections() { events.push('prepareCollections'); },
     async verifyConditions() { events.push('verifyConditions'); },
+    async measureVaultBytes() { return 0; },
     async deleteVault(vaultId) {
       if (vault && vault.vaultId !== vaultId) throw new Error('身份已变化');
       events.push('deleteVault'); vault = null;
@@ -62,6 +63,9 @@ async function harness(options: { readonly synchronize?: () => Promise<never>;
     synchronize: options.synchronize ?? (async () => ({ runId: 'run', vaultId: 'vault-local', deviceId: 'device-local',
       state: 'synced', publishedGeneration: 0, localGeneration: 0, revision: '"rev"', uploadedAssets: 0,
       downloadedAssets: 0, repairedAssetIds: [] })),
+    previewSizes: async () => ({ measuredAt: 0, localMediaBytes: 0, remoteVaultBytes: 0,
+      downloadMediaObjects: 0, downloadMediaBytes: 0, uploadMediaObjects: 0, uploadMediaBytes: 0,
+      downloadSnapshotObjects: 0, downloadSnapshotBytes: 0, uploadSnapshotBytes: 0 }),
     createId: () => ids[idIndex++] ?? `id-${idIndex}`,
   });
   return { db, settings, provider, service };
@@ -134,9 +138,9 @@ it('reports orphaned configuration and disconnect preserves domain rows', async 
     settings.value = null;
     await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
     await h.service.connect();
-    const groupsBefore = await h.db.groups.toArray();
+    const foldersBefore = await h.db.folders.toArray();
     await h.service.disconnect();
-    expect(await h.db.groups.toArray()).toEqual(groupsBefore);
+    expect(await h.db.folders.toArray()).toEqual(foldersBefore);
     expect(await h.db.sync_state.count()).toBe(0);
     expect(await h.db.sync_keys.count()).toBe(0);
     expect(settings.value).toBeNull();
@@ -161,13 +165,13 @@ it('deletes the remote vault and disconnects while preserving local domain data'
   const h = await harness();
   await h.service.prepare({ credentials, consistencyMode: 'strong-etag' });
   await h.service.connect();
-  const before = await Promise.all([h.db.groups.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()]);
+  const before = await Promise.all([h.db.folders.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()]);
   await h.service.deleteRemote();
   expect(h.provider.vault).toBeNull();
   expect(h.settings.value).toBeNull();
   expect(await h.db.sync_keys.count()).toBe(0);
   expect(await h.db.sync_state.count()).toBe(0);
-  expect(await Promise.all([h.db.groups.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()])).toEqual(before);
+  expect(await Promise.all([h.db.folders.toArray(), h.db.shortcuts.toArray(), h.db.settings.toArray(), h.db.assets.toArray()])).toEqual(before);
 });
 
 it('preserves connection and key if remote deletion fails, then permits retry', async () => {
@@ -184,15 +188,15 @@ it('preserves connection and key if remote deletion fails, then permits retry', 
   expect(await h.service.read()).toBeNull();
 });
 
-it('permits an explicitly confirmed reset without a recovery key and preserves local groups', async () => {
+it('permits an explicitly confirmed reset without a recovery key and preserves local folders', async () => {
   const h = await harness();
   h.provider.vault = (await encryptedVault('remote-vault')).vault;
-  const before = await h.db.groups.toArray();
+  const before = await h.db.folders.toArray();
   await expect(h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).rejects.toBeInstanceOf(WebDavRecoveryRequiredError);
   expect(h.provider.vault).not.toBeNull();
   await h.service.resetRemote();
   expect(h.provider.vault).toBeNull();
-  expect(await h.db.groups.toArray()).toEqual(before);
+  expect(await h.db.folders.toArray()).toEqual(before);
   expect(await h.db.sync_state.count()).toBe(0);
   expect(h.settings.value).toBeNull();
   expect((await h.service.prepare({ credentials, consistencyMode: 'strong-etag' })).mode).toBe('create');

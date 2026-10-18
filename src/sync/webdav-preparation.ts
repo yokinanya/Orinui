@@ -1,4 +1,5 @@
 import type { WebDavConnectionDependencies, WebDavSyncService } from '@/sync/webdav-types';
+import type { SyncProgressReporter } from '@/sync/ports';
 import { prepareConnection, connectPrepared, type PreparedConnection } from '@/sync/webdav-prepare';
 import { WebDavRecoveryRequiredError, resetWebDavVault, type WebDavResetTarget } from '@/sync/webdav-recovery-required';
 
@@ -21,10 +22,10 @@ export function createWebDavPreparation(deps: WebDavConnectionDependencies):
       prepared = result;
       return result.plan;
     },
-    async connect() {
+    async connect(reportProgress?: SyncProgressReporter) {
       if (!prepared) throw new Error('请先检查 WebDAV 连接');
       const current = prepared;
-      try { await connectPrepared(deps, current); }
+      try { await connectPrepared(deps, current, reportProgress); }
       finally { prepared = null; }
     },
     cancelPlan() { preparationId += 1; prepared = null; resetTarget = null; },

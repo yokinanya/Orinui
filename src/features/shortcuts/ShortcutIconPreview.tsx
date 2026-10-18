@@ -23,5 +23,5 @@ export function ShortcutIconPreview({ draft, url, mime }: {
       <Icon aria-hidden="true" className="size-full" />
     </span>
   );
-  return <span role="img" aria-label="名称首字母预览" style={iconLetterStyle(frame)}>{shortcutInitial(draft.title)}</span>;
+  return <span role="img" aria-label="名称首字母预览" style={iconLetterStyle(frame)}>{shortcutInitial(draft.displayName)}</span>;
 }

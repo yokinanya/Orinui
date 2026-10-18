@@ -80,6 +80,49 @@ function DialogContent({
   )
 }
 
+/**
+ * 不受祖先 transform 影响的居中弹窗。
+ *
+ * 主页动效与 dnd-kit 排序都在祖先元素上使用 CSS transform；弹层自身的 fade/zoom
+ * 动画也会改写 transform。这些 transform 会让 `position: fixed` 相对祖先盒子定位，
+ * 弹窗随之偏离视口中心。这里保持自身只做透明度淡入，并用 fixed 包装层居中。
+ */
+function FloatingDialogContent({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <div data-slot="dialog-floating-layer" className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
+        <DialogPrimitive.Popup
+          data-slot="dialog-content"
+          className={cn(
+            "pointer-events-auto relative grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] gap-6 overflow-hidden rounded-4xl bg-popover p-6 text-sm text-popover-foreground shadow-xl ring-1 ring-foreground/5 outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 sm:max-w-md dark:ring-foreground/10",
+            className
+          )}
+          {...props}
+        >
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close
+              data-slot="dialog-close"
+              render={<Button variant="ghost" className="absolute top-4 right-4 bg-secondary" size="icon-sm" />}
+            >
+              <XIcon />
+              <span className="sr-only">关闭</span>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Popup>
+      </div>
+    </DialogPortal>
+  )
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -157,4 +200,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  FloatingDialogContent,
 }

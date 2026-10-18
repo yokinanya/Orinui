@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useData } from '@/app/data-context';
-import { photoSeed } from '@/platform/images';
+import { photoReadabilityColor, photoSeed } from '@/platform/images';
 import type { MediaAsset } from '@/domain/asset';
 
 interface LocalImageState {
@@ -12,12 +12,14 @@ interface LocalImageState {
   readonly mime: string | null;
   readonly seed: string | null;
   readonly seedError: string | null;
+  readonly readabilityColor: string | null;
+  readonly readabilityColorError: string | null;
   readonly sourceUrl: string | null;
   readonly error: string | null;
 }
 
 const EMPTY_IMAGE: LocalImageState = { id: null, url: null, mediaUrl: null, motionKind: null, mime: null,
-  seed: null, seedError: null, sourceUrl: null, error: null };
+  seed: null, seedError: null, readabilityColor: null, readabilityColorError: null, sourceUrl: null, error: null };
 
 type PhotoAsset = Pick<MediaAsset, 'id' | 'blob' | 'width' | 'height'>;
 
@@ -40,7 +42,8 @@ function useImageResource(id: string | null, readMediaAsset: (id: string) => Pro
         if (image.motion) mediaUrl = URL.createObjectURL(image.blob);
         setAsset({ id, blob: poster, width: image.width, height: image.height });
         setState({ id, url: objectUrl, mediaUrl, motionKind: image.motion?.kind ?? null, mime: image.mime,
-          seed: null, seedError: null, sourceUrl: image.sourceUrl, error: null });
+          seed: null, seedError: null, readabilityColor: null, readabilityColorError: null,
+          sourceUrl: image.sourceUrl, error: null });
       } catch (cause) {
         if (cancelled) return;
         setAsset(null);
@@ -57,26 +60,33 @@ function useImageResource(id: string | null, readMediaAsset: (id: string) => Pro
   return { state, setState, asset };
 }
 
-export function useLocalImage(id: string | null, extractSeed = false): LocalImageState {
+export function useLocalImage(id: string | null, extractSeed = false, extractReadabilityColor = false): LocalImageState {
   const { readMediaAsset } = useData();
   const { state, setState, asset } = useImageResource(id, readMediaAsset);
   useEffect(() => {
     if (!id || asset?.id !== id) return;
     if (!extractSeed) {
       setState((current) => current.id === id && current.seedError ? { ...current, seedError: null } : current);
+    }
+    if (!extractSeed && !extractReadabilityColor) {
       return;
     }
     let cancelled = false;
-    void photoSeed(asset.blob, asset.width, asset.height).then((seed) => {
-      if (cancelled) return;
-      setState((current) => current.id === id ? { ...current, seed, seedError: null } : current);
+    if (extractSeed) void photoSeed(asset.blob, asset.width, asset.height).then((seed) => {
+      if (!cancelled) setState((current) => current.id === id ? { ...current, seed, seedError: null } : current);
     }).catch((cause: unknown) => {
-      if (cancelled) return;
-      const message = cause instanceof Error ? cause.message : String(cause);
-      setState((current) => current.id === id ? { ...current, seedError: message } : current);
+      if (!cancelled) setState((current) => current.id === id
+        ? { ...current, seedError: cause instanceof Error ? cause.message : String(cause) } : current);
+    });
+    if (extractReadabilityColor) void photoReadabilityColor(asset.blob, asset.width, asset.height).then((readabilityColor) => {
+      if (!cancelled) setState((current) => current.id === id
+        ? { ...current, readabilityColor, readabilityColorError: null } : current);
+    }).catch((cause: unknown) => {
+      if (!cancelled) setState((current) => current.id === id
+        ? { ...current, readabilityColorError: cause instanceof Error ? cause.message : String(cause) } : current);
     });
     return () => { cancelled = true; };
-  }, [id, extractSeed, asset]);
+  }, [id, extractSeed, extractReadabilityColor, asset]);
   return state.id === id ? state : EMPTY_IMAGE;
 }
 

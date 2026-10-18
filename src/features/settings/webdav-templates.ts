@@ -7,7 +7,7 @@ export const WEBDAV_TEMPLATES = [
     usernamePlaceholder: '坚果云账号邮箱',
     passwordLabel: '应用密码',
     consistencyMode: 'readback-only',
-    instructions: '账号填邮箱，密码填「安全选项」中生成的应用密码；同步文件保存在 Orinui 文件夹中。',
+    instructions: '填写账号邮箱及「安全选项」生成的应用密码；同步至 Orinui 文件夹。',
     helpUrl: 'https://help.jianguoyun.com/?p=2064',
   },
   {
@@ -18,7 +18,7 @@ export const WEBDAV_TEMPLATES = [
     usernamePlaceholder: 'Koofr 账号邮箱',
     passwordLabel: '应用密码',
     consistencyMode: 'strong-etag',
-    instructions: '账号填邮箱，密码使用为 Orinui 生成的应用密码。',
+    instructions: '填写账号邮箱和为 Orinui 生成的应用密码。',
     helpUrl: 'https://koofr.eu/help/koofr_with_webdav/how-do-i-connect-a-service-to-koofr-through-webdav/',
   },
   {
@@ -29,7 +29,7 @@ export const WEBDAV_TEMPLATES = [
     usernamePlaceholder: 'Nextcloud 用户名',
     passwordLabel: '应用密码',
     consistencyMode: 'strong-etag',
-    instructions: '从文件设置复制 WebDAV 地址，并在个人设置的「安全」中生成应用密码。',
+    instructions: '从文件设置复制 WebDAV 地址；在个人设置 → 安全中生成应用密码。',
     helpUrl: 'https://docs.nextcloud.com/server/stable/user_manual/en/files/access_webdav.html',
   },
   {

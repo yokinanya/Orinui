@@ -60,12 +60,18 @@ async function addShortcut(page: Page) {
 }
 
 async function expectGridWidths(page: Page) {
+  // 网格与时钟、搜索共用页面宽度（此处为“宽阔” 1024px），格子随列数在该宽度内均分。
   const grid = page.locator('.shortcut-grid');
-  await expect.poll(() => grid.evaluate((element) => element.getBoundingClientRect().width)).toBe(432);
+  const pageWidth = 1024;
+  const columnWidth = (columns: number) => Math.round((pageWidth - (columns - 1) * 16) / columns);
+  const tileWidth = async () => page.locator('.shortcut-grid li').first()
+    .evaluate((element) => Math.round(element.getBoundingClientRect().width));
+  await expect.poll(() => grid.evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(pageWidth);
   await chooseLayoutOption(page, '6 列');
-  await expect.poll(() => grid.evaluate((element) => element.getBoundingClientRect().width)).toBe(656);
+  await expect.poll(tileWidth).toBe(columnWidth(6));
   await chooseLayoutOption(page, '8 列');
-  await expect.poll(() => grid.evaluate((element) => element.getBoundingClientRect().width)).toBe(880);
+  await expect.poll(tileWidth).toBe(columnWidth(8));
+  await expect.poll(tileWidth).toBeGreaterThanOrEqual(96);
 }
 
 async function expectShortcutKeyboardNavigation(page: Page) {
@@ -115,20 +121,16 @@ test('搜索设置为新标签页时保留主页并用键盘提交', async ({ pa
   await expect(page).toHaveURL(/newtab\.html/);
 });
 
-test('320px 窄屏下网站网格自适应并将未满行内容居中', async ({ page }) => {
+test('320px 空间不足时自动减少列数，不产生网格横向滚动', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto('/newtab.html');
   await addShortcut(page);
   await chooseLayoutOption(page, '8 列');
   const grid = page.locator('.shortcut-grid');
   await expect.poll(() => grid.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const [gridBox, shortcutBox] = await Promise.all([
-    grid.boundingBox(), page.getByRole('link', { name: '私人网站', exact: true }).boundingBox(),
-  ]);
-  expect(gridBox).not.toBeNull();
-  expect(shortcutBox).not.toBeNull();
-  expect(Math.abs(shortcutBox!.x + shortcutBox!.width / 2 - gridBox!.x - gridBox!.width / 2)).toBeLessThanOrEqual(1);
+  expect(await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length)).toBeLessThan(8);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.getByRole('link', { name: '私人网站', exact: true })).toBeVisible();
 });
 
 test('主页区域支持手柄拖拽与键盘排序，显隐和原有移动按钮独立工作', async ({ page }) => {
@@ -141,6 +143,7 @@ test('主页区域支持手柄拖拽与键盘排序，显隐和原有移动按�
   await expect(rows).toContainText(['时钟', '搜索', '快捷方式']);
   const handle = layout.getByRole('button', { name: '拖动时钟排序' });
   const target = rows.nth(2);
+  await rows.first().scrollIntoViewIfNeeded();
   const [from, to] = await Promise.all([handle.boundingBox(), target.boundingBox()]);
   expect(from).not.toBeNull();
   expect(to).not.toBeNull();

@@ -10,6 +10,7 @@ export type ServerEvent =
   | { readonly kind: 'list'; readonly vaultId: string }
   | { readonly kind: 'read-snapshot'; readonly objectId: string }
   | { readonly kind: 'read-asset'; readonly objectId: string }
+  | { readonly kind: 'stat-asset'; readonly objectId: string }
   | { readonly kind: 'create-asset'; readonly objectId: string }
   | { readonly kind: 'publish'; readonly objectId: string };
 
@@ -36,7 +37,8 @@ export class SyncObjectServer implements SyncObjectStore {
   async listSnapshots(input: { readonly vaultId: string }): Promise<readonly SyncSnapshotHead[]> {
     this.events.push({ kind: 'list', vaultId: input.vaultId });
     await this.hooks.afterListSnapshots?.();
-    return [...this.snapshots].map(([deviceId, object]) => ({ deviceId, revision: object.revision }));
+    return [...this.snapshots].map(([deviceId, object]) => ({ deviceId, revision: object.revision,
+      ciphertextBytes: object.ciphertext.byteLength }));
   }
 
   async readSnapshot(input: { readonly vaultId: string; readonly objectId: string; readonly revision: string }): Promise<SyncObjectRead> {
@@ -51,6 +53,16 @@ export class SyncObjectServer implements SyncObjectStore {
     this.events.push({ kind: 'read-asset', objectId: input.objectId });
     const object = this.assets.get(input.objectId);
     return object ? cloneRead(object) : null;
+  }
+
+  async statAsset(input: { readonly vaultId: string; readonly objectId: string }) {
+    this.events.push({ kind: 'stat-asset', objectId: input.objectId });
+    const object = this.assets.get(input.objectId);
+    return object ? { revision: object.revision, ciphertextBytes: object.ciphertext.byteLength } : null;
+  }
+
+  async measureVaultBytes(): Promise<number> {
+    return [...this.snapshots.values(), ...this.assets.values()].reduce((total, object) => total + object.ciphertext.byteLength, 0);
   }
 
   async createAsset(input: { readonly vaultId: string; readonly objectId: string; readonly ciphertext: Uint8Array }): Promise<SyncAssetReceipt> {

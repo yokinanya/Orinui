@@ -1,7 +1,7 @@
 import { fail } from '@/domain/errors';
 import type { MediaAsset } from '@/domain/asset';
 import { materializeSyncSnapshot, maximumSyncClock, nextSyncCounter } from '@/domain/sync';
-import type { SyncSnapshotV1 } from '@/domain/sync';
+import type { SyncSnapshot } from '@/domain/sync';
 import type { Database, SettingsRow } from '@/storage/db';
 import type { SyncRecordRow, SyncStateRow } from '@/storage/sync/types';
 import type { SyncRunRecord } from '@/sync/types';
@@ -9,13 +9,13 @@ import { buildAppliedRows } from '@/storage/sync/apply-records';
 import { validateSyncPayload, type SyncApplyDependencies, type ValidatedSyncPayload } from '@/storage/sync/apply-validation';
 
 export interface ApplySyncSnapshotInput {
-  readonly snapshot: SyncSnapshotV1;
+  readonly snapshot: SyncSnapshot;
   readonly assets: readonly MediaAsset[];
   readonly expectedGeneration: number;
   readonly syncRun?: { readonly runId: string; readonly appliedAt: number };
 }
 
-function nextObservedClock(snapshot: SyncSnapshotV1, current: number): number {
+function nextObservedClock(snapshot: SyncSnapshot, current: number): number {
   const maximum = Math.max(current, maximumSyncClock(snapshot));
   nextSyncCounter(maximum);
   return maximum;
@@ -59,8 +59,8 @@ interface ReplaceRowsInput {
 }
 
 async function replaceRows({ db, payload, state, applied, syncRun }: ReplaceRowsInput): Promise<void> {
-  await db.groups.clear();
-  await db.groups.bulkPut([...applied.groups]);
+  await db.folders.clear();
+  if (applied.folders.length > 0) await db.folders.bulkPut([...applied.folders]);
   await db.shortcuts.clear();
   if (applied.shortcuts.length > 0) await db.shortcuts.bulkPut([...applied.shortcuts]);
   await db.settings.clear();
@@ -70,7 +70,7 @@ async function replaceRows({ db, payload, state, applied, syncRun }: ReplaceRows
   await db.sync_records.clear();
   if (applied.records.length > 0) await db.sync_records.bulkPut([...applied.records]);
   const lastSync = syncRun ? inputSyncRun(state.lastSync, payload.snapshot.generation, syncRun.appliedAt) : state.lastSync;
-  await db.sync_state.put({ ...state, defaultGroupId: applied.defaultGroupId,
+  await db.sync_state.put({ ...state,
     clock: nextObservedClock(payload.snapshot, state.clock), generation: payload.snapshot.generation, suspended: false,
     hasAcceptedSnapshot: true,
     ...(lastSync ? { lastSync } : {}) });
@@ -85,7 +85,7 @@ export async function applySyncSnapshot(db: Database, input: ApplySyncSnapshotIn
   dependencies: SyncApplyDependencies): Promise<void> {
   const payload = await validateSyncPayload({ snapshot: input.snapshot, assets: input.assets }, dependencies);
   const materialized = materializeSyncSnapshot(payload.snapshot);
-  await db.transaction('rw', [db.groups, db.shortcuts, db.settings, db.assets, db.sync_state, db.sync_records], async () => {
+  await db.transaction('rw', [db.folders, db.shortcuts, db.settings, db.assets, db.sync_state, db.sync_records], async () => {
     const state = await db.sync_state.get('app');
     validateApplyState(state, input);
     await db.sync_state.put({ ...state, suspended: true });
