@@ -1,7 +1,8 @@
 import { fail } from '@/domain/errors';
 import { SyncMergeConflictError } from '@/domain/sync/conflicts';
 import { parseSyncSnapshot } from '@/domain/sync/validate';
-import type { SearchEngine } from '@/domain/search-engines';
+import { BUILT_IN_ENGINES, type SearchEngine } from '@/domain/search-engines';
+import { maximumSyncClock, nextSyncCounter } from '@/domain/sync/version';
 import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
 export interface MergeSyncSnapshotsInput {
@@ -66,11 +67,28 @@ function mergeSettings(snapshots: readonly SyncSnapshot[]): SyncSettings {
       layout: choose(merged.layout, snapshot.settings.layout),
       clock: choose(merged.clock, snapshot.settings.clock),
       searchPreferences: choose(merged.searchPreferences, snapshot.settings.searchPreferences),
+      searchCustomization: choose(merged.searchCustomization, snapshot.settings.searchCustomization),
       shortcutPreferences: choose(merged.shortcutPreferences, snapshot.settings.shortcutPreferences),
       customEngines: mergeEngines([...merged.customEngines, ...snapshot.settings.customEngines]),
     };
   }
   return merged;
+}
+
+function removeDeletedEngineKeywords(input: {
+  readonly settings: SyncSettings;
+  readonly snapshots: readonly SyncSnapshot[];
+  readonly deviceId: string;
+}): SyncSettings {
+  const { settings, snapshots, deviceId } = input;
+  const liveEngineIds = new Set([...BUILT_IN_ENGINES.map(({ id }) => id), ...settings.customEngines.map(({ value }) => value.id)]);
+  const keywords = Object.fromEntries(Object.entries(settings.searchCustomization.value.engineKeywords)
+    .filter(([engineId]) => liveEngineIds.has(engineId)));
+  if (Object.keys(keywords).length === Object.keys(settings.searchCustomization.value.engineKeywords).length) return settings;
+  const observedClock = snapshots.reduce((maximum, snapshot) => Math.max(maximum, maximumSyncClock(snapshot)), 0);
+  return { ...settings, searchCustomization: { ...settings.searchCustomization,
+    value: { ...settings.searchCustomization.value, engineKeywords: keywords },
+    clock: nextSyncCounter(observedClock), deviceId } };
 }
 
 function mergeAsset(left: SyncAsset, right: SyncAsset): SyncAsset {
@@ -160,7 +178,8 @@ export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput):
   const shortcuts = mergedShortcuts;
   const settings = mergeSettings(snapshots);
   const engines = settings.customEngines.filter(({ value }) => !deleted.has(tombstoneKey('custom-engine', value.id)));
-  const liveSettings = { ...settings, customEngines: engines };
+  const liveSettings = removeDeletedEngineKeywords({ settings: { ...settings, customEngines: engines },
+    snapshots, deviceId: local.deviceId });
   assertReferencesAlive({ settings: liveSettings, shortcuts, tombstones: deleted });
   const assetReferences = referencedAssets(shortcuts, liveSettings);
   const localLatest = snapshots.find(({ deviceId }) => deviceId === local.deviceId);

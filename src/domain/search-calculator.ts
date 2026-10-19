@@ -93,7 +93,12 @@ function isImplicitExpression(source: string): boolean {
   return /[+*/%()]/.test(source) || /\d\s*-\s*[\d.]/.test(source);
 }
 
-export function calculateSearchExpression(query: string): { readonly matched: false } | { readonly matched: true; readonly value?: string; readonly error?: string } {
+export type CalculationMatch =
+  | { readonly matched: false }
+  | { readonly matched: true; readonly value: string }
+  | { readonly matched: true; readonly error: string };
+
+export function calculateSearchExpression(query: string): CalculationMatch {
   const explicit = query.trimStart().startsWith('=');
   if (!explicit && !isImplicitExpression(query)) return { matched: false };
   try {

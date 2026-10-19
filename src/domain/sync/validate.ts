@@ -6,12 +6,13 @@ import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEng
 import type { ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { createDefaultSettings, validateSettings } from '@/domain/settings';
+import { createDefaultSearchCustomization, validateSearchCustomization } from '@/domain/search-customization';
 import { normalizeEngineName, normalizeFolderName, normalizeOptionalShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
 import { parseSyncAsset } from '@/domain/sync/validate-assets';
 import { LEGACY_GROUP_SYNC_SCHEMA_VERSION, LEGACY_FOLDER_SYNC_SCHEMA_VERSION, LEGACY_LAYOUT_SYNC_SCHEMA_VERSION,
-  LEGACY_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION,
+  LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION,
   SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset, type SyncEntityType,
   type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
@@ -84,9 +85,18 @@ function parseLayout(value: unknown): SyncSettings['layout']['value'] {
   return validateLayout(raw);
 }
 
-function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion): SyncSettings {
+function parseSearchCustomization(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string): SyncSettings['searchCustomization'] {
+  if (schemaVersion === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION) {
+    return { value: createDefaultSearchCustomization(), clock: 0, deviceId };
+  }
+  return validateRegister(value, '搜索自定义设置', validateSearchCustomization);
+}
+
+function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string): SyncSettings {
   const raw = asRecord(value, '同步设置');
-  exactKeys(raw, ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'], '同步设置');
+  const keys = ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'];
+  if (schemaVersion === SYNC_SCHEMA_VERSION) keys.push('searchCustomization');
+  exactKeys(raw, keys, '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
   if (raw.customEngines.length > LIMITS.customEngines) fail('自定义搜索引擎数量超限');
   const customEngines = raw.customEngines.map((item) => validateRegister(item, '自定义搜索引擎', parseEngine))
@@ -107,15 +117,17 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
     }).search;
     return { width: search.width, autoFocus: search.autoFocus, openTarget: search.openTarget };
   });
+  const searchCustomization = parseSearchCustomization(raw.searchCustomization, schemaVersion, deviceId);
   const shortcutPreferences = validateRegister(raw.shortcutPreferences, '网站偏好', (item) => {
     const value = asRecord(item, '网站偏好');
     exactKeys(value, ['showNames', 'openTarget'], '网站偏好');
     return validateSettings({ ...createDefaultSettings(), shortcuts: value }).shortcuts;
   });
-  const settings = { appearance, defaultEngineId, layout, clock, searchPreferences, shortcutPreferences, customEngines };
+  const settings = { appearance, defaultEngineId, layout, clock, searchPreferences, searchCustomization, shortcutPreferences, customEngines };
   const rawSettings = {
     appearance: appearance.value,
-    search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine), ...searchPreferences.value },
+    search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine),
+      ...searchPreferences.value, customization: searchCustomization.value },
     shortcuts: shortcutPreferences.value, layout: layout.value, clock: clock.value,
   };
   validateSettings(rawSettings);
@@ -206,13 +218,14 @@ function validateReferences(snapshot: SyncSnapshot): void {
 function isSupportedSchemaVersion(value: unknown): value is SupportedSyncSchemaVersion {
   return value === LEGACY_SYNC_SCHEMA_VERSION || value === LEGACY_STYLE_SYNC_SCHEMA_VERSION
     || value === LEGACY_LAYOUT_SYNC_SCHEMA_VERSION || value === LEGACY_GROUP_SYNC_SCHEMA_VERSION
-    || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
+    || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION
+    || value === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
 }
 
 function validateSnapshotEnvelope(raw: RecordValue): SupportedSyncSchemaVersion {
   const schemaVersion = raw.schemaVersion;
   if (!isSupportedSchemaVersion(schemaVersion)) fail('同步快照版本不受支持');
-  if (schemaVersion !== SYNC_SCHEMA_VERSION) {
+  if (schemaVersion !== LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
     fail('旧分组同步协议不兼容当前文件夹版本；需要重新启用同步并显式重置远端库');
   }
   exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'folders', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
@@ -228,7 +241,7 @@ function parseSnapshotFields(raw: SnapshotEnvelope, schemaVersion: SupportedSync
     generation: integer(raw.generation, '快照代次'),
     folders: raw.folders.map(parseFolder).sort((left, right) => compareText(left.id, right.id)),
     shortcuts: raw.shortcuts.map(parseShortcut).sort((left, right) => compareText(left.id, right.id)),
-    settings: parseSettings(raw.settings, schemaVersion),
+    settings: parseSettings(raw.settings, schemaVersion, identifier(raw.deviceId, '设备标识')),
     assets: raw.assets.map((item) => parseSyncAsset(item, schemaVersion)).sort((left, right) => compareText(left.id, right.id)),
     tombstones: raw.tombstones.map(parseTombstone).sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id)),
   };

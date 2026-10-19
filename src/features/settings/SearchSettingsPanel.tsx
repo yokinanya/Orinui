@@ -1,5 +1,4 @@
-import { FieldGroup } from '@/components/ui/field';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SettingsSection } from '@/features/settings/SettingsSection';
@@ -7,27 +6,42 @@ import { useData } from '@/app/data-context';
 import { CustomEngineForm } from '@/features/settings/CustomEngineForm';
 import { CustomEngineList } from '@/features/settings/CustomEngineList';
 import { EngineSelection } from '@/features/settings/EngineSelection';
-import { SettingsChoiceField, type ChoiceOption } from '@/features/settings/SettingsChoiceField';
-import { SettingsSwitchField } from '@/features/settings/SettingsSwitchField';
-import type { OpenTarget } from '@/domain/settings';
+import { SearchBehaviorSettings } from '@/features/settings/SearchBehaviorSettings';
+import { SearchBoxSettings } from '@/features/settings/SearchBoxSettings';
+import { SearchResultsSettings } from '@/features/settings/SearchResultsSettings';
 import { notifyError } from '@/lib/notify';
 
-const WIDTH_OPTIONS: readonly ChoiceOption<'narrow' | 'standard' | 'wide'>[] = [
-  { value: 'narrow', label: '窄' }, { value: 'standard', label: '标准' }, { value: 'wide', label: '宽' },
-];
-const TARGET_OPTIONS: readonly ChoiceOption<OpenTarget>[] = [
-  { value: 'current-tab', label: '当前页' }, { value: 'new-tab', label: '新标签页' },
-];
-
 function EngineManagement({ onBack }: { readonly onBack: () => void }) {
-  const { settings } = useData();
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-w-0 flex-col gap-5">
       <Button autoFocus variant="ghost" className="self-start" onClick={onBack}>
         <ArrowLeft data-icon="inline-start" />返回搜索
       </Button>
-      <SettingsSection title="自定义搜索引擎"><CustomEngineForm /></SettingsSection>
-      {settings.search.customEngines.length > 0 && <SettingsSection title="已添加的引擎"><CustomEngineList /></SettingsSection>}
+      <SettingsSection title="添加自定义搜索引擎"><CustomEngineForm /></SettingsSection>
+      <SettingsSection title="搜索引擎关键词与管理" description="为内置或自定义引擎设置关键词；内置引擎名称和模板固定。">
+        <CustomEngineList />
+      </SettingsSection>
+    </div>
+  );
+}
+
+function SearchSettingsHome({ onManage, managementTrigger }: {
+  readonly onManage: () => void;
+  readonly managementTrigger: RefObject<HTMLButtonElement | null>;
+}) {
+  const { settings, setDefaultEngine } = useData();
+  return (
+    <div className="settings-columns grid min-w-0 items-start gap-4">
+      <SettingsSection title="搜索框"><SearchBoxSettings /></SettingsSection>
+      <SettingsSection title="搜索行为"><SearchBehaviorSettings /></SettingsSection>
+      <SettingsSection title="结果内容"><SearchResultsSettings /></SettingsSection>
+      <SettingsSection title="搜索引擎" description="输入时仅搜索本地网站和文件夹。">
+        <EngineSelection engines={settings.search.customEngines} selected={settings.search.defaultEngineId}
+          onSelect={(id) => void setDefaultEngine(id).catch(notifyError)} />
+        <Button ref={managementTrigger} variant="outline" className="w-full justify-between" onClick={onManage}>
+          管理自定义搜索引擎<ArrowRight data-icon="inline-end" />
+        </Button>
+      </SettingsSection>
     </div>
   );
 }
@@ -46,30 +60,6 @@ export function SearchSettingsPanel() {
     restoreFocus.current = true;
     setManagingEngines(false);
   };
-  const { settings, setDefaultEngine, updateSearchPreferences } = useData();
-  const update = (patch: Parameters<typeof updateSearchPreferences>[0]) =>
-    void updateSearchPreferences(patch).catch(notifyError);
   if (managingEngines) return <EngineManagement onBack={returnToSearch} />;
-  return (
-    <div className="settings-columns grid items-start gap-4">
-    <SettingsSection title="搜索行为">
-    <FieldGroup>
-      <SettingsChoiceField responsive label="搜索框宽度" value={settings.search.width} options={WIDTH_OPTIONS}
-        onChange={(width) => update({ width })} />
-      <SettingsSwitchField label="打开主页时聚焦搜索" checked={settings.search.autoFocus}
-        onChange={(autoFocus) => update({ autoFocus })} />
-      <SettingsChoiceField responsive label="搜索结果打开方式" value={settings.search.openTarget} options={TARGET_OPTIONS}
-        onChange={(openTarget) => update({ openTarget })} />
-    </FieldGroup>
-    </SettingsSection>
-    <SettingsSection title="搜索引擎">
-      <EngineSelection engines={settings.search.customEngines} selected={settings.search.defaultEngineId}
-        onSelect={(id) => void setDefaultEngine(id).catch(notifyError)} />
-      <Button ref={managementTrigger} variant="outline" className="justify-between" onClick={() => setManagingEngines(true)}>
-        管理自定义搜索引擎<ArrowRight data-icon="inline-end" />
-      </Button>
-      <p className="text-sm text-muted-foreground">输入时仅搜索本地网站和文件夹。</p>
-    </SettingsSection>
-    </div>
-  );
+  return <SearchSettingsHome managementTrigger={managementTrigger} onManage={() => setManagingEngines(true)} />;
 }

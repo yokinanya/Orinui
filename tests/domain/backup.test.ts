@@ -80,12 +80,23 @@ describe('ZIP media and settings validation', () => {
 });
 
 describe('ZIP folder format boundary', () => {
-  it('round-trips a folder v8 manifest', () => {
+  it('round-trips a folder v9 manifest', () => {
     const parsed = parseBackup(backup({ folders: [{ id: 'work', name: '工作', order: 0 }],
       shortcuts: [{ id: 'site', folderId: 'work', title: '文档', url: 'https://example.com/',
         icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }] }));
     expect(parsed.document.folders).toEqual([{ id: 'work', name: '工作', order: 0 }]);
     expect(parsed.document.shortcuts[0]?.folderId).toBe('work');
+  });
+
+  it('upgrades a strict folder v8 backup with defaults and preserves named assets', () => {
+    const defaults = createDefaultSettings();
+    const { customization: _customization, ...legacySearch } = defaults.search;
+    const legacy = backup({ formatVersion: 8, settings: { ...defaults, search: legacySearch },
+      assets: [metadata({ kind: 'background', name: '城市夜景' })] });
+    const parsed = parseBackup(legacy);
+    expect(parsed.document.formatVersion).toBe(BACKUP_VERSION);
+    expect(parsed.document.settings.search.customization).toEqual(defaults.search.customization);
+    expect(parsed.document.assets[0]?.name).toBe('城市夜景');
   });
 
   it.each([2, 3, 4, 5, 6, 7])('rejects old group ZIP formatVersion %s without mapping or clearing', (formatVersion) => {

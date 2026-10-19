@@ -50,7 +50,9 @@ export async function prepareSyncReplacement(db: Database, input: ReplacementDat
     settings: { ...settings, appearance: remapAppearance(settings.appearance, maps.assets),
       search: { ...settings.search,
         defaultEngineId: maps.engines.get(settings.search.defaultEngineId) ?? settings.search.defaultEngineId,
-        customEngines: settings.search.customEngines.map((engine) => ({ ...engine, id: maps.engines.get(engine.id) ?? engine.id })) } },
+        customEngines: settings.search.customEngines.map((engine) => ({ ...engine, id: maps.engines.get(engine.id) ?? engine.id })),
+        customization: { ...settings.search.customization, engineKeywords: Object.fromEntries(
+          Object.entries(settings.search.customization.engineKeywords).map(([id, keyword]) => [maps.engines.get(id) ?? id, keyword])) } } },
   };
   return { document, assets: input.assets.map((asset) => ({ ...asset, id: maps.assets.get(asset.id) ?? asset.id })) };
 }

@@ -97,7 +97,7 @@ function parseAssetName(value: unknown): string | null {
 export function parseSyncAsset(value: unknown, schemaVersion: SupportedSyncSchemaVersion = SYNC_SCHEMA_VERSION): SyncAsset {
   const raw = asRecord(value, '同步图片资源');
   const keys = ['id', 'kind', 'mime', 'width', 'height', 'byteLength', 'sha256', 'sourceUrl', 'motion'];
-  if (schemaVersion === SYNC_SCHEMA_VERSION) keys.push('name');
+  if (schemaVersion >= 10) keys.push('name');
   exactKeys(raw, keys, '同步媒体资源');
   const kind = parseKind(raw.kind);
   const mime = parseMime(raw.mime);
@@ -107,7 +107,7 @@ export function parseSyncAsset(value: unknown, schemaVersion: SupportedSyncSchem
   if (byteLength === 0) fail('媒体大小必须大于零');
   const sourceUrl = validateRegister(raw.sourceUrl, '图片来源', parseSourceUrl);
   if (motion && sourceUrl.value !== null) fail('动态媒体来源必须为空');
-  const name = schemaVersion === SYNC_SCHEMA_VERSION
+  const name = schemaVersion >= 10
     ? validateRegister(raw.name, '素材名称', parseAssetName)
     : { value: null, clock: 0, deviceId: sourceUrl.deviceId };
   return { id: identifier(raw.id, '媒体标识'), kind, mime, width, height, byteLength, sha256: parseHash(raw.sha256),

@@ -1,35 +1,61 @@
-import { calculateSearchExpression } from '@/domain/search-calculator';
-import { convertSearchDateTime, convertSearchUnit } from '@/domain/search-converters';
+import type { SearchToolContext, SearchToolResults } from '@/domain/search-tool-types';
+import type { SearchToolGroup } from '@/domain/search-customization';
+import { parseCalculationTool } from '@/domain/search-tool-calculation';
+import { parseColorTool } from '@/domain/search-tool-color';
+import { parseDateTimeTool } from '@/domain/search-tool-datetime';
+import { parseGitHubTool } from '@/domain/search-tool-github';
+import { createToolAction, toolResults } from '@/domain/search-tool-utils';
 
-export interface SearchToolAction {
-  readonly kind: 'open' | 'copy' | 'error';
+export type { SearchToolAction, SearchToolContext, SearchToolResults } from '@/domain/search-tool-types';
+export type { SearchToolGroup } from '@/domain/search-customization';
+
+interface SearchToolDefinition {
+  readonly id: string;
   readonly label: string;
-  readonly value: string;
-  readonly detail: string;
+  readonly group: SearchToolGroup;
+  readonly aliases: readonly string[];
+  readonly examples: readonly string[];
+  readonly parse: (query: string, context: SearchToolContext, enabled: readonly SearchToolGroup[]) => SearchToolResults | null;
 }
 
-function githubAction(query: string): SearchToolAction | null {
-  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)$/.exec(query.trim());
-  if (!match) return null;
-  const url = `https://github.com/${match[1]}/${match[2]}/issues/${match[3]}`;
-  return { kind: 'open', label: '打开 GitHub Issue 或 PR', value: url, detail: `${match[1]}/${match[2]} #${match[3]}` };
+export const SEARCH_TOOLS: readonly SearchToolDefinition[] = [
+  { id: 'calculation', label: '计算/单位换算', group: 'calculation', aliases: ['=', '计算', 'calculate', '单位', 'unit'],
+    examples: ['=2*(3+4)', '25 C to F'], parse: parseCalculationTool },
+  { id: 'datetime', label: '日期与时间', group: 'datetime', aliases: ['ts', 'unix', 'unixms', 'date', 'datediff', '日期', '日期差', '时间', '时间戳'],
+    examples: ['ts now', 'unix:0', '日期 2026-10-01 + 2周', '日期差 2026-10-01 2026-10-19'], parse: parseDateTimeTool },
+  { id: 'color', label: '颜色与对比度', group: 'color', aliases: ['color', 'contrast', '颜色', '对比度'],
+    examples: ['#ff7043', '颜色 hsl(210 50% 40%)', '对比度 #111 #fff'], parse: parseColorTool },
+  { id: 'github', label: 'GitHub', group: 'github', aliases: ['gh'],
+    examples: ['gh owner/repo', 'gh owner/repo#123', 'gh code owner/repo auth token', 'gh clone owner/repo'],
+    parse: parseGitHubTool },
+];
+
+function matchingTools(query: string): readonly SearchToolDefinition[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  return SEARCH_TOOLS.filter(({ aliases }) => aliases.some((alias) => alias.toLocaleLowerCase() === normalized));
 }
 
-function fromConversion(result: { readonly matched: boolean; readonly value?: string; readonly label?: string; readonly error?: string }): SearchToolAction | null {
-  if (!result.matched) return null;
-  if (result.error) return { kind: 'error', label: '无法换算', value: '', detail: result.error };
-  const value = result.value ?? '';
-  return { kind: 'copy', label: result.label ?? '复制结果', value, detail: value };
+function discoveryResults(enabledGroups: readonly SearchToolGroup[], query: string): SearchToolResults {
+  const allTools = query.trim() === '?';
+  const tools = allTools ? SEARCH_TOOLS : matchingTools(query);
+  const actions = tools.filter(({ group }) => enabledGroups.includes(group)).flatMap(({ group, id, label, examples }) =>
+    examples.map((example, index) => createToolAction({ toolId: id, group, actionId: `discover-${index + 1}`,
+      kind: 'fill', label, value: example, detail: `示例：${example}` })));
+  const explicit = allTools || query.trim() === '=' || (/^[a-z]+$/i.test(query.trim()) && tools.length > 0);
+  return toolResults(actions, explicit, explicit ? actions[0]?.id : undefined);
 }
 
-function calculatorAction(query: string): SearchToolAction | null {
-  const result = calculateSearchExpression(query);
-  if (!result.matched) return null;
-  if (result.error) return { kind: 'error', label: '算式错误', value: '', detail: result.error };
-  return { kind: 'copy', label: '复制计算结果', value: result.value ?? '', detail: result.value ?? '' };
-}
-
-export function parseSearchTool(query: string): SearchToolAction | null {
-  return githubAction(query) ?? fromConversion(convertSearchUnit(query))
-    ?? fromConversion(convertSearchDateTime(query)) ?? calculatorAction(query);
+export function getSearchToolResults(input: {
+  readonly query: string;
+  readonly context: SearchToolContext;
+  readonly enabledGroups: readonly SearchToolGroup[];
+}): SearchToolResults {
+  if (input.query.trim() === '?' || matchingTools(input.query).some(({ group }) => group !== 'github')) {
+    return discoveryResults(input.enabledGroups, input.query);
+  }
+  for (const tool of SEARCH_TOOLS) {
+    const result = tool.parse(input.query, input.context, input.enabledGroups);
+    if (result) return result;
+  }
+  return toolResults([], false);
 }

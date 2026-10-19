@@ -1,3 +1,4 @@
+import { createPreferenceCommands } from '@/app/preference-commands';
 import type { DataContextValue } from '@/app/data-context';
 import { getMediaAsset, listLibraryAssets, reorderBackgroundAsset, moveBackgroundAsset, pruneUnreferencedAssets, renameBackgroundAsset } from '@/storage/assets';
 import type { Database } from '@/storage/db';
@@ -8,10 +9,8 @@ import { readSettings, updateSettings } from '@/storage/settings';
 import * as shortcuts from '@/storage/shortcuts';
 import type { Folder } from '@/domain/folder';
 import type { AppSettings } from '@/domain/settings';
-import { DEFAULT_LAYOUT } from '@/domain/layout';
-import type { ClockFormat } from '@/domain/settings';
 import { newId } from '@/domain/id';
-import { validateEngineTemplate } from '@/domain/search-engines';
+import { resolveEngine, validateEngineTemplate } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
 import { createBackupSnapshot, replaceAllData, resetLocalData } from '@/storage/backup';
 import { serializeBackup } from '@/platform/backup-file';
@@ -91,7 +90,7 @@ function folderCommands({ db, loadFolders, loadShortcuts }: CommandDependencies)
   };
 }
 
-type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings' | 'updateSearchPreferences' | 'updateShortcutPreferences' | 'setPhotoBackground' | 'setMotionBackground' | 'clearImageSourceUrl'>;
+type AppearanceCommands = Pick<DataContextValue, 'updateAppearance' | 'setPhotoBackground' | 'setMotionBackground' | 'clearImageSourceUrl'>;
 type WallpaperCommands = Pick<DataContextValue, 'activateBackgroundAsset' | 'deleteBackgroundAsset' | 'listBackgroundAssets'
   | 'renameBackgroundAsset' | 'reorderBackgroundAsset' | 'moveBackgroundAsset'>;
 
@@ -105,29 +104,6 @@ function appearanceCommands({ db, setSettings, loadShortcuts }: CommandDependenc
         await pruneUnreferencedAssets(db);
       });
       setSettings(await readSettings(db));
-    },
-    async updateLayout(patch) {
-      setSettings(await updateSettings(db, (current) => ({
-        ...current, layout: { ...current.layout, ...patch },
-      })));
-    },
-    async resetLayout() {
-      setSettings(await updateSettings(db, (current) => ({
-        ...current, layout: { ...DEFAULT_LAYOUT, order: [...DEFAULT_LAYOUT.order], hidden: [] },
-        shortcuts: { ...current.shortcuts, showNames: true },
-      })));
-    },
-    async updateClockFormat(format: ClockFormat) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, clock: { ...current.clock, format } })));
-    },
-    async updateClockSettings(patch) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, clock: { ...current.clock, ...patch } })));
-    },
-    async updateSearchPreferences(patch) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, search: { ...current.search, ...patch } })));
-    },
-    async updateShortcutPreferences(patch) {
-      setSettings(await updateSettings(db, (current) => ({ ...current, shortcuts: { ...current.shortcuts, ...patch } })));
     },
     async setPhotoBackground(image) {
       await setPhotoBackground(db, image);
@@ -190,7 +166,11 @@ function searchCommands({ db, setSettings }: CommandDependencies): SearchCommand
       await updateSettings(db, (current) => {
         if (current.search.defaultEngineId === id) throw new Error('请先切换默认搜索引擎，再删除此项');
         if (!current.search.customEngines.some((engine) => engine.id === id)) throw new Error('自定义搜索引擎不存在');
-        return { ...current, search: { ...current.search, customEngines: current.search.customEngines.filter((engine) => engine.id !== id) } };
+        const engineKeywords = { ...current.search.customization.engineKeywords };
+        delete engineKeywords[id];
+        return { ...current, search: { ...current.search,
+          customization: { ...current.search.customization, engineKeywords },
+          customEngines: current.search.customEngines.filter((engine) => engine.id !== id) } };
       });
       setSettings(await readSettings(db));
     },
@@ -222,7 +202,7 @@ function backupCommands({ db, setSettings, loadFolders, loadShortcuts }: Command
 
 /** 绑定由数据桥注入的数据库与刷新方法，不持有全局数据库。 */
 export function createDataCommands(dependencies: CommandDependencies) {
-  return { ...shortcutCommands(dependencies), ...folderCommands(dependencies), ...appearanceCommands(dependencies),
+  return { ...createPreferenceCommands(dependencies), ...shortcutCommands(dependencies), ...folderCommands(dependencies), ...appearanceCommands(dependencies),
     ...wallpaperCommands(dependencies), ...searchCommands(dependencies), ...backupCommands(dependencies) };
 }
 

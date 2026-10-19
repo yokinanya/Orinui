@@ -163,6 +163,7 @@ test('文件夹菜单上下移动持久化，搜索建议复用同一个文件�
   await expect(page.getByRole('dialog', { name: '工作', exact: true })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(1);
   await page.keyboard.press('Escape');
+  await expect(page.getByRole('listbox', { name: '搜索结果' })).toBeHidden();
   await first.click();
   await expect(page.getByRole('dialog')).toHaveCount(1);
 });

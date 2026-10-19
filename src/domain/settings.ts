@@ -8,6 +8,7 @@ import { DEFAULT_LAYOUT, validateLayout, type LayoutConfig } from '@/domain/layo
 import { LIMITS } from '@/domain/limits';
 import { resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
+import { createDefaultSearchCustomization, validateSearchCustomization, type SearchCustomization } from '@/domain/search-customization';
 import { asRecord } from '@/domain/validate';
 
 /** 时钟格式三态：跟随系统或手动固定。 */
@@ -34,6 +35,7 @@ export interface AppSettings {
     defaultEngineId: string;
     /** 用户自定义引擎，上限见 LIMITS.customEngines */
     customEngines: SearchEngine[];
+    customization: SearchCustomization;
   } & SearchPreferences;
   shortcuts: ShortcutPreferences;
   layout: LayoutConfig;
@@ -69,7 +71,8 @@ function booleanSetting(value: unknown, label: string): boolean {
 export function createDefaultSettings(): AppSettings {
   return {
     appearance: createDefaultAppearance(),
-    search: { defaultEngineId: 'google', customEngines: [], width: 'standard', autoFocus: false, openTarget: 'current-tab' },
+    search: { defaultEngineId: 'google', customEngines: [], width: 'standard', autoFocus: false, openTarget: 'current-tab',
+      customization: createDefaultSearchCustomization() },
     shortcuts: { showNames: true, openTarget: 'current-tab' },
     layout: { ...DEFAULT_LAYOUT, order: [...DEFAULT_LAYOUT.order], hidden: [...DEFAULT_LAYOUT.hidden] },
     clock: {
@@ -155,9 +158,13 @@ export function validateSettings(value: unknown): AppSettings {
   }
 
   const searchPreferences = validateSearchPreferences(search);
+  const customization = validateSearchCustomization(search.customization);
+  for (const engineId of Object.keys(customization.engineKeywords)) {
+    if (!resolveEngine(engineId, customEngines)) fail(`搜索引擎关键词引用不存在：${engineId}`);
+  }
   return {
     appearance: validateAppearance(raw.appearance),
-    search: { defaultEngineId: search.defaultEngineId, customEngines, ...searchPreferences },
+    search: { defaultEngineId: search.defaultEngineId, customEngines, ...searchPreferences, customization },
     shortcuts: validateShortcutPreferences(raw.shortcuts),
     layout: validateLayout(raw.layout),
     clock: validateClockSettings(raw.clock),

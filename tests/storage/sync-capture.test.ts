@@ -81,8 +81,22 @@ describe('字段版本捕获：个性化设置', () => {
     if (after?.kind !== 'settings' || !afterState) throw new Error('同步设置更新缺失');
     expect(after.value.clock.value.weekdayFormat).toBe('english-short');
     expect(after.value.searchPreferences.value).toMatchObject({ width: 'wide', autoFocus: true });
+    expect(after.value.searchCustomization).toEqual(beforeRecord.value.searchCustomization);
     expect(after.value.shortcutPreferences.value.showNames).toBe(false);
     expect(afterState.generation).toBe(state.generation + 1);
+  });
+
+  it('captures search customization independently from search behavior preferences', async () => {
+    await enableSync();
+    const before = await db.sync_records.get('settings:app');
+    if (before?.kind !== 'settings') throw new Error('同步设置记录缺失');
+    await updateSettings(db, (current) => ({ ...current, search: { ...current.search,
+      customization: { ...current.search.customization, corner: 'pill', engineKeywords: { google: 'web' } } } }));
+    const after = await db.sync_records.get('settings:app');
+    if (after?.kind !== 'settings') throw new Error('同步设置记录缺失');
+    expect(after.value.searchPreferences).toEqual(before.value.searchPreferences);
+    expect(after.value.searchCustomization.clock).toBeGreaterThan(before.value.searchCustomization.clock);
+    expect(after.value.searchCustomization.value).toMatchObject({ corner: 'pill', engineKeywords: { google: 'web' } });
   });
 });
 

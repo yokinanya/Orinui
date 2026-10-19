@@ -1,10 +1,10 @@
-# 同步基础协议（快照 schema 10）
+# 同步基础协议（快照 schema 11）
 
-状态：当前 schema 10 使用一层文件夹与网站 placement，不存在默认组寄存器；本轮实施与验证进行中，未验收。旧分组格式拒绝且不清库。完整背景素材库逐文件加密，poster 在本地重建。WebDAV/R2 验收范围见 [VERIFICATION.md](./VERIFICATION.md)，实现、fixture 和构建均不等同于真实服务验收。
+状态：当前 schema 11 使用一层文件夹与网站 placement，新增独立 searchCustomization 寄存器；仅对 schema 10 提供严格校验后的显式升级，新寄存器补默认值和零逻辑时钟，既有配置不被覆盖。旧分组格式拒绝且不清库。完整背景素材库逐文件加密，poster 在本地重建。WebDAV/R2 验收范围见 [VERIFICATION.md](./VERIFICATION.md)，实现、fixture 和构建均不等同于真实服务验收。
 
 ## 版本与身份
 
-当前 Dexie schema 为 11、ZIP formatVersion 为 8、同步快照 schema 为 10。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。加密 envelope 魔数仍为 ORINUI01，AAD 的固定 `schemaVersion` 仍为 1；这些版本各自独立。旧客户端不支持 schema 10。
+当前 Dexie schema 为 12、ZIP formatVersion 为 9、同步快照 schema 为 11；显式升级 Dexie 11、ZIP 8 和同步 10，规则见 [SEARCH-DESIGN.md](./SEARCH-DESIGN.md)。旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不清理本机数据、同步身份、密钥或远端库。加密 envelope 魔数仍为 ORINUI01，AAD 的固定 `schemaVersion` 仍为 1；这些版本各自独立。旧客户端不支持 schema 11。
 
 vaultId 标识一个同步库，deviceId 标识一个 Chrome 配置文件。实体标识沿用已有稳定 ID，新实体使用 UUID。协议接受既有非空字符串标识，但拒绝首尾空白和控制字符；不能用永久删除的标识重新创建实体。
 
@@ -18,7 +18,7 @@ generation 是每设备快照代次，不跨设备比较。实际本地变更和
 |---|---|
 | 文件夹 | name、position 各自独立；不含父文件夹引用 |
 | 网站 | title、url 独立；folderId（null 表示主页）与 order 合为 placement；icon 引用为一个寄存器 |
-| 设置 | appearance、layout、clock、searchPreferences、shortcutPreferences 各为一个单元；defaultEngineId 独立；自定义引擎按 ID 保存 |
+| 设置 | appearance、layout、clock、searchPreferences、searchCustomization、shortcutPreferences 各为一个单元；defaultEngineId 独立；自定义引擎按 ID 保存 |
 | 媒体 | id、kind、MIME、尺寸、byteLength、SHA-256、动态类型与时长不可变；sourceUrl 单独版本化。所有背景素材均在库中同步，图标仍需网站引用且为静态图片 |
 
 资源来源 URL 随完整快照加密同步，包括已保存的查询参数；它也随 ZIP manifest 导出。动态媒体仅本地上传，因此 sourceUrl 必须为空。清除静态图片来源会同步清空资源及相关网站的来源字段，保留媒体 Blob 和引用。凭据、恢复密钥和 CryptoKey 不进入快照或 ZIP。
@@ -39,7 +39,7 @@ pending 图片已从当前 assets 回收时，仅在本地同步记录中暂存�
 
 文件夹删除产生永久文件夹墓碑，不级联产生网站墓碑。本地显式删除文件夹时事务化把网站移回主页；合并时，未被自身墓碑删除且仍指向已删文件夹的网站派生显示在主页，不改写 placement 寄存器、clock 或 deviceId。后续并发移入存活文件夹可按原寄存器正常决胜，不能被物化产生的伪编辑覆盖。所有实体删除墓碑永久保留，不因快照压缩、时间或设备离线而移除。
 
-自定义引擎删除使用独立墓碑。网站图标 prune 只清理本地无引用 Blob，不为图标制造永久墓碑；壁纸素材显式删除会产生 asset tombstone，并从所有设备素材库移除，远端对象 GC 仍延期。
+自定义引擎删除使用独立墓碑。若并发搜索配置仍引用被删除引擎的关键词，合并裁剪该关键词，并使用本机 deviceId 与高于所有已观察时钟的新 register clock；不能修改值却沿用旧逻辑版本。网站图标 prune 只清理本地无引用 Blob，不为图标制造永久墓碑；壁纸素材显式删除会产生 asset tombstone，并从所有设备素材库移除，远端对象 GC 仍延期。
 
 ## 首次连接与本地替换
 
@@ -49,13 +49,13 @@ planSyncJoin 是无写入的首次合并计划。新设备使用独立 deviceId 
 - 有本机数据时保留其实体，文件夹与主页网站按同一当前格式合并，不合成默认文件夹。
 - 首次合并时，本机已有字段被视为一次新设备提交，其版本高于已观察远端版本；同 ID 的图片内容冲突仍拒绝，不丢弃本机数据。
 
-ZIP 导入是用户确认的完整替换。已被该库登记过的导入 ID 会换成新 ID，并一起更新文件夹、网站、媒体和引擎引用；被替换实体通过墓碑传播，避免旧删除身份复活。没有配置同步时，备份 ID 继续原样恢复。首个 Beta 不导入开发期 JSON，也不提供旧 ZIP 转换分支。
+ZIP 导入是用户确认的完整替换。已被该库登记过的导入 ID 会换成新 ID，并一起更新文件夹、网站、媒体和引擎及关键词引用；被替换实体通过墓碑传播，避免旧删除身份复活。没有配置同步时，备份 ID 继续原样恢复。当前显式验证并升级文件夹 ZIP 8；旧分组 ZIP、Beta 1 ZIP 和开发期 JSON 继续拒绝。
 
 本地重置仍恢复空默认数据；已配置同步时，其删除进入版本记录，不生成默认组。断开本机同步只清理本机同步状态/密钥，不删除本地网站或任何外部文件。
 
 ## 接收与冲突
 
-接收先严格校验字段、schema 10（旧分组格式不迁移）、域内规则及全部引用，再验证每项媒体的 MIME、长度、SHA-256、静态图片规则或动态媒体签名和实际浏览器解码。poster 在验证通过后重建。校验在事务外完成，不静默重新编码/降质；失败时不修改本机数据。
+接收先严格校验字段、schema 10/11（10 经显式升级；旧分组格式不迁移）、域内规则及全部引用，再验证每项媒体的 MIME、长度、SHA-256、静态图片规则或动态媒体签名和实际浏览器解码。poster 在验证通过后重建。校验在事务外完成，不静默重新编码/降质；失败时不修改本机数据。
 
 最终事务检查 vaultId、deviceId 与 expectedGeneration。准备期间本机发生新修改会明确失败并保留本机数据；不能直接应用未合并的其他设备快照。
 

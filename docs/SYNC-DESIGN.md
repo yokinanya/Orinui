@@ -2,7 +2,7 @@
 
 决策日期：2026-10-11；进度更新于 2026-10-18。Beta 2 新增本地壁纸素材库、完整素材同步、S3/R2 提供方、容量预览和操作反馈；本轮一层文件夹模型与新界面实施、验证中，未验收。既有 WebDAV 实现与真实服务验收保留；Beta 2 全素材组合、Cloudflare R2 真实服务及真实用户设备验证待完成。Google Drive 适配器与 OAuth 继续延期。
 
-当前 Dexie schema 为 11、ZIP formatVersion 为 8、同步快照 schema 为 10。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。静态图片和动态媒体原件逐文件端到端加密；poster 仅为本机可重建缓存。WebDAV 与 S3 凭据分开保存在当前配置文件的 `chrome.storage.local`。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调流程见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，提供方说明见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) 和 [SYNC-S3.md](./SYNC-S3.md)。
+当前 Dexie schema 为 12、ZIP formatVersion 为 9、同步快照 schema 为 11；显式升级当前 Beta 2 的 Dexie 11、ZIP 8 和同步 10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。静态图片和动态媒体原件逐文件端到端加密；poster 仅为本机可重建缓存。WebDAV 与 S3 凭据分开保存在当前配置文件的 `chrome.storage.local`。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调流程见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，提供方说明见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) 和 [SYNC-S3.md](./SYNC-S3.md)。
 
 ## 目标与范围
 
@@ -67,7 +67,7 @@ WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；�
 
 ## 基础协议与剩余验收
 
-字段版本、耦合寄存器、逐文件加密和首次合并基础层已实施；本轮 schema 10 文件夹、永久墓碑及旧分组拒绝规则正在实施/验证，不据此宣称验收通过。当前 Dexie schema 为 11、ZIP formatVersion 为 8、同步快照 schema 为 10。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
+字段版本、耦合寄存器、逐文件加密和首次合并基础层已实施；本轮 schema 10 文件夹、永久墓碑及旧分组拒绝规则正在实施/验证，不据此宣称验收通过。当前 Dexie schema 为 12、ZIP formatVersion 为 9、同步快照 schema 为 11；显式升级当前 Beta 2 的 Dexie 11、ZIP 8 和同步 10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
 公共对象接口、提供方条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。WebDAV 默认使用强 ETag 条件发布；坚果云模板使用单独的 SHA-256 读回兼容模式，其非原子并发边界会在确认界面说明。预览只展示本地/远端数量，不冻结合并候选；用户确认时重新读取远端并重新计算计划。连接确认取得本机锁后再次校验 vault/device 身份，等待期间身份变化会丢弃旧准备数据和界面计划。所有 HTTP 重定向一律拒绝，避免把 Basic 认证转发到其他 origin。设备集合、远端媒体回收与密钥轮换尚待细化协议及 MVP 边界，之后再安排实现；Drive 授权/适配器延期。下一阶段计划见 TASKS.md。
 

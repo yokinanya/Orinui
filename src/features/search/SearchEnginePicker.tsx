@@ -14,7 +14,7 @@ function EngineIcon({ id }: { readonly id: string }) {
 
 export function SearchEnginePicker({ engineId, engines, setDefaultEngine }: {
   readonly engineId: string;
-  readonly engines: AppSettings['search']['customEngines'];
+  readonly engines: readonly AppSettings['search']['customEngines'][number][];
   readonly setDefaultEngine: (id: string) => Promise<void>;
 }) {
   const selected = resolveEngine(engineId, engines);

@@ -2,6 +2,7 @@ import type { AppearanceSettings } from '@/domain/appearance';
 import type { LayoutConfig } from '@/domain/layout';
 import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
+import type { SearchCustomization } from '@/domain/search-customization';
 import type { ShortcutIcon } from '@/domain/shortcut';
 
 export const LEGACY_SYNC_SCHEMA_VERSION = 4 as const;
@@ -9,12 +10,14 @@ export const LEGACY_STYLE_SYNC_SCHEMA_VERSION = 5 as const;
 export const LEGACY_LAYOUT_SYNC_SCHEMA_VERSION = 6 as const;
 export const LEGACY_GROUP_SYNC_SCHEMA_VERSION = 7 as const;
 export const LEGACY_FOLDER_SYNC_SCHEMA_VERSION = 8 as const;
+export const LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION = 10 as const;
 export const PREVIOUS_SYNC_SCHEMA_VERSION = 9 as const;
-export const CURRENT_SYNC_SCHEMA_VERSION = 10 as const;
+export const CURRENT_SYNC_SCHEMA_VERSION = 11 as const;
 export const SYNC_SCHEMA_VERSION = CURRENT_SYNC_SCHEMA_VERSION;
 export type SupportedSyncSchemaVersion = typeof LEGACY_SYNC_SCHEMA_VERSION | typeof LEGACY_STYLE_SYNC_SCHEMA_VERSION
   | typeof LEGACY_LAYOUT_SYNC_SCHEMA_VERSION | typeof LEGACY_GROUP_SYNC_SCHEMA_VERSION
-  | typeof LEGACY_FOLDER_SYNC_SCHEMA_VERSION | typeof PREVIOUS_SYNC_SCHEMA_VERSION | typeof CURRENT_SYNC_SCHEMA_VERSION;
+  | typeof LEGACY_FOLDER_SYNC_SCHEMA_VERSION | typeof PREVIOUS_SYNC_SCHEMA_VERSION
+  | typeof LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION | typeof CURRENT_SYNC_SCHEMA_VERSION;
 
 export interface SyncRegister<T> {
   readonly value: T;
@@ -64,6 +67,7 @@ export interface SyncSettings {
   readonly layout: SyncRegister<LayoutConfig>;
   readonly clock: SyncRegister<AppSettings['clock']>;
   readonly searchPreferences: SyncRegister<Pick<AppSettings['search'], 'width' | 'autoFocus' | 'openTarget'>>;
+  readonly searchCustomization: SyncRegister<SearchCustomization>;
   readonly shortcutPreferences: SyncRegister<AppSettings['shortcuts']>;
   readonly customEngines: readonly SyncRegister<SearchEngine>[];
 }

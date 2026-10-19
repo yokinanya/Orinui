@@ -1,9 +1,11 @@
 import { fail } from '@/domain/errors';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import { validateSettings, type AppSettings } from '@/domain/settings';
+import { createDefaultSearchCustomization } from '@/domain/search-customization';
 
-export const CURRENT_BACKUP_VERSION = 8 as const;
-export type SupportedBackupVersion = typeof CURRENT_BACKUP_VERSION;
+export const PREVIOUS_BACKUP_VERSION = 8 as const;
+export const CURRENT_BACKUP_VERSION = 9 as const;
+export type SupportedBackupVersion = typeof PREVIOUS_BACKUP_VERSION | typeof CURRENT_BACKUP_VERSION;
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(`${label}格式不正确`);
@@ -32,7 +34,9 @@ function validateAppearanceShape(value: unknown): void {
 
 function validateSearchShape(value: unknown): void {
   const search = record(value, '搜索设置');
-  exactKeys(search, ['defaultEngineId', 'customEngines', 'width', 'autoFocus', 'openTarget'], '搜索设置');
+  exactKeys(search, ['defaultEngineId', 'customEngines', 'width', 'autoFocus', 'openTarget', 'customization'], '搜索设置');
+  exactKeys(record(search.customization, '搜索自定义设置'),
+    ['corner', 'surfaceOpacity', 'placeholder', 'showSites', 'showFolders', 'enabledTools', 'engineKeywords'], '搜索自定义设置');
   if (!Array.isArray(search.customEngines)) fail('自定义搜索引擎格式不正确');
   for (const item of search.customEngines) {
     const engine = record(item, '自定义搜索引擎');
@@ -40,6 +44,17 @@ function validateSearchShape(value: unknown): void {
     if (typeof engine.id === 'string' && BUILT_IN_ENGINES.some((builtIn) => builtIn.id === engine.id)) {
       fail('自定义引擎不能使用内置标识');
     }
+  }
+}
+
+function validateLegacySearchShape(value: unknown): void {
+  const search = record(value, '搜索设置');
+  exactKeys(search, ['defaultEngineId', 'customEngines', 'width', 'autoFocus', 'openTarget'], '搜索设置');
+  if (!Array.isArray(search.customEngines)) fail('自定义搜索引擎格式不正确');
+  for (const item of search.customEngines) {
+    const engine = record(item, '自定义搜索引擎');
+    exactKeys(engine, ['id', 'name', 'template', 'builtIn'], '自定义搜索引擎');
+    if (typeof engine.id === 'string' && BUILT_IN_ENGINES.some((builtIn) => builtIn.id === engine.id)) fail('自定义引擎不能使用内置标识');
   }
 }
 
@@ -55,12 +70,19 @@ function validateClockShape(value: unknown): void {
 }
 
 export function validateBackupSettings(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): AppSettings {
-  if (formatVersion !== CURRENT_BACKUP_VERSION) fail('备份版本不兼容当前文件夹协议');
   const raw = record(value, '设置');
   exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock'], '设置');
   validateAppearanceShape(raw.appearance);
-  validateSearchShape(raw.search);
+  if (formatVersion === CURRENT_BACKUP_VERSION) validateSearchShape(raw.search);
+  else validateLegacySearchShape(raw.search);
   const layout = validateCurrentLayout(raw.layout);
   validateClockShape(raw.clock);
-  return validateSettings({ ...raw, layout });
+  const settings = formatVersion === PREVIOUS_BACKUP_VERSION
+    ? { ...raw, search: { ...(raw.search as Record<string, unknown>), ...legacySearchDefaults() }, layout }
+    : { ...raw, layout };
+  return validateSettings(settings);
+}
+
+function legacySearchDefaults(): { readonly customization: AppSettings['search']['customization'] } {
+  return { customization: createDefaultSearchCustomization() };
 }

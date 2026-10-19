@@ -1,6 +1,18 @@
 # 验证记录
 
-记录日期：2026-10-18。记录按批次区分本地功能初始复核、WebDAV compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+记录日期：2026-10-19。记录按批次区分本地功能初始复核、WebDAV compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+
+## 搜索升级与显式兼容迁移（2026-10-19）
+
+- 当前代码实现范围见 [SEARCH-DESIGN.md](./SEARCH-DESIGN.md)：四区设置、背景不透明度/圆角/提示、单次关键词、网址与中文/全拼/首拼检索、显式 gh、多动作颜色/对比度/日期时间工具。输入期间不联网，不保存查询，不读取剪贴板。
+- `pnpm compile` 通过；`timeout 60s pnpm test` 60 文件、531/531 通过（最终 3.01 秒，runner 另有 60 秒硬超时）；`pnpm build` 通过，输出 `.output/chrome-mv3`，约 1.82 MB。拼音词典为随包按需加载 chunk，约 297.50 kB；主 chunk 仍有大于 500 kB 提示，没有隐藏该警告。
+- 单元范围包括设置保存/快速工具开关、关键词保留与大小写重复、独立寄存器、Dexie 升级回滚、ZIP 8→9、同步 10→11、旧默认不覆盖真实偏好、关键词裁剪新逻辑版本/重复合并/收敛/溢出、拼音和同分稳定顺序、颜色非法值与 alpha、严格日期/闰日/DST、gh 全部命令/编码/非法参数/裸写不触发及复制失败不报成功。
+- 网页初次完整回归 138/142：发现并修复搜索打开文件夹后恢复焦点重现旧结果的问题；引擎改用菜单、键盘提示移出 listbox 后同步更新旧测试的语义定位，未删除其行为断言。搜索定向另外修正重复文本定位和异步保存后的等待；背景实际 alpha 0/1、24px 胶囊、文字透明度不变、自动模式恢复、1440/900/360 布局、IME `isComposing`/229、Esc 后不执行隐藏动作均有运行检查。
+- 最终 `pnpm exec playwright test --workers=2 --reporter=line` 为 **141/143**（约 2.5 分钟），搜索引擎/设置/工具/升级四份 spec 合计 **25/25**，搜索复用文件夹弹层的回归也通过。失败有两项：`folders.spec.ts` 的“文件夹添加、移出与删除后的内容刷新”重现此前已记录的 Esc 偶发未关闭（该项本轮单 worker 定向通过）；`ui-new-features.spec.ts` 的壁纸键盘排序持续失败。定向通过不代替整套全绿，没有重试或放宽断言掩盖失败。
+- 既有壁纸键盘排序仍失败：纠正查看按钮与拖拽按钮的歧义后，Space 能激活，ArrowLeft 未使 active 项越过目标。临时事件观测显示 keydown 到达 window/document capture，却没有到 document bubble（dnd-kit KeyboardSensor 的监听阶段）；具体拦截者未定位。已清除调试监听，保留真实排序断言，没有改壁纸生产逻辑或绕过键盘动作。
+- 真实扩展：Chrome 155.0.8059.39、隔离配置、实际 `chrome-extension://dnbanccmmmpijkgomjbjniagofabobao/newtab.html`。`node scripts/audit-search-extension.mjs` 通过：HTTPS clone/带 alpha 色值复制、工具预览、裸编号普通搜索、非法日期、Esc、外观与关键词重载、offline 后拼音检索和显式导航。输入阶段 HTTP(S) 请求为 0，page errors 为 0；GitHub 导航由拦截的网页 fixture 核对目标 URL，没有访问真实仓库或宣称远端权限已验收。
+- 真实迁移：`node scripts/audit-search-migration.mjs` 通过。原生 IndexedDB 110（Dexie 11）升级为实际读取的 120（Dexie 12）；文件夹、网站、设置、原寄存器、vault/device 身份、clock=42、generation=13 和状态标记保留。新搜索寄存器为完整默认值、clock=0、原 deviceId；不可导出 CryptoKey 可解密迁移前的密文。HTTP(S) 请求为 0。首轮审计脚本的初始化竞态已修复为等待实际 settings 行，不通过创建空库伪造成功。
+- 两个可复现脚本的报告与截图在 `.output/search-audit/`，隔离 profile 结束后删除。未访问真实 WebDAV/R2 或用户配置文件；本轮搜索的新同步配置仍以受控测试为证，不补写真实跨设备服务或用户视觉验收。本地构建不是发布授权，未创建 Release、标签或上传商店。
 
 ## S3卡片标题统一（2026-10-19）
 

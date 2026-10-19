@@ -31,6 +31,7 @@ describe('validateSettings defaults and personalization', () => {
     expect(validated.clock.weekdayFormat).toBe('english-short');
     expect(validated.layout.columns).toBe(8);
     expect(validated.search.openTarget).toBe('new-tab');
+    expect(validated.search.customization).toEqual(settings.search.customization);
   });
 
   it('拒绝不支持的布局和日期格式', () => {
@@ -74,6 +75,9 @@ describe('validateSettings custom engines', () => {
     );
   });
 
+});
+
+describe('自定义引擎引用校验', () => {
   it('拒绝不存在的默认引擎', () => {
     const settings = createDefaultSettings();
     expect(() =>
@@ -109,6 +113,14 @@ describe('validateSettings custom engines', () => {
 });
 
 describe('validateSettings invalid inputs', () => {
+  it('当前设置缺少搜索自定义字段时明确失败，默认值只由迁移补齐', () => {
+    const settings = createDefaultSettings();
+    const { customization: _customization, ...search } = settings.search;
+    expect(() => validateSettings({ ...settings, search })).toThrow(/搜索自定义设置/);
+    expect(() => validateSettings({ ...settings, search: { ...settings.search,
+      customization: { ...settings.search.customization, unknown: true } } })).toThrow(/字段不正确/);
+  });
+
   it('拒绝超过上限的自定义引擎', () => {
     const settings = createDefaultSettings();
     const engines = Array.from({ length: LIMITS.customEngines + 1 }, (_, index) =>
@@ -140,5 +152,33 @@ describe('validateSettings invalid inputs', () => {
     expect(() => validateSettings({ ...createDefaultSettings(), layout: undefined })).toThrowError(
       /布局设置/,
     );
+  });
+});
+
+describe('search customization settings', () => {
+  it('accepts customization fields and rejects conflicting or duplicate engine keywords', () => {
+    const settings = createDefaultSettings();
+    const search = { ...settings.search, customEngines: [customEngine()], customization: {
+      ...settings.search.customization, corner: 'pill', surfaceOpacity: 0, placeholder: '',
+      showSites: false, enabledTools: ['calculation'], engineKeywords: { custom: 'docs' },
+    } };
+    expect(validateSettings({ ...settings, search }).search.customization.engineKeywords).toEqual({ custom: 'docs' });
+    expect(() => validateSettings({ ...settings, search: { ...search, customization: {
+      ...search.customization, engineKeywords: { custom: 'GH' } } } })).toThrow(/冲突/);
+    expect(() => validateSettings({ ...settings, search: { ...search, customization: {
+      ...search.customization, engineKeywords: { custom: 'Docs', google: 'docs' } } } })).toThrow(/重复/);
+  });
+
+  it('rejects invalid customization opacity, line breaks, tool groups, and engine references', () => {
+    const settings = createDefaultSettings();
+    const customization = settings.search.customization;
+    expect(() => validateSettings({ ...settings, search: { ...settings.search,
+      customization: { ...customization, surfaceOpacity: 101 } } })).toThrow(/透明度/);
+    expect(() => validateSettings({ ...settings, search: { ...settings.search,
+      customization: { ...customization, placeholder: 'line\nbreak' } } })).toThrow(/单行/);
+    expect(() => validateSettings({ ...settings, search: { ...settings.search,
+      customization: { ...customization, enabledTools: ['unknown'] } } })).toThrow(/快捷工具/);
+    expect(() => validateSettings({ ...settings, search: { ...settings.search,
+      customization: { ...customization, engineKeywords: { missing: 'docs' } } } })).toThrow(/引用不存在/);
   });
 });

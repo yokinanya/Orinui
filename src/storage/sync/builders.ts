@@ -125,6 +125,7 @@ export function buildSettingsRecord(settings: AppSettings, previous: SyncRecordR
     clock: clock.register(settings.clock, old?.value.clock),
     searchPreferences: clock.register({ width: settings.search.width, autoFocus: settings.search.autoFocus,
       openTarget: settings.search.openTarget }, old?.value.searchPreferences),
+    searchCustomization: clock.register(settings.search.customization, old?.value.searchCustomization),
     shortcutPreferences: clock.register(settings.shortcuts, old?.value.shortcutPreferences),
     customEngines: [],
   };

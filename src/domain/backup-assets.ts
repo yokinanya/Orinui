@@ -148,7 +148,7 @@ function validateAssetName(value: unknown): string | null {
 
 function validateAsset(value: unknown, formatVersion: SupportedBackupVersion): BackupAsset {
   const raw = record(value, '媒体资源');
-  const hasName = formatVersion === CURRENT_BACKUP_VERSION;
+  const hasName = formatVersion >= 8;
   exactKeys(raw, hasName
     ? ['id', 'kind', 'mime', 'width', 'height', 'sourceUrl', 'name', 'motion', 'byteLength', 'sha256']
     : ['id', 'kind', 'mime', 'width', 'height', 'sourceUrl', 'motion', 'byteLength', 'sha256'], '媒体资源');

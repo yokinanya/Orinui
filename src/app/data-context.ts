@@ -11,6 +11,7 @@ import type { NewMediaAsset } from '@/storage/assets';
 import type { SearchEngine } from '@/domain/search-engines';
 import type { ClockFormat } from '@/domain/settings';
 import type { RestorableBackup } from '@/platform/backup-file';
+import type { SearchCustomizationPatch, SearchToolGroup } from '@/domain/search-customization';
 
 export type DataStatus = 'loading' | 'ready' | 'error';
 
@@ -33,6 +34,9 @@ export interface DataContextValue {
   updateClockFormat: (format: ClockFormat) => Promise<void>;
   updateClockSettings: (patch: Partial<AppSettings['clock']>) => Promise<void>;
   updateSearchPreferences: (patch: Partial<SearchPreferences>) => Promise<void>;
+  updateSearchCustomization: (patch: SearchCustomizationPatch) => Promise<void>;
+  setSearchToolEnabled: (group: SearchToolGroup, enabled: boolean) => Promise<void>;
+  setSearchEngineKeyword: (engineId: string, keyword: string) => Promise<void>;
   updateShortcutPreferences: (patch: Partial<ShortcutPreferences>) => Promise<void>;
   setDefaultEngine: (id: string) => Promise<void>;
   createSearchEngine: (input: Pick<SearchEngine, 'name' | 'template'>) => Promise<void>;

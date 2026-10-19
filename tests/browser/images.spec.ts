@@ -134,35 +134,6 @@ test('拒绝解码损坏文件与超过图标像素上限的图片', async ({ pa
   await expect(page.getByRole('img', { name: '图标预览' })).toHaveCount(0);
 });
 
-test('自定义搜索引擎可新增、设为默认并删除', async ({ page }) => {
-  await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('tab', { name: '搜索' }).click();
-  await page.getByRole('button', { name: '管理自定义搜索引擎', exact: true }).click();
-  await page.getByLabel('名称', { exact: true }).fill('Ecosia');
-  await page.getByLabel('HTTPS 搜索模板').fill('https://www.ecosia.org/search?q={query}');
-  await page.getByRole('button', { name: '添加搜索引擎' }).click();
-  await expect(page.getByRole('textbox', { name: 'Ecosia 名称', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '返回搜索', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ecosia', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Ecosia', exact: true }).click();
-  await page.getByRole('button', { name: '管理自定义搜索引擎', exact: true }).click();
-  await expect(page.getByRole('button', { name: '删除 Ecosia' })).toBeDisabled();
-  await page.reload();
-  await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('tab', { name: '搜索' }).click();
-  await expect(page.getByRole('button', { name: 'Ecosia', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Google', exact: true }).click();
-  await page.getByRole('button', { name: '管理自定义搜索引擎', exact: true }).click();
-  await page.getByRole('button', { name: '删除 Ecosia' }).click();
-  await expect(page.getByRole('textbox', { name: 'Ecosia 名称', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: '返回搜索', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Ecosia', exact: true })).toHaveCount(0);
-});
-
 test('主页全部隐藏后可从主页一键恢复', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();

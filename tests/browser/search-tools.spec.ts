@@ -16,7 +16,7 @@ test('搜索框提供本地计算、换算、GitHub 编号和引擎搜索', asyn
   await expect(page.getByRole('listbox').getByRole('option').first()).toContainText('2026-10-16 01:00:00 UTC');
 
   await page.context().route('https://github.com/**', (route) => route.fulfill({ status: 200, body: 'ok' }));
-  await search.fill('owner/repo#123');
+  await search.fill('gh owner/repo#123');
   await expect(page.getByRole('listbox').getByRole('option').first()).toContainText('打开 GitHub Issue 或 PR');
   await search.press('Enter');
   await expect(page).toHaveURL('https://github.com/owner/repo/issues/123');
