@@ -2,7 +2,7 @@
 
 决策日期：2026-10-11；进度更新于 2026-10-18。Beta 2 新增本地壁纸素材库、完整素材同步、S3/R2 提供方、容量预览和操作反馈；本轮一层文件夹模型与新界面实施、验证中，未验收。既有 WebDAV 实现与真实服务验收保留；Beta 2 全素材组合、Cloudflare R2 真实服务及真实用户设备验证待完成。Google Drive 适配器与 OAuth 继续延期。
 
-当前 Dexie schema 为 12、ZIP formatVersion 为 9、同步快照 schema 为 11；显式升级当前 Beta 2 的 Dexie 11、ZIP 8 和同步 10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。静态图片和动态媒体原件逐文件端到端加密；poster 仅为本机可重建缓存。WebDAV 与 S3 凭据分开保存在当前配置文件的 `chrome.storage.local`。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调流程见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，提供方说明见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) 和 [SYNC-S3.md](./SYNC-S3.md)。
+当前 Dexie schema 为 13、ZIP formatVersion 为 10、同步快照 schema 为 12；显式升级上一版 Dexie 12、ZIP 9、同步 11，以及 Beta 2 的 Dexie 11、ZIP 8、同步 10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。静态图片和动态媒体原件逐文件端到端加密；poster 仅为本机可重建缓存。WebDAV 与 S3 凭据分开保存在当前配置文件的 `chrome.storage.local`。基础协议见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)，协调流程见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，提供方说明见 [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) 和 [SYNC-S3.md](./SYNC-S3.md)。
 
 ## 目标与范围
 
@@ -56,7 +56,7 @@ Settings 按设置分区/自定义引擎 ID 版本化。文件夹位置与网站
 
 恢复密钥遗失且所有已解锁设备都不可用时，云端内容无法恢复；现存设备上的本地数据与用户导出的 ZIP 备份仍可用。ZIP 默认不加密且不包含恢复密钥。恢复密钥遗失但仍有可解锁设备时，可从该设备重新生成恢复密钥并重新加密 vault。加密保护提供方一侧的数据，不防护已解锁设备、恶意扩展代码或本机恶意软件。
 
-WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；描述明文只含 schemaVersion 与 vaultId，按 `kind=snapshot`、`objectId=vaultId` 加密。设备快照使用 schema 10；旧 schema 1–9 明确拒绝，不迁移分组数据或触发数据/身份删除。对象路径为 `vaults/<vaultId>/devices/<deviceId>/snapshot.enc` 和 `vaults/<vaultId>/assets/<assetId>.enc`。WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配置文件中；它不随设备快照或 ZIP 备份同步。连接 WebDAV 必须使用 HTTPS。
+WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；描述明文只含 schemaVersion 与 vaultId，按 `kind=snapshot`、`objectId=vaultId` 加密。新设备快照使用 schema 12；schema 10/11 经严格验证后显式升级，旧 schema 1–9 明确拒绝，不迁移分组数据或触发数据/身份删除。对象路径为 `vaults/<vaultId>/devices/<deviceId>/snapshot.enc` 和 `vaults/<vaultId>/assets/<assetId>.enc`。WebDAV 密码或应用密码只保存在使用该提供方的本机 Chrome 配置文件中；它不随设备快照或 ZIP 备份同步。连接 WebDAV 必须使用 HTTPS。
 
 ## 同步与失败行为
 
@@ -67,7 +67,7 @@ WebDAV 的 `vault.json` 外壳公开 schemaVersion、vaultId 和描述密文；�
 
 ## 基础协议与剩余验收
 
-字段版本、耦合寄存器、逐文件加密和首次合并基础层已实施；本轮 schema 10 文件夹、永久墓碑及旧分组拒绝规则正在实施/验证，不据此宣称验收通过。当前 Dexie schema 为 12、ZIP formatVersion 为 9、同步快照 schema 为 11；显式升级当前 Beta 2 的 Dexie 11、ZIP 8 和同步 10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
+字段版本、耦合寄存器、逐文件加密、文件夹和永久墓碑规则已实现。当前 Dexie schema 为 13、ZIP formatVersion 为 10、同步快照 schema 为 12；显式升级 Dexie 12/11、ZIP 9/8 和同步 11/10，保留领域数据、逻辑版本、身份和密钥。仅接受当前文件夹格式；旧分组本地库、ZIP v1–7、同步 schema 1–9 与开发期 JSON 明确拒绝，不自动转换或清理本机数据、同步身份、密钥及远端库。用户可主动卸载重装旧分组版本，这不是自动清库授权。详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 
 公共对象接口、提供方条件发布契约、同配置文件串行、显式发布状态及下一次手动恢复已实现。WebDAV 默认使用强 ETag 条件发布；坚果云模板使用单独的 SHA-256 读回兼容模式，其非原子并发边界会在确认界面说明。预览只展示本地/远端数量，不冻结合并候选；用户确认时重新读取远端并重新计算计划。连接确认取得本机锁后再次校验 vault/device 身份，等待期间身份变化会丢弃旧准备数据和界面计划。所有 HTTP 重定向一律拒绝，避免把 Basic 认证转发到其他 origin。设备集合、远端媒体回收与密钥轮换尚待细化协议及 MVP 边界，之后再安排实现；Drive 授权/适配器延期。下一阶段计划见 TASKS.md。
 

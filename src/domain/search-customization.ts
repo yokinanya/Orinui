@@ -1,5 +1,8 @@
 import { fail } from '@/domain/errors';
 import { asRecord } from '@/domain/validate';
+import { BUILT_IN_ENGINES, validateEngineTemplate } from '@/domain/search-engines';
+import type { BuiltInEngineOverrides } from '@/domain/search-engines';
+import { normalizeEngineName } from '@/domain/text';
 
 export type SearchToolGroup = 'calculation' | 'datetime' | 'color' | 'github';
 export interface SearchCustomization {
@@ -10,14 +13,16 @@ export interface SearchCustomization {
   readonly showFolders: boolean;
   readonly enabledTools: readonly SearchToolGroup[];
   readonly engineKeywords: Readonly<Record<string, string>>;
+  readonly engineOverrides: BuiltInEngineOverrides;
 }
-export type SearchCustomizationPatch = Partial<Omit<SearchCustomization, 'engineKeywords'>>;
+export type SearchCustomizationPatch = Partial<Omit<SearchCustomization, 'engineKeywords' | 'engineOverrides'>>;
 
 const DEFAULT_PLACEHOLDER = '搜索、查找网站或计算';
 const DEFAULT_TOOLS: readonly SearchToolGroup[] = ['calculation', 'datetime', 'color', 'github'];
 const CORNERS = ['small', 'standard', 'pill'] as const;
 const TOOL_GROUPS = ['calculation', 'datetime', 'color', 'github'] as const;
-const CUSTOMIZATION_FIELDS = ['corner', 'surfaceOpacity', 'placeholder', 'showSites', 'showFolders', 'enabledTools', 'engineKeywords'] as const;
+const LEGACY_CUSTOMIZATION_FIELDS = ['corner', 'surfaceOpacity', 'placeholder', 'showSites', 'showFolders', 'enabledTools', 'engineKeywords'] as const;
+const CUSTOMIZATION_FIELDS = [...LEGACY_CUSTOMIZATION_FIELDS, 'engineOverrides'] as const;
 const MAX_OPACITY_PERCENT = 100;
 const RESERVED_KEYWORDS = new Set([
   'gh', 'ts', 'unix', 'unixms', 'date', 'datediff', 'contrast', 'color', 'time', 'timestamp', 'calculate', 'unit', '?', '=',
@@ -26,7 +31,7 @@ const RESERVED_KEYWORDS = new Set([
 
 export function createDefaultSearchCustomization(): SearchCustomization {
   return { corner: 'standard', surfaceOpacity: null, placeholder: DEFAULT_PLACEHOLDER,
-    showSites: true, showFolders: true, enabledTools: [...DEFAULT_TOOLS], engineKeywords: {} };
+    showSites: true, showFolders: true, enabledTools: [...DEFAULT_TOOLS], engineKeywords: {}, engineOverrides: {} };
 }
 
 function parseBoolean(value: unknown, label: string): boolean {
@@ -70,6 +75,33 @@ function parseEngineKeywords(value: unknown): Readonly<Record<string, string>> {
   return Object.fromEntries(entries);
 }
 
+function parseEngineOverrides(value: unknown): BuiltInEngineOverrides {
+  const raw = asRecord(value, '内置搜索引擎设置');
+  const overrides = Object.entries(raw).map(([id, item]) => {
+    const engine = BUILT_IN_ENGINES.find((candidate) => candidate.id === id);
+    if (!engine) fail(`未知的内置搜索引擎：${id}`);
+    const fields = asRecord(item, '内置搜索引擎设置');
+    if (Object.keys(fields).length !== 2 || !Object.hasOwn(fields, 'name') || !Object.hasOwn(fields, 'template')) {
+      fail('内置搜索引擎设置字段不正确');
+    }
+    if (typeof fields.name !== 'string' || typeof fields.template !== 'string') fail('内置搜索引擎设置字段不正确');
+    const name = normalizeEngineName(fields.name);
+    const template = validateEngineTemplate(fields.template);
+    if (name !== fields.name || template !== fields.template) fail('内置搜索引擎设置必须是已保存的规范格式');
+    return [id, { name, template }] as const;
+  });
+  return Object.fromEntries(overrides);
+}
+
+export function upgradeLegacySearchCustomization(value: unknown): SearchCustomization {
+  const raw = asRecord(value, '搜索自定义设置');
+  if (Object.keys(raw).length !== LEGACY_CUSTOMIZATION_FIELDS.length ||
+    LEGACY_CUSTOMIZATION_FIELDS.some((field) => !Object.hasOwn(raw, field))) {
+    fail('旧搜索自定义设置字段不正确');
+  }
+  return validateSearchCustomization({ ...raw, engineOverrides: {} });
+}
+
 export function validateSearchCustomization(value: unknown): SearchCustomization {
   const raw = asRecord(value, '搜索自定义设置');
   if (Object.keys(raw).length !== CUSTOMIZATION_FIELDS.length || CUSTOMIZATION_FIELDS.some((field) => !Object.hasOwn(raw, field))) {
@@ -79,5 +111,5 @@ export function validateSearchCustomization(value: unknown): SearchCustomization
   return { corner: raw.corner as SearchCustomization['corner'], surfaceOpacity: parseOpacity(raw.surfaceOpacity),
     placeholder: parsePlaceholder(raw.placeholder), showSites: parseBoolean(raw.showSites, '显示网站结果'),
     showFolders: parseBoolean(raw.showFolders, '显示文件夹结果'), enabledTools: parseTools(raw.enabledTools),
-    engineKeywords: parseEngineKeywords(raw.engineKeywords) };
+    engineKeywords: parseEngineKeywords(raw.engineKeywords), engineOverrides: parseEngineOverrides(raw.engineOverrides) };
 }

@@ -6,13 +6,14 @@ import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEng
 import type { ShortcutIcon } from '@/domain/shortcut';
 import { parseShortcutIcon } from '@/domain/shortcut-icon';
 import { createDefaultSettings, validateSettings } from '@/domain/settings';
-import { createDefaultSearchCustomization, validateSearchCustomization } from '@/domain/search-customization';
+import { createDefaultSearchCustomization, upgradeLegacySearchCustomization, validateSearchCustomization } from '@/domain/search-customization';
 import { normalizeEngineName, normalizeFolderName, normalizeOptionalShortcutTitle } from '@/domain/text';
 import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
 import { parseSyncAsset } from '@/domain/sync/validate-assets';
 import { LEGACY_GROUP_SYNC_SCHEMA_VERSION, LEGACY_FOLDER_SYNC_SCHEMA_VERSION, LEGACY_LAYOUT_SYNC_SCHEMA_VERSION,
   LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION,
+  LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
   SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset, type SyncEntityType,
   type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
@@ -89,13 +90,16 @@ function parseSearchCustomization(value: unknown, schemaVersion: SupportedSyncSc
   if (schemaVersion === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION) {
     return { value: createDefaultSearchCustomization(), clock: 0, deviceId };
   }
+  if (schemaVersion === LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION) {
+    return validateRegister(value, '搜索自定义设置', upgradeLegacySearchCustomization);
+  }
   return validateRegister(value, '搜索自定义设置', validateSearchCustomization);
 }
 
 function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string): SyncSettings {
   const raw = asRecord(value, '同步设置');
   const keys = ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'];
-  if (schemaVersion === SYNC_SCHEMA_VERSION) keys.push('searchCustomization');
+  if (schemaVersion >= LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION) keys.push('searchCustomization');
   exactKeys(raw, keys, '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
   if (raw.customEngines.length > LIMITS.customEngines) fail('自定义搜索引擎数量超限');
@@ -201,7 +205,8 @@ function validateAssetSet(snapshot: SyncSnapshot, refs: ReadonlySet<string>): vo
 
 function validateSettingsReferences(snapshot: SyncSnapshot): void {
   const custom = snapshot.settings.customEngines.map(({ value }) => value);
-  if (!resolveEngine(snapshot.settings.defaultEngineId.value, custom)) fail('默认搜索引擎引用不存在');
+  if (!resolveEngine(snapshot.settings.defaultEngineId.value, custom,
+    snapshot.settings.searchCustomization.value.engineOverrides)) fail('默认搜索引擎引用不存在');
 }
 
 function validateReferences(snapshot: SyncSnapshot): void {
@@ -219,13 +224,15 @@ function isSupportedSchemaVersion(value: unknown): value is SupportedSyncSchemaV
   return value === LEGACY_SYNC_SCHEMA_VERSION || value === LEGACY_STYLE_SYNC_SCHEMA_VERSION
     || value === LEGACY_LAYOUT_SYNC_SCHEMA_VERSION || value === LEGACY_GROUP_SYNC_SCHEMA_VERSION
     || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION
-    || value === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
+    || value === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION || value === LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION
+    || value === SYNC_SCHEMA_VERSION;
 }
 
 function validateSnapshotEnvelope(raw: RecordValue): SupportedSyncSchemaVersion {
   const schemaVersion = raw.schemaVersion;
   if (!isSupportedSchemaVersion(schemaVersion)) fail('同步快照版本不受支持');
-  if (schemaVersion !== LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
+  if (schemaVersion !== LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION &&
+    schemaVersion !== LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
     fail('旧分组同步协议不兼容当前文件夹版本；需要重新启用同步并显式重置远端库');
   }
   exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'folders', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');

@@ -28,7 +28,9 @@ export function createSearchPreferenceCommands(input: { readonly db: Database;
     },
     async setSearchEngineKeyword(engineId, keyword) {
       setSettings(await updateSettings(db, (current) => {
-        if (!resolveEngine(engineId, current.search.customEngines)) throw new Error('搜索引擎不存在');
+        if (!resolveEngine(engineId, current.search.customEngines, current.search.customization.engineOverrides)) {
+          throw new Error('搜索引擎不存在');
+        }
         const entries = Object.entries(current.search.customization.engineKeywords).filter(([id]) => id !== engineId);
         const engineKeywords = Object.fromEntries(keyword.trim() ? [...entries, [engineId, keyword.trim()]] : entries);
         return { ...current, search: { ...current.search, customization: { ...current.search.customization, engineKeywords } } };

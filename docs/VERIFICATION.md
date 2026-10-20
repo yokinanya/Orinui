@@ -1,6 +1,26 @@
 # 验证记录
 
-记录日期：2026-10-19。记录按批次区分本地功能初始复核、WebDAV compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+记录日期：2026-10-20。记录按批次区分本地功能初始复核、WebDAV compile/test/build 检查、普通网页回归与真实扩展受控审计。进度见 [TASKS.md](./TASKS.md)。
+
+## 设置独立列排列与搜索引擎列表管理（2026-10-20）
+
+- 引擎管理改为可展开列表，概览显示预置/自定义、默认项及快捷词；快捷词更名为更清楚的“快捷词”，并用 `g React` 示例说明它只为本次查询临时选择引擎。
+- `pnpm compile` 通过；`timeout 60s pnpm test` 通过，60 个文件、536/536；`pnpm build` 通过，更新 `.output/chrome-mv3`，仍有大于 500 kB 的 chunk 提示。
+- 搜索设置、引擎、命令、列宽和设置入口普通网页回归 `pnpm exec playwright test tests/browser/settings-columns.spec.ts tests/browser/search-settings.spec.ts tests/browser/search-engines.spec.ts tests/browser/search-upgrade.spec.ts tests/browser/settings-design.spec.ts --workers=1 --reporter=line`：28/28 通过。覆盖列表展开/收起、快捷词用途与冲突、预置编辑/恢复、自定义增删、持久化及查询路由。
+- 以上浏览器回归运行在构建后的普通网页预览；本批没有在真实 Chrome 扩展环境单独验收引擎管理 UI。
+
+- 布局、外观、搜索、数据四页均由共享网格行改为每列独立纵向堆叠。1440px 时为双列，900px 时单列；每页卡片无横向溢出，桌面同列卡片间距为 16px。
+- 预置引擎可编辑名称与 HTTPS 模板，保存后参与菜单显示和查询 URL 编码；恢复预置只清除引擎覆盖，关键词继续保留。管理页同时覆盖自定义引擎编辑、关键词持久化和原删除约束。
+- `pnpm compile` 通过；`timeout 60s pnpm test` 通过，60 个文件、536/536；`pnpm build` 通过，更新 `.output/chrome-mv3`，仍有大于 500 kB 的 chunk 提示。
+- `pnpm exec playwright test tests/browser/settings-columns.spec.ts tests/browser/search-settings.spec.ts tests/browser/search-engines.spec.ts tests/browser/search-upgrade.spec.ts tests/browser/settings-design.spec.ts --workers=1 --reporter=line`：27/27 通过，运行于构建后普通网页预览。
+- `node scripts/audit-search-migration.mjs` 在 Chrome 155 真实扩展环境通过：实际数据库 110→130，设置/文件夹/网站、原寄存器和同步身份、clock/generation、不可导出密钥均保留；新搜索寄存器使用 clock=0，HTTP(S) 请求为 0。该审计只覆盖迁移，不代表预置引擎 UI 已在真实扩展中验收。
+
+## 搜索设置卡片纵向独立排列（2026-10-20，首次验证）
+
+- 搜索设置双列改为左列搜索框/结果、右列行为/引擎各自堆叠；不再用共享网格行高对齐卡片。窄内容区仍按现有规则单列。
+- `pnpm compile` 通过；`timeout 60s pnpm test` 通过，60 文件、531/531；`pnpm build` 通过并更新 `.output/chrome-mv3`，仍有既有大 chunk 提示。
+- `pnpm exec playwright test tests/browser/search-settings.spec.ts --workers=1 --reporter=line` 6/6 通过。新增几何断言确认 1440px 桌面视口两列各自保持 16px 卡片间距；900px 与 360px 回到单列，三种宽度都无横向溢出。属于普通网页浏览器回归，不是 Chrome 扩展环境验收。
+- 本次只调整卡片排布，不改控件、偏好数据或交互。
 
 ## 搜索升级与显式兼容迁移（2026-10-19）
 

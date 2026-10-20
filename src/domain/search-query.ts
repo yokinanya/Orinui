@@ -34,7 +34,8 @@ export function resolveSearchQuery(input: { readonly query: string; readonly set
   const [prefix = ''] = text.split(/\s+/u);
   const keywordId = Object.entries(input.settings.customization.engineKeywords)
     .find(([, keyword]) => keyword.toLocaleLowerCase() === prefix.toLocaleLowerCase())?.[0];
-  const engine = resolveEngine(keywordId ?? input.settings.defaultEngineId, input.settings.customEngines);
+  const engine = resolveEngine(keywordId ?? input.settings.defaultEngineId, input.settings.customEngines,
+    input.settings.customization.engineOverrides);
   if (!engine) throw new Error('搜索引擎不存在');
   const query = keywordId ? text.slice(prefix.length).trim() : text;
   const base = { query, engineName: engine.name, searchUrl: buildSearchUrl(engine, query), keyword: keywordId !== undefined };

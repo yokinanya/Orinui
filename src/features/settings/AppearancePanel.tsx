@@ -49,14 +49,16 @@ function AppearanceHome({ trigger, onOpen }: {
   readonly onOpen: () => void;
 }) {
   return (
-    <div className="settings-columns settings-appearance-columns grid items-start gap-4">
-      <SettingsSection title="主题模式"><ThemePanel /></SettingsSection>
-      <SettingsSection title="背景">
-        <Button ref={trigger} variant="outline" className="w-full justify-between" onClick={onOpen}>
-          <span className="flex items-center gap-2"><Images data-icon="inline-start" />壁纸与背景</span>
-          <ArrowRight data-icon="inline-end" />
-        </Button>
-      </SettingsSection>
+    <div className="settings-columns grid items-start gap-4">
+      <div className="flex min-w-0 flex-col gap-4">
+        <SettingsSection title="主题模式"><ThemePanel /></SettingsSection>
+        <SettingsSection title="背景">
+          <Button ref={trigger} variant="outline" className="w-full justify-between" onClick={onOpen}>
+            <span className="flex items-center gap-2"><Images data-icon="inline-start" />壁纸与背景</span>
+            <ArrowRight data-icon="inline-end" />
+          </Button>
+        </SettingsSection>
+      </div>
       <SettingsSection title="界面配色"><DynamicColorPanel /></SettingsSection>
     </div>
   );

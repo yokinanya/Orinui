@@ -2,7 +2,7 @@
 
 本文件说明 S3 提供方边界。Cloudflare R2 是首个真实服务验收目标；允许输入自定义 HTTPS endpoint，但没有通过实际服务验收的存储服务不声明兼容。自动测试与连接配置正确不等同于真实 R2 双配置文件验收。
 
-当前协议为 Dexie 11 / ZIP v8 / sync schema 10；旧分组格式拒绝，不自动迁移、清库或重建同步身份。永久墓碑与已删文件夹网站派生回主页的规则与 WebDAV 共用，详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。2026-10-18 本轮文件夹与界面仍在实施/验证，未获验收。
+当前协议为 Dexie 13 / ZIP v10 / sync schema 12；显式升级上一版 Dexie 12 / ZIP v9 / sync schema 11 和 Beta 2 的 Dexie 11 / ZIP v8 / sync schema 10。旧分组格式拒绝，不自动迁移、清库或重建同步身份。永久墓碑与已删文件夹网站派生回主页的规则与 WebDAV 共用，详见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。2026-10-18 本轮文件夹与界面尚未验收的历史记录保留在 [VERIFICATION.md](./VERIFICATION.md)。
 
 ## 连接与对象命名
 

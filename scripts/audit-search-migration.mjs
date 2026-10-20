@@ -133,7 +133,7 @@ async function waitForMigration(page) {
       request.onsuccess = () => {
         const version = request.result.version;
         request.result.close();
-        resolve(version === 120);
+        resolve(version === 130);
       };
       request.onerror = () => reject(request.error);
     });
@@ -176,7 +176,7 @@ async function readMigratedData(page, proof) {
 
 function assertMigratedData(input) {
   const { migrated, currentSettings, proof, externalRequests } = input;
-  assert.equal(migrated.version, 120);
+  assert.equal(migrated.version, 130);
   assert.deepEqual(migrated.state, { id: 'app', vaultId: proof.vaultId, deviceId: proof.deviceId,
     clock: 42, generation: 13, suspended: false, hasAcceptedSnapshot: true });
   assert.deepEqual(migrated.settings.search.customization, currentSettings.search.customization);

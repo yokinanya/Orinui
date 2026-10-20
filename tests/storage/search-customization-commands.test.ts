@@ -39,3 +39,16 @@ it('updates search customization and manages per-engine keywords transactionally
   expect(settings.search.customEngines).toEqual([]);
   expect(beforeDelete.search.customization.engineKeywords).toEqual({ google: 'web' });
 });
+
+it('edits and resets preinstalled engine names and templates', async () => {
+  await commands.updateSearchEngine('google', { name: 'Google 中文', template: 'https://search.example/?q={query}' });
+  expect((await readSettings(db)).search.customization.engineOverrides.google).toEqual({
+    name: 'Google 中文', template: 'https://search.example/?q={query}',
+  });
+  await commands.updateSearchEngine('google', {
+    name: 'Google', template: 'https://www.google.com/search?q={query}',
+  });
+  expect((await readSettings(db)).search.customization.engineOverrides).toEqual({});
+  await commands.setDefaultEngine('bing');
+  await expect(commands.deleteSearchEngine('google')).rejects.toThrow(/自定义搜索引擎不存在/);
+});

@@ -1,7 +1,7 @@
 /**
  * 搜索引擎。
  *
- * 数据契约 §2.4：内置引擎只能选择，不能编辑或删除；默认指向 Google。
+ * 数据契约 §2.4：内置引擎可编辑显示名称与 HTTPS 模板，但不能删除；默认指向 Google。
  * 模板用于拼接查询地址，`{query}` 提交前会被 URL 编码。
  * 用户自定义引擎（HTTPS、仅一个位于查询参数值中的 `{query}`）随外观与搜索设置接入。
  */
@@ -16,6 +16,8 @@ export interface SearchEngine {
   template: string;
   builtIn: boolean;
 }
+
+export type BuiltInEngineOverrides = Readonly<Record<string, Pick<SearchEngine, 'name' | 'template'>>>;
 
 export const DEFAULT_ENGINE_ID = 'google';
 
@@ -106,7 +108,16 @@ export function validateEngineTemplate(template: string): string {
 export function resolveEngine(
   id: string,
   customEngines: readonly SearchEngine[] = [],
+  overrides: BuiltInEngineOverrides = {},
 ): SearchEngine | undefined {
-  return [...BUILT_IN_ENGINES, ...customEngines].find((engine) => engine.id === id);
+  return resolveEngines(customEngines, overrides).find((engine) => engine.id === id);
+}
+
+export function resolveEngines(
+  customEngines: readonly SearchEngine[] = [],
+  overrides: BuiltInEngineOverrides = {},
+): SearchEngine[] {
+  const builtIns = BUILT_IN_ENGINES.map((engine) => ({ ...engine, ...overrides[engine.id] }));
+  return [...builtIns, ...customEngines];
 }
 

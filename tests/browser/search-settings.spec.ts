@@ -7,7 +7,12 @@ async function openSearchSettings(page: import('@playwright/test').Page) {
 }
 
 async function openEngineManagement(page: import('@playwright/test').Page) {
-  await page.getByRole('button', { name: '管理自定义搜索引擎' }).click();
+  await page.getByRole('button', { name: '管理搜索引擎' }).click();
+}
+
+async function expandEngine(page: import('@playwright/test').Page, name: string) {
+  await page.getByRole('button', { name: `${name} 搜索引擎设置`, exact: true }).click();
+  return page.getByRole('region', { name: `${name} 搜索设置`, exact: true });
 }
 
 test('搜索设置按四个分区呈现并在重载后保留', async ({ page }) => {
@@ -111,18 +116,18 @@ test('搜索框背景不透明度独立于文字透明度并支持自动恢复',
 test('引擎关键词拒绝快捷语法冲突和重复值', async ({ page }) => {
   await openSearchSettings(page);
   await openEngineManagement(page);
-  const google = page.getByRole('region', { name: 'Google 搜索设置' });
-  const bing = page.getByRole('region', { name: 'Bing 搜索设置' });
+  const google = await expandEngine(page, 'Google');
 
-  await google.getByRole('textbox', { name: 'Google 搜索关键词' }).fill('gh');
-  await google.getByRole('button', { name: '保存关键词' }).click();
+  await google.getByRole('textbox', { name: 'Google 快捷词' }).fill('gh');
+  await google.getByRole('button', { name: '保存快捷词' }).click();
   await expect(google.getByRole('alert')).toContainText('快捷工具语法冲突');
 
-  await google.getByRole('textbox', { name: 'Google 搜索关键词' }).fill('g');
-  await google.getByRole('button', { name: '保存关键词' }).click();
+  await google.getByRole('textbox', { name: 'Google 快捷词' }).fill('g');
+  await google.getByRole('button', { name: '保存快捷词' }).click();
   await expect(google.getByRole('status')).toHaveText('已保存');
-  await bing.getByRole('textbox', { name: 'Bing 搜索关键词' }).fill('g');
-  await bing.getByRole('button', { name: '保存关键词' }).click();
+  const bing = await expandEngine(page, 'Bing');
+  await bing.getByRole('textbox', { name: 'Bing 快捷词' }).fill('g');
+  await bing.getByRole('button', { name: '保存快捷词' }).click();
   await expect(bing.getByRole('alert')).toContainText('不能重复');
 });
 
@@ -138,6 +143,15 @@ for (const width of [1440, 900, 360]) {
     }));
     expect(dimensions.columns).toBe(width === 1440 ? 2 : 1);
     expect(dimensions.overflow).toBe(false);
+    if (width === 1440) {
+      const searchBox = await panel.getByRole('region', { name: '搜索框' }).boundingBox();
+      const results = await panel.getByRole('region', { name: '结果内容' }).boundingBox();
+      const behavior = await panel.getByRole('region', { name: '搜索行为' }).boundingBox();
+      const engines = await panel.getByRole('region', { name: '搜索引擎' }).boundingBox();
+      if (!searchBox || !results || !behavior || !engines) throw new Error('搜索设置卡片未生成布局边界');
+      expect(Math.abs(results.y - searchBox.y - searchBox.height - 16)).toBeLessThan(1);
+      expect(Math.abs(engines.y - behavior.y - behavior.height - 16)).toBeLessThan(1);
+    }
     await openEngineManagement(page);
     const sections = panel.locator('.settings-section');
     const overflows = await sections.evaluateAll((elements) =>

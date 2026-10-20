@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { SettingsSection } from '@/features/settings/SettingsSection';
 import { useData } from '@/app/data-context';
 import { CustomEngineForm } from '@/features/settings/CustomEngineForm';
@@ -12,13 +13,23 @@ import { SearchResultsSettings } from '@/features/settings/SearchResultsSettings
 import { notifyError } from '@/lib/notify';
 
 function EngineManagement({ onBack }: { readonly onBack: () => void }) {
+  const [addingEngine, setAddingEngine] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-5">
       <Button autoFocus variant="ghost" className="self-start" onClick={onBack}>
         <ArrowLeft data-icon="inline-start" />返回搜索
       </Button>
-      <SettingsSection title="添加自定义搜索引擎"><CustomEngineForm /></SettingsSection>
-      <SettingsSection title="搜索引擎关键词与管理" description="为内置或自定义引擎设置关键词；内置引擎名称和模板固定。">
+      <SettingsSection title="搜索引擎管理"
+        description="快捷词用于临时选择引擎：给 Google 设为 g 后，在主页输入“g React”会用 Google 搜索 React，不会更改默认引擎。">
+        <Button type="button" variant="outline" className="self-start" aria-expanded={addingEngine}
+          onClick={() => setAddingEngine((current) => !current)}>
+          {addingEngine ? '取消添加' : '添加自定义引擎'}
+        </Button>
+        {addingEngine && <div className="flex min-w-0 flex-col gap-4">
+          <Separator />
+          <CustomEngineForm />
+          <Separator />
+        </div>}
         <CustomEngineList />
       </SettingsSection>
     </div>
@@ -32,16 +43,21 @@ function SearchSettingsHome({ onManage, managementTrigger }: {
   const { settings, setDefaultEngine } = useData();
   return (
     <div className="settings-columns grid min-w-0 items-start gap-4">
-      <SettingsSection title="搜索框"><SearchBoxSettings /></SettingsSection>
-      <SettingsSection title="搜索行为"><SearchBehaviorSettings /></SettingsSection>
-      <SettingsSection title="结果内容"><SearchResultsSettings /></SettingsSection>
-      <SettingsSection title="搜索引擎" description="输入时仅搜索本地网站和文件夹。">
-        <EngineSelection engines={settings.search.customEngines} selected={settings.search.defaultEngineId}
-          onSelect={(id) => void setDefaultEngine(id).catch(notifyError)} />
-        <Button ref={managementTrigger} variant="outline" className="w-full justify-between" onClick={onManage}>
-          管理自定义搜索引擎<ArrowRight data-icon="inline-end" />
-        </Button>
-      </SettingsSection>
+      <div className="flex min-w-0 flex-col gap-4">
+        <SettingsSection title="搜索框"><SearchBoxSettings /></SettingsSection>
+        <SettingsSection title="结果内容"><SearchResultsSettings /></SettingsSection>
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">
+        <SettingsSection title="搜索行为"><SearchBehaviorSettings /></SettingsSection>
+        <SettingsSection title="搜索引擎" description="输入时仅搜索本地网站和文件夹。">
+          <EngineSelection engines={settings.search.customEngines} overrides={settings.search.customization.engineOverrides}
+            selected={settings.search.defaultEngineId}
+            onSelect={(id) => void setDefaultEngine(id).catch(notifyError)} />
+          <Button ref={managementTrigger} variant="outline" className="w-full justify-between" onClick={onManage}>
+            管理搜索引擎<ArrowRight data-icon="inline-end" />
+          </Button>
+        </SettingsSection>
+      </div>
     </div>
   );
 }

@@ -23,6 +23,15 @@ describe('单次搜索路由', () => {
       error: '请输入要用 Bing 搜索的内容' });
   });
 
+  it('使用已编辑的预置引擎名称和模板构造查询地址', () => {
+    const defaults = preferences();
+    const search = { ...defaults, customization: { ...defaults.customization,
+      engineOverrides: { google: { name: 'Google 中文', template: 'https://search.example/?query={query}' } } } };
+    expect(resolveSearchQuery({ settings: search, query: '关键词 a&b' })).toMatchObject({
+      engineName: 'Google 中文', searchUrl: 'https://search.example/?query=%E5%85%B3%E9%94%AE%E8%AF%8D%20a%26b',
+    });
+  });
+
   it('网址保留路径、查询、片段，域名补 HTTPS', () => {
     const settings = preferences();
     expect(resolveSearchQuery({ settings, query: 'example.com/a?q=中文#section' }).navigationUrl)

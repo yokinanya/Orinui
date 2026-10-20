@@ -1,7 +1,7 @@
 import type { CSSProperties, FormEvent, MutableRefObject, RefObject } from 'react';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import type { SearchCustomization } from '@/domain/search-customization';
-import type { SearchEngine } from '@/domain/search-engines';
+import type { BuiltInEngineOverrides, SearchEngine } from '@/domain/search-engines';
 import { SearchEnginePicker } from '@/features/search/SearchEnginePicker';
 import { SearchSuggestionList } from '@/features/search/SearchSuggestionList';
 import { handleSearchKeyboard } from '@/features/search/search-keyboard';
@@ -28,6 +28,7 @@ export interface SearchFormProps {
   readonly customization: SearchCustomization;
   readonly engineId: string;
   readonly engines: readonly SearchEngine[];
+  readonly engineOverrides: BuiltInEngineOverrides;
   readonly setDefaultEngine: (id: string) => Promise<void>;
 }
 
@@ -60,7 +61,7 @@ export function SearchForm(input: SearchFormProps) {
         aria-activedescendant={input.showing && active ? `search-option-${active.id}` : undefined}
         className="home-readable-ink h-12 pr-1 text-base text-glass-foreground placeholder:text-glass-foreground-muted md:text-base" />
       <InputGroupAddon className="pl-2"><SearchEnginePicker engineId={input.engineId}
-        engines={input.engines} setDefaultEngine={input.setDefaultEngine} /></InputGroupAddon>
+        engines={input.engines} overrides={input.engineOverrides} setDefaultEngine={input.setDefaultEngine} /></InputGroupAddon>
     </InputGroup>
     {input.showing && <SearchSuggestionList input={input} />}
   </form>;

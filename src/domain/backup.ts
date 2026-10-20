@@ -2,7 +2,7 @@ import { fail } from '@/domain/errors';
 import { resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
 import type { AppSettings } from '@/domain/settings';
-import { CURRENT_BACKUP_VERSION, PREVIOUS_BACKUP_VERSION, validateBackupSettings } from '@/domain/backup-settings';
+import { CURRENT_BACKUP_VERSION, LEGACY_BACKUP_VERSION, PREVIOUS_BACKUP_VERSION, validateBackupSettings } from '@/domain/backup-settings';
 import type { MediaAsset, MediaAssetMotion } from '@/domain/asset';
 import type { Folder } from '@/domain/folder';
 import type { Shortcut } from '@/domain/shortcut';
@@ -57,7 +57,7 @@ export function parseBackup(value: unknown): BackupPreview {
   const raw = record(value);
   exactManifest(raw);
   const formatVersion = raw.formatVersion;
-  if (formatVersion !== CURRENT_BACKUP_VERSION && formatVersion !== PREVIOUS_BACKUP_VERSION) {
+  if (formatVersion !== CURRENT_BACKUP_VERSION && formatVersion !== PREVIOUS_BACKUP_VERSION && formatVersion !== LEGACY_BACKUP_VERSION) {
     fail('备份版本不兼容当前文件夹协议；请使用文件夹版本 ZIP 备份');
   }
   if (typeof raw.exportedAt !== 'string' || !Number.isFinite(Date.parse(raw.exportedAt))) fail('备份时间不正确');
@@ -66,7 +66,8 @@ export function parseBackup(value: unknown): BackupPreview {
   const settings = validateBackupSettings(raw.settings, formatVersion);
   const assets = validateBackupAssets(raw.assets, formatVersion);
   validateBackupReferences({ folders, shortcuts, settings, assets });
-  const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines);
+  const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines,
+    settings.search.customization.engineOverrides);
   if (!engine) fail('默认搜索引擎不存在');
   return { folderCount: folders.length, shortcutCount: shortcuts.length, assetCount: assets.length,
     backgroundCount: assets.filter(({ kind }) => kind === 'background').length,

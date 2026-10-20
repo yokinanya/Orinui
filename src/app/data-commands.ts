@@ -10,7 +10,8 @@ import * as shortcuts from '@/storage/shortcuts';
 import type { Folder } from '@/domain/folder';
 import type { AppSettings } from '@/domain/settings';
 import { newId } from '@/domain/id';
-import { resolveEngine, validateEngineTemplate } from '@/domain/search-engines';
+import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate } from '@/domain/search-engines';
+import type { SearchEngine } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
 import { createBackupSnapshot, replaceAllData, resetLocalData } from '@/storage/backup';
 import { serializeBackup } from '@/platform/backup-file';
@@ -156,11 +157,7 @@ function searchCommands({ db, setSettings }: CommandDependencies): SearchCommand
       setSettings(await readSettings(db));
     },
     async updateSearchEngine(id, input) {
-      setSettings(await updateSettings(db, (current) => {
-        if (!current.search.customEngines.some((engine) => engine.id === id)) throw new Error('自定义搜索引擎不存在');
-        return { ...current, search: { ...current.search, customEngines: current.search.customEngines.map((engine) => engine.id === id
-          ? { ...engine, name: normalizeEngineName(input.name), template: validateEngineTemplate(input.template) } : engine) } };
-      }));
+      setSettings(await updateSettings(db, (current) => updateEngineSettings(current, id, input)));
     },
     async deleteSearchEngine(id) {
       await updateSettings(db, (current) => {
@@ -175,6 +172,26 @@ function searchCommands({ db, setSettings }: CommandDependencies): SearchCommand
       setSettings(await readSettings(db));
     },
   };
+}
+
+function updateEngineSettings(current: AppSettings, id: string, input: Pick<SearchEngine, 'name' | 'template'>): AppSettings {
+  const engine = resolveEngine(id, current.search.customEngines, current.search.customization.engineOverrides);
+  if (!engine) throw new Error('搜索引擎不存在');
+  const value = { name: normalizeEngineName(input.name), template: validateEngineTemplate(input.template) };
+  if (engine.builtIn) return updateBuiltInEngine(current, id, value);
+  return { ...current, search: { ...current.search, customEngines: current.search.customEngines.map((item) =>
+    item.id === id ? { ...item, ...value } : item) } };
+}
+
+function updateBuiltInEngine(current: AppSettings, id: string, value: Pick<SearchEngine, 'name' | 'template'>): AppSettings {
+  const preset = BUILT_IN_ENGINES.find((engine) => engine.id === id);
+  if (!preset) throw new Error(`预置搜索引擎不存在：${id}`);
+  const engineOverrides = { ...current.search.customization.engineOverrides };
+  if (value.name === preset.name && value.template === preset.template) delete engineOverrides[id];
+  else engineOverrides[id] = value;
+  return { ...current, search: { ...current.search, customization: {
+    ...current.search.customization, engineOverrides,
+  } } };
 }
 
 type BackupCommands = Pick<DataContextValue, 'exportBackup' | 'restoreBackup' | 'resetLocalData'>;

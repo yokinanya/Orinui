@@ -1,8 +1,16 @@
 # 开发与验收进度
 
-整理日期：2026-10-19。本文件是进度的主记录。规则见 [DATA-CONTRACT.md](./DATA-CONTRACT.md) 与 [VISUAL-SPEC.md](./VISUAL-SPEC.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
+整理日期：2026-10-20。本文件是进度的主记录。规则见 [DATA-CONTRACT.md](./DATA-CONTRACT.md) 与 [VISUAL-SPEC.md](./VISUAL-SPEC.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
+
+2026-10-20：布局、外观、搜索和数据四个多列设置页均改为左右独立纵向排列；搜索管理中的预置引擎支持编辑名称/HTTPS 模板并恢复默认，管理页改为可展开列表，并说明快捷词怎样临时选用某引擎。对应规则见 [VISUAL-SPEC.md](./VISUAL-SPEC.md) 与 [SEARCH-DESIGN.md](./SEARCH-DESIGN.md)，验证结果见 [VERIFICATION.md](./VERIFICATION.md)。
 
 `v0.1.0-beta.1` Release 与附件已按用户要求撤下，仓库和签名标签保留。2026-10-16 准备的 Beta 2 本地候选仍未发布；2026-10-17 的外观与布局更新已改变 ZIP/sync wire format，因此旧 ZIP 不代表当前源码构建。只有重新核验具体候选并获得用户单独明确确认后才可公开发布；未确认前不上传 Release 附件或推送发布标签。历史进度保留如下。
+
+## 设置独立列排列与搜索引擎列表管理（2026-10-20）
+
+- 宽内容区中，布局页左列为页面设置/恢复默认、右列为时钟/网站；外观页左列为主题/背景、右列为配色；搜索页左列为搜索框/结果、右列为行为/引擎；数据页左列为完整备份/本地数据、右列为 WebDAV/S3。各列分别纵向排列，窄内容区回到单列。
+- 管理页中预置搜索引擎可编辑名称和 HTTPS 模板，可恢复预置值；固定引擎 ID 与独立快捷词保留，预置引擎不可删除。管理页采用可展开列表，概览默认/预置状态和快捷词，新增表单按需展开。Dexie 12→13、ZIP 9→10、同步 schema 11→12 显式补入覆盖字段并保留已保存数据与寄存器信息。
+- `pnpm compile`、`timeout 60s pnpm test`（60 个文件、536/536）、`pnpm build` 通过；构建输出 `.output/chrome-mv3`，仍有既有大 chunk 提示。搜索设置、引擎、命令和设置入口普通网页回归 27/27 通过；真实扩展迁移审计另通过 Dexie 11→13，范围不含真实扩展中的引擎编辑 UI。
 
 ## 搜索设置、搜索功能与单行工具（2026-10-19）
 

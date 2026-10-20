@@ -16,14 +16,22 @@ for (const width of [1440, 900]) {
       }));
       expect(dimensions.columns).toBe(width === 1440 ? 2 : 1);
       expect(dimensions.overflow).toBe(false);
-      if (name === '数据') {
-        const sections = await grid.locator(':scope > section').evaluateAll((elements) =>
-          elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y,
-            overflow: element.scrollWidth > element.clientWidth })));
-        expect(sections.every(({ overflow }) => !overflow)).toBe(true);
-        if (width === 1440) {
-          expect(sections[1]!.x).toBeLessThan(sections[2]!.x);
-          expect(Math.abs(sections[1]!.y - sections[2]!.y)).toBeLessThan(2);
+      const columns = await grid.evaluate((element) => [...element.children].map((column) => {
+        const sections = column.matches('.settings-section') ? [column] : [...column.querySelectorAll(':scope > .settings-section')];
+        return {
+          cards: sections.map((section) => {
+            const bounds = section.getBoundingClientRect();
+            return { top: bounds.top, bottom: bounds.bottom };
+          }),
+          overflow: sections.some((section) => section.scrollWidth > section.clientWidth),
+        };
+      }));
+      expect(columns.every(({ overflow }) => !overflow)).toBe(true);
+      if (width === 1440) {
+        for (const column of columns) {
+          for (let index = 1; index < column.cards.length; index += 1) {
+            expect(Math.abs(column.cards[index]!.top - column.cards[index - 1]!.bottom - 16)).toBeLessThan(1);
+          }
         }
       }
     }

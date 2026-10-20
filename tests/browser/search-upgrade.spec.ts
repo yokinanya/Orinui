@@ -100,10 +100,11 @@ test('clone 剪贴板拒绝时显示真实错误', async ({ page }) => {
 test('搜索引擎关键词只路由当前查询，不修改默认引擎', async ({ page }) => {
   await page.goto('/newtab.html');
   await openSearchSettings(page);
-  await page.getByRole('button', { name: '管理自定义搜索引擎' }).click();
+  await page.getByRole('button', { name: '管理搜索引擎' }).click();
+  await page.getByRole('button', { name: 'Google 搜索引擎设置', exact: true }).click();
   const google = page.getByRole('region', { name: 'Google 搜索设置' });
-  await google.getByRole('textbox', { name: 'Google 搜索关键词' }).fill('g');
-  await google.getByRole('button', { name: '保存关键词' }).click();
+  await google.getByRole('textbox', { name: 'Google 快捷词' }).fill('g');
+  await google.getByRole('button', { name: '保存快捷词' }).click();
   await expect(google.getByRole('status')).toHaveText('已保存');
   await page.getByRole('button', { name: '返回搜索', exact: true }).click();
   await page.keyboard.press('Escape');

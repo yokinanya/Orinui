@@ -1,6 +1,6 @@
 # WebDAV 提供方实施说明
 
-本文件保留 WebDAV 的提供方细节和历史审计记录。当前为 Dexie 11、ZIP formatVersion 8、快照 schema 10；旧分组格式明确拒绝，不自动迁移、清理本地数据/同步身份或删除远端库。本轮文件夹协议与界面尚未验收，历史服务结果不外推。当前规则见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)、[SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 与 [TASKS.md](./TASKS.md)。
+本文件保留 WebDAV 的提供方细节和历史审计记录。当前为 Dexie 13、ZIP formatVersion 10、快照 schema 12；显式升级上一版 Dexie 12 / ZIP 9 / schema 11 和 Beta 2 的 Dexie 11 / ZIP 8 / schema 10。旧分组格式明确拒绝，不自动迁移、清理本地数据/同步身份或删除远端库。历史服务结果不外推。当前规则见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)、[SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) 与 [TASKS.md](./TASKS.md)。
 
 状态：WebDAV 适配器、连接流程与事件触发已实现，并通过受控本机 HTTPS 服务的真实扩展审计。用户已确认真实 WebDAV 服务验收完成；动态媒体同步组合仍待本轮验证。受控服务使用预授权来源和自签测试证书，不代替新增媒体组合及用户权限弹窗检查。总同步决策见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)，对象端口顺序见 [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md)，密文格式见 [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md)。
 

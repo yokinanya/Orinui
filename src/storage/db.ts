@@ -7,6 +7,7 @@ import type { MediaAsset } from '@/domain/asset';
 import type { SyncRecordRow, SyncStateRow, SyncKeyRow } from '@/storage/sync/types';
 import { createSyncCaptureMiddleware } from '@/storage/sync/middleware';
 import { migrateSearchCustomization } from '@/storage/search-customization-migration';
+import { migrateSearchEngineOverrides } from '@/storage/search-engine-override-migration';
 
 /** 设置只保存一行，id 固定；结构随版本升级迁移。 */
 export type SettingsRow = AppSettings & { id: 'app' };
@@ -41,6 +42,7 @@ function registerSchemaVersions(database: OrinuiDatabase): void {
     throw new Error('旧分组安装不兼容当前文件夹版本。请先使用旧版本导出备份并保留，再明确确认后卸载、重新安装扩展；旧备份不能直接导入当前版本。本机数据与同步密钥未被清除，远端数据未被修改。');
   });
   database.version(12).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchCustomization);
+  database.version(13).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchEngineOverrides);
 }
 
 

@@ -63,7 +63,7 @@ function useSearchController({ inputRef, openFolder }: SearchFieldProps): Search
     onDismiss: state.dismiss, select: state.select, composing: state.composing, suppressSubmit: state.suppressSubmit,
     showing: state.focused && state.query.trim().length > 0 && results.items.length > 0,
     suggestions: results.items, activeIndex, execute, customization, engineId: settings.search.defaultEngineId,
-    engines: settings.search.customEngines, setDefaultEngine };
+    engines: settings.search.customEngines, engineOverrides: customization.engineOverrides, setDefaultEngine };
 }
 
 export function SearchField(props: SearchFieldProps) {

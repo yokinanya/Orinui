@@ -81,7 +81,7 @@ describe('自定义引擎引用校验', () => {
   it('拒绝不存在的默认引擎', () => {
     const settings = createDefaultSettings();
     expect(() =>
-      validateSettings({ ...settings, search: { defaultEngineId: 'missing', customEngines: [] } }),
+      validateSettings({ ...settings, search: { ...settings.search, defaultEngineId: 'missing', customEngines: [] } }),
     ).toThrowError(/默认搜索引擎不存在/);
   });
 
@@ -167,6 +167,21 @@ describe('search customization settings', () => {
       ...search.customization, engineKeywords: { custom: 'GH' } } } })).toThrow(/冲突/);
     expect(() => validateSettings({ ...settings, search: { ...search, customization: {
       ...search.customization, engineKeywords: { custom: 'Docs', google: 'docs' } } } })).toThrow(/重复/);
+  });
+
+  it('accepts validated overrides for known built-in engines', () => {
+    const settings = createDefaultSettings();
+    const result = validateSettings({ ...settings, search: { ...settings.search, customization: {
+      ...settings.search.customization,
+      engineOverrides: { google: { name: 'Google 中文', template: 'https://search.example/?q={query}' } },
+    } } });
+    expect(result.search.customization.engineOverrides.google?.name).toBe('Google 中文');
+    expect(() => validateSettings({ ...settings, search: { ...settings.search, customization: {
+      ...settings.search.customization, engineOverrides: { unknown: { name: '搜索', template: 'https://search.example/?q={query}' } },
+    } } })).toThrow(/未知的内置/);
+    expect(() => validateSettings({ ...settings, search: { ...settings.search, customization: {
+      ...settings.search.customization, engineOverrides: { google: { name: 'Google', template: 'http://example.com/?q={query}' } },
+    } } })).toThrow(/必须使用 https/);
   });
 
   it('rejects invalid customization opacity, line breaks, tool groups, and engine references', () => {

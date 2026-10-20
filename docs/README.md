@@ -18,7 +18,7 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 当前实现的工具链、目录、平台/数据边界和工程注意事项 |
 | [SEARCH-DESIGN.md](./SEARCH-DESIGN.md) | 搜索设置、关键词、本地拼音检索、gh 命令、单行工具与数据迁移 |
 | [SYNC-DESIGN.md](./SYNC-DESIGN.md) | 已定同步方向、当前实现边界和外部存储验收要求 |
-| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 同步 schema 11、独立搜索偏好、schema 10 显式升级、永久墓碑和加密事务协议 |
+| [SYNC-PROTOCOL.md](./SYNC-PROTOCOL.md) | 同步 schema 12、搜索偏好及预置引擎覆盖、schema 10/11 显式升级、永久墓碑和加密事务协议 |
 | [SYNC-COORDINATOR.md](./SYNC-COORDINATOR.md) | 公共对象端口、手动协调顺序、并发/失败状态及当前验证边界 |
 | [SYNC-WEBDAV.md](./SYNC-WEBDAV.md) | HTTPS WebDAV 对象格式、连接流程、安全边界和受控真实扩展审计范围 |
 | [SYNC-S3.md](./SYNC-S3.md) | S3/R2 配置、条件操作、容量、删除边界及真实服务验收要求 |

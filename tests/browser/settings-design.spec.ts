@@ -51,12 +51,12 @@ for (const viewport of VIEWPORTS) {
     await expect(settings.getByRole('region', { name: '主题模式' })).toBeVisible();
     await expect(settings.getByRole('button', { name: '壁纸与背景', exact: true })).toBeFocused();
     await settings.getByRole('tab', { name: '搜索', exact: true }).click();
-    await settings.getByRole('button', { name: '管理自定义搜索引擎', exact: true }).click();
+    await settings.getByRole('button', { name: '管理搜索引擎', exact: true }).click();
     await expect(settings.getByRole('button', { name: '返回搜索', exact: true })).toBeFocused();
-    await expect(settings.getByRole('region', { name: '自定义搜索引擎' })).toBeVisible();
+    await expect(settings.getByRole('region', { name: '搜索引擎管理' })).toBeVisible();
     await settings.getByRole('button', { name: '返回搜索', exact: true }).click();
     await expect(settings.getByRole('region', { name: '搜索行为' })).toBeVisible();
-    await expect(settings.getByRole('button', { name: '管理自定义搜索引擎', exact: true })).toBeFocused();
+    await expect(settings.getByRole('button', { name: '管理搜索引擎', exact: true })).toBeFocused();
     const overflow = await settings.evaluate((element) => element.scrollWidth > element.clientWidth);
     expect(overflow).toBe(false);
   });

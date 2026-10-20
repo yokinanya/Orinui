@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { createDefaultSettings } from '@/domain/settings';
-import { parseSyncSnapshot, materializeSyncSnapshot, mergeSyncSnapshots, SYNC_SCHEMA_VERSION, LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION } from '@/domain/sync';
+import { parseSyncSnapshot, materializeSyncSnapshot, mergeSyncSnapshots, SYNC_SCHEMA_VERSION,
+  LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION } from '@/domain/sync';
 import { register, snapshot } from './snapshot-fixture';
 
 it('upgrades schema 10 search settings to explicit defaults with a zero register clock', () => {
@@ -15,7 +16,7 @@ it('upgrades schema 10 search settings to explicit defaults with a zero register
   expect(materializeSyncSnapshot(parsed).settings.search.customization).toEqual(createDefaultSettings().search.customization);
 });
 
-it('strictly separates schema 10 and 11 search register shapes', () => {
+it('strictly separates schema 10, 11, and 12 search register shapes', () => {
   const current = snapshot('device-a');
   const legacySettings = { ...current.settings } as Record<string, unknown>;
   delete legacySettings.searchCustomization;
@@ -23,6 +24,13 @@ it('strictly separates schema 10 and 11 search register shapes', () => {
     settings: { ...legacySettings, searchCustomization: current.settings.searchCustomization } })).toThrow(/字段不正确/);
   expect(() => parseSyncSnapshot({ ...current, settings: legacySettings })).toThrow(/字段不正确/);
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: 9, settings: legacySettings })).toThrow(/不兼容/);
+  const { engineOverrides: _ignored, ...oldCustomization } = createDefaultSettings().search.customization;
+  const oldRegister = { ...current.settings.searchCustomization, value: oldCustomization };
+  const oldSettings = { ...current.settings, searchCustomization: oldRegister };
+  expect(parseSyncSnapshot({ ...current, schemaVersion: LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
+    settings: oldSettings }).settings.searchCustomization.value.engineOverrides).toEqual({});
+  expect(() => parseSyncSnapshot({ ...current, schemaVersion: LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
+    settings: { ...current.settings, searchCustomization: current.settings.searchCustomization } })).toThrow(/旧搜索自定义设置字段/);
 });
 
 it('does not let a schema 10 snapshot overwrite newer customized search settings', () => {

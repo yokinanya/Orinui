@@ -1,7 +1,8 @@
 import { GlobeIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { BUILT_IN_ENGINES, resolveEngine } from '@/domain/search-engines';
+import { resolveEngine, resolveEngines } from '@/domain/search-engines';
+import type { BuiltInEngineOverrides } from '@/domain/search-engines';
 import type { AppSettings } from '@/domain/settings';
 import { notifyError } from '@/lib/notify';
 
@@ -12,12 +13,14 @@ function EngineIcon({ id }: { readonly id: string }) {
   return <GlobeIcon />;
 }
 
-export function SearchEnginePicker({ engineId, engines, setDefaultEngine }: {
+export function SearchEnginePicker({ engineId, engines, overrides, setDefaultEngine }: {
   readonly engineId: string;
   readonly engines: readonly AppSettings['search']['customEngines'][number][];
+  readonly overrides: BuiltInEngineOverrides;
   readonly setDefaultEngine: (id: string) => Promise<void>;
 }) {
-  const selected = resolveEngine(engineId, engines);
+  const selected = resolveEngine(engineId, engines, overrides);
+  const allEngines = resolveEngines(engines, overrides);
   if (!selected) return <span role="alert">搜索引擎不存在</span>;
   return <DropdownMenu>
     <DropdownMenuTrigger render={<Button type="button"     variant="ghost" size="icon-sm" aria-label="选择搜索引擎"
@@ -26,7 +29,7 @@ export function SearchEnginePicker({ engineId, engines, setDefaultEngine }: {
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start">
       <DropdownMenuRadioGroup value={engineId} onValueChange={(id) => void setDefaultEngine(id).catch(notifyError)}>
-        {[...BUILT_IN_ENGINES, ...engines].map((engine) => <DropdownMenuRadioItem key={engine.id} value={engine.id}>
+        {allEngines.map((engine) => <DropdownMenuRadioItem key={engine.id} value={engine.id}>
           <EngineIcon id={engine.id} />{engine.name}
         </DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>

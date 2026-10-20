@@ -3,16 +3,18 @@ import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { BUILT_IN_ENGINES, resolveEngine } from '@/domain/search-engines';
+import { resolveEngine, resolveEngines } from '@/domain/search-engines';
 import type { SearchEngine } from '@/domain/search-engines';
+import type { BuiltInEngineOverrides } from '@/domain/search-engines';
 
-export function EngineSelection({ engines, selected, onSelect }: {
+export function EngineSelection({ engines, overrides, selected, onSelect }: {
   readonly engines: readonly SearchEngine[];
+  readonly overrides: BuiltInEngineOverrides;
   readonly selected: string;
   readonly onSelect: (id: string) => void;
 }) {
-  const selectedEngine = resolveEngine(selected, engines);
-  const allEngines = [...BUILT_IN_ENGINES, ...engines];
+  const selectedEngine = resolveEngine(selected, engines, overrides);
+  const allEngines = resolveEngines(engines, overrides);
   const labelId = useId();
   return (
     <Field aria-labelledby={labelId}>

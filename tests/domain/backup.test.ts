@@ -99,6 +99,16 @@ describe('ZIP folder format boundary', () => {
     expect(parsed.document.assets[0]?.name).toBe('城市夜景');
   });
 
+  it('upgrades strict ZIP v9 search settings by adding empty built-in engine overrides', () => {
+    const defaults = createDefaultSettings();
+    const { engineOverrides: _engineOverrides, ...oldCustomization } = defaults.search.customization;
+    const legacy = backup({ formatVersion: 9, settings: { ...defaults, search: { ...defaults.search,
+      customization: oldCustomization } } });
+    const parsed = parseBackup(legacy);
+    expect(parsed.document.formatVersion).toBe(BACKUP_VERSION);
+    expect(parsed.document.settings.search.customization.engineOverrides).toEqual({});
+  });
+
   it.each([2, 3, 4, 5, 6, 7])('rejects old group ZIP formatVersion %s without mapping or clearing', (formatVersion) => {
     const legacy = { formatVersion, exportedAt: '2026-10-10T00:00:00.000Z',
       groups: [{ id: 'main', name: '常用', colorRole: 'primary', order: 0, isDefault: true }],

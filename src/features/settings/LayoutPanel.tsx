@@ -74,17 +74,17 @@ export function LayoutPanel() {
   const { resetLayout } = useData();
   return (
     <div className="settings-columns settings-layout-columns grid items-start gap-4 pb-2">
-      <PageSettings />
-
+      <div className="flex min-w-0 flex-col gap-4">
+        <PageSettings />
+        <Button type="button" variant="outline" size="sm" className="self-start"
+          onClick={() => void resetLayout().catch(notifyError)}>
+          恢复默认布局
+        </Button>
+      </div>
       <div className="flex min-w-0 flex-col gap-4">
         <LayoutSection id="layout-clock-heading" title="时钟"><ClockSettingsPanel /></LayoutSection>
         <WebsiteSettings />
       </div>
-
-      <Button type="button" variant="outline" size="sm" className="settings-layout-reset justify-self-start"
-        onClick={() => void resetLayout().catch(notifyError)}>
-        恢复默认布局
-      </Button>
     </div>
   );
 }

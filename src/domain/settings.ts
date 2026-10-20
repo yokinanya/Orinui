@@ -153,14 +153,14 @@ export function validateSettings(value: unknown): AppSettings {
     fail('默认搜索引擎不正确');
   }
   const customEngines = validateCustomEngines(search.customEngines);
-  if (!resolveEngine(search.defaultEngineId, customEngines)) {
+  const customization = validateSearchCustomization(search.customization);
+  if (!resolveEngine(search.defaultEngineId, customEngines, customization.engineOverrides)) {
     fail('默认搜索引擎不存在');
   }
 
   const searchPreferences = validateSearchPreferences(search);
-  const customization = validateSearchCustomization(search.customization);
   for (const engineId of Object.keys(customization.engineKeywords)) {
-    if (!resolveEngine(engineId, customEngines)) fail(`搜索引擎关键词引用不存在：${engineId}`);
+    if (!resolveEngine(engineId, customEngines, customization.engineOverrides)) fail(`搜索引擎关键词引用不存在：${engineId}`);
   }
   return {
     appearance: validateAppearance(raw.appearance),

@@ -62,7 +62,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 
 ## 本地数据与事务
 
-当前 Dexie schema 为版本 12；ZIP formatVersion 9 与同步 schema 11 独立于 Dexie schema。仅对当前 Beta 2 的 Dexie 11、ZIP 8 和同步 10 提供显式升级，见 [搜索设计](./SEARCH-DESIGN.md)。主页个性化设置与文件夹/网站层级分别保存。
+当前 Dexie schema 为版本 13；ZIP formatVersion 10 与同步 schema 12 独立于 Dexie schema。对上一版 Dexie 12、ZIP 9、同步 11 和当前 Beta 2 的 Dexie 11、ZIP 8、同步 10 均提供显式升级，见 [搜索设计](./SEARCH-DESIGN.md)。主页个性化设置与文件夹/网站层级分别保存。
 
 | 表 | 主键与索引 | 作用 |
 |---|---|---|
@@ -78,14 +78,14 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 - 领域校验在写入前执行；文件夹可删除；删除时同一事务把其中网站移回主页，不丢弃网站数据。
 - 排序维护集中在 order.ts。拖放使用 assignOrder 按传入数组顺序编号；renumber 先按现有 order 排序，不能用它替代拖放结果。
 - 未发生移动时返回 null，避免无意义写入。
-以下 1–8 为历史升级行为，不表示当前 Dexie 12 接受旧分组数据库：
+以下 1–8 为历史升级行为，不表示当前 Dexie 13 接受旧分组数据库：
 
 - 版本 1 → 2 迁移补齐外观字段并新增 assets，不重建既有网站。
 - 版本 2 → 3 只新增同步表；没有配置同步库时不捕获业务记录。DBCore 中间件把本机版本与领域写入原子提交，接收事务暂停捕获防回声。
 - 版本 3 → 4 不改表/索引；将旧网站图标像素尺寸迁移为占比，并同步规范化本地同步寄存器中的图标值。
 - 版本 4 → 5 不改表/索引；为时钟、布局、搜索和网站偏好补新增字段默认值，并为新同步寄存器使用零逻辑版本，保留既有逻辑版本。已连接同步的旧库在同一升级事务中暂时暂停变更捕获，迁移完成后恢复原暂停状态；失败则整笔回滚。旧设置仍经过领域校验，损坏数据会使迁移失败。
 - 版本 5 → 6 不改表/索引；为旧布局和对应本地同步寄存器加入 `style: centered`，保留区域设置与逻辑版本。版本 6 → 7 将旧 `toolbar`/`sidebar` 映射到新命名布局，并补 `clockPosition: left`；版本 7 → 8 为设置和同步布局寄存器添加 `hideGroupNameWhenSingle: false`。迁移时暂停并恢复既有同步捕获状态，损坏值使整笔迁移回滚。
-- ZIP formatVersion 8 使用 folders/folderId 清单；旧 formatVersion 2–7 的 groups/groupId 数据明确拒绝，不能静默合并成一个文件夹。同步 schema 10/11 使用 folder 实体与 folderId placement；旧 schema 1–9 格式拒绝，不能清空或重映射远端状态。Dexie schema 11 遇到旧分组数据明确拒绝，不把网站搬到主页后清空旧表，不自动清理数据、同步身份或密钥；用户接受主动卸载重装旧版本，但不授权自动重置。Beta 1 ZIP v1、开发期 JSON 与旧 wire formats 保持拒绝。
+- ZIP formatVersion 8 使用 folders/folderId 清单；旧 formatVersion 2–7 的 groups/groupId 数据明确拒绝，不能静默合并成一个文件夹。同步 schema 10–12 使用 folder 实体与 folderId placement；旧 schema 1–9 格式拒绝，不能清空或重映射远端状态。Dexie schema 11 遇到旧分组数据明确拒绝，不把网站搬到主页后清空旧表，不自动清理数据、同步身份或密钥；用户接受主动卸载重装旧版本，但不授权自动重置。Beta 1 ZIP v1、开发期 JSON 与旧 wire formats 保持拒绝。
 
 完整规则与限额见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
 
@@ -116,7 +116,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 - SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、ZIP 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
 - 图片链接下载只在用户主动操作中联网，使用 omit credentials/no-referrer，并对每一跳阻止浏览器自动重定向。临时 webRequest 观察读取响应头中的 Location，领域层严格校验目标；同来源继续，跨来源交回界面确认并重新请求具体来源权限。同一链接通过原生独占锁串行观察，请求结束后移除监听，不常驻收集网络信息。
 - Manifest 声明可选 HTTPS 与精确 localhost HTTP 来源，不安装时授予全部站点访问。私有 DNS 最终地址判定存在平台限制。
-- ZIP 备份由 platform 流式逐资源编解码、domain 严格校验、storage 事务化替换；manifest formatVersion 为 9，全部背景素材原件和被引用的网站图标位于 `assets/<assetId>` 并带长度与 SHA-256。导入须整包验证后预览和确认，不重新下载来源 URL；开发期 JSON 与 Beta 1 ZIP v1 均不兼容。
+- ZIP 备份由 platform 流式逐资源编解码、domain 严格校验、storage 事务化替换；manifest formatVersion 为 10，全部背景素材原件和被引用的网站图标位于 `assets/<assetId>` 并带长度与 SHA-256。导入须整包验证后预览和确认，不重新下载来源 URL；开发期 JSON 与 Beta 1 ZIP v1 均不兼容。
 - 静态图片继续保留单文件 10 MiB 及既有像素/输出规则。取消 50 MiB 本地媒体总量和 70 MiB JSON 文件限制；不设动态视频应用级单文件大小或时长上限。实际浏览器配额、文件 API 或解码容量失败必须明确显示。
 
 ## 外观与交互实现注意事项
