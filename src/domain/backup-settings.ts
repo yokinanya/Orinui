@@ -1,12 +1,14 @@
 import { fail } from '@/domain/errors';
+import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import { validateSettings, type AppSettings } from '@/domain/settings';
 import { createDefaultSearchCustomization, upgradeLegacySearchCustomization } from '@/domain/search-customization';
 
 export const LEGACY_BACKUP_VERSION = 8 as const;
 export const PREVIOUS_BACKUP_VERSION = 9 as const;
-export const CURRENT_BACKUP_VERSION = 10 as const;
-export type SupportedBackupVersion = typeof LEGACY_BACKUP_VERSION | typeof PREVIOUS_BACKUP_VERSION | typeof CURRENT_BACKUP_VERSION;
+export const LEGACY_HOME_BACKUP_VERSION = 10 as const;
+export const CURRENT_BACKUP_VERSION = 11 as const;
+export type SupportedBackupVersion = typeof LEGACY_BACKUP_VERSION | typeof PREVIOUS_BACKUP_VERSION | typeof LEGACY_HOME_BACKUP_VERSION | typeof CURRENT_BACKUP_VERSION;
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(`${label}格式不正确`);
@@ -66,9 +68,9 @@ function validateClockShape(value: unknown): void {
 
 export function validateBackupSettings(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): AppSettings {
   const raw = record(value, '设置');
-  exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock'], '设置');
+  exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock', ...(Object.hasOwn(raw, 'home') ? ['home'] : [])], '设置');
   validateAppearanceShape(raw.appearance);
-  if (formatVersion === CURRENT_BACKUP_VERSION) validateSearchShape(raw.search);
+  if (formatVersion >= LEGACY_HOME_BACKUP_VERSION) validateSearchShape(raw.search);
   else if (formatVersion === PREVIOUS_BACKUP_VERSION) validateLegacySearchFormatShape(raw.search);
   else validateLegacySearchShape(raw.search);
   const layout = validateCurrentLayout(raw.layout);
@@ -79,7 +81,10 @@ export function validateBackupSettings(value: unknown, formatVersion: SupportedB
     : formatVersion === PREVIOUS_BACKUP_VERSION
       ? { ...raw, search: upgradeLegacySearchFormat(legacySearch), layout }
       : { ...raw, layout };
-  return validateSettings(settings);
+  const parsed = validateSettings(settings);
+  if (formatVersion === CURRENT_BACKUP_VERSION) return parsed;
+  return { ...parsed, layout: { ...parsed.layout, style: DEFAULT_LAYOUT.style, order: [...DEFAULT_LAYOUT.order],
+    clockPosition: DEFAULT_LAYOUT.clockPosition, columns: DEFAULT_LAYOUT.columns }, shortcuts: { ...parsed.shortcuts, showNames: true } };
 }
 
 function validateLegacySearchFormatShape(value: unknown): void {

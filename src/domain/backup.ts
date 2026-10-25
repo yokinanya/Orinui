@@ -1,4 +1,6 @@
 import { fail } from '@/domain/errors';
+import { LEGACY_HOME_BACKUP_VERSION } from '@/domain/backup-settings';
+import { EMPTY_HOME, reconcileHome, assertHomeDisjoint } from '@/domain/home';
 import { resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import { normalizeEngineName } from '@/domain/text';
 import type { AppSettings } from '@/domain/settings';
@@ -57,13 +59,18 @@ export function parseBackup(value: unknown): BackupPreview {
   const raw = record(value);
   exactManifest(raw);
   const formatVersion = raw.formatVersion;
-  if (formatVersion !== CURRENT_BACKUP_VERSION && formatVersion !== PREVIOUS_BACKUP_VERSION && formatVersion !== LEGACY_BACKUP_VERSION) {
+  if (formatVersion !== CURRENT_BACKUP_VERSION && formatVersion !== LEGACY_HOME_BACKUP_VERSION && formatVersion !== PREVIOUS_BACKUP_VERSION && formatVersion !== LEGACY_BACKUP_VERSION) {
     fail('备份版本不兼容当前文件夹协议；请使用文件夹版本 ZIP 备份');
   }
   if (typeof raw.exportedAt !== 'string' || !Number.isFinite(Date.parse(raw.exportedAt))) fail('备份时间不正确');
   const folders = validateBackupFolders(raw.folders);
   const shortcuts = validateBackupShortcuts(raw.shortcuts, folders);
-  const settings = validateBackupSettings(raw.settings, formatVersion);
+  const parsedSettings = validateBackupSettings(raw.settings, formatVersion);
+  const home = reconcileHome({ home: parsedSettings.home ?? EMPTY_HOME, folders, shortcuts });
+  if (formatVersion === CURRENT_BACKUP_VERSION && parsedSettings.home?.placements.some(({ id }) => !home.placements.some((item) => item.id === id))) fail('备份格位引用不存在');
+  if (formatVersion === CURRENT_BACKUP_VERSION && parsedSettings.home?.widgets.some(({ id }) => !parsedSettings.home?.placements.some((item) => item.id === `widget:${id}`))) fail('备份小组件格位缺失');
+  assertHomeDisjoint(home.placements);
+  const settings = { ...parsedSettings, home };
   const assets = validateBackupAssets(raw.assets, formatVersion);
   validateBackupReferences({ folders, shortcuts, settings, assets });
   const engine = resolveEngine(settings.search.defaultEngineId, settings.search.customEngines,

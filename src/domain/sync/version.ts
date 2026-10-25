@@ -7,6 +7,7 @@ export function maximumSyncClock(snapshot: SyncSnapshot): number {
     ...snapshot.shortcuts.flatMap((shortcut) => [
       shortcut.title.clock, shortcut.url.clock, shortcut.placement.clock, shortcut.icon.clock,
     ]),
+    ...Object.values(snapshot.settings.home ?? {}).map(({ clock }) => clock),
     snapshot.settings.appearance.clock, snapshot.settings.defaultEngineId.clock,
     snapshot.settings.layout.clock, snapshot.settings.clock.clock,
     snapshot.settings.searchPreferences.clock, snapshot.settings.shortcutPreferences.clock,

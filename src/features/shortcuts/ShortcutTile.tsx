@@ -20,9 +20,9 @@ interface ShortcutTileProps {
  *
  * 图片图标仅加载本地 Blob，不请求远程网站。
  */
-export function ShortcutTile({ shortcut, editing = false, showName = true, openTarget = 'current-tab' }: ShortcutTileProps) {
+export function ShortcutTile({ shortcut, editing = false, openTarget = 'current-tab' }: ShortcutTileProps) {
   const className = cn(
-    'home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none md:p-3',
+    'home-readable-focus group flex h-20 w-full flex-row items-center gap-3 rounded-2xl p-2 text-left transition-colors outline-none',
     editing
       ? 'bg-glass/30 ring-1 ring-glass-border'
       : 'hover:bg-glass/60',
@@ -39,11 +39,9 @@ export function ShortcutTile({ shortcut, editing = false, showName = true, openT
         <ShortcutIcon shortcut={shortcut} />
       </span>
       {/* 名称容器必须是零宽基准，长名称才会在格子宽度内省略，而不会把网格列撑宽。 */}
-      {showName
-        ? <span className="home-readable-chip home-readable-muted block w-full min-w-0 truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground">
-            {name}
-          </span>
-        : <span className="sr-only">{name}</span>}
+      <span className="home-readable-chip home-readable-muted block min-w-0 flex-1 truncate text-base text-glass-foreground-muted group-hover:text-glass-foreground">
+        {name}
+      </span>
     </>
   );
 

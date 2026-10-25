@@ -20,7 +20,7 @@
 | autoFocus / openTarget | false / current-tab，与网站打开目标独立 |
 | customization.corner | small/standard/pill 对应 8/16/24px；默认 standard |
 | customization.surfaceOpacity | 默认 null，使用既有背景自适应表面；整数 0–100 手动覆盖背景 alpha，不改变文字 alpha |
-| customization.placeholder | 默认“搜索、查找网站或计算”；单行纯文本，可留空，不存储输入查询 |
+| customization.placeholder | 默认空字符串；单行纯文本，可自定义提示或留空，不存储输入查询；不覆盖已有提示配置 |
 | customization.showSites / showFolders | 默认均 true，分别控制本地网站和文件夹结果 |
 | customization.enabledTools | 默认全部启用：calculation、datetime、color、github |
 | customization.engineKeywords | 默认空映射；引擎 ID → 单个关键词，trim 后不含空白和控制字符，大小写不敏感唯一 |
@@ -68,11 +68,12 @@
 
 ## 数据与兼容
 
-- 新写入为 Dexie 13、ZIP 10、同步快照 12。搜索外观、工具、关键词和预置引擎覆盖位于 `AppSettings.search.customization`，共用独立 `searchCustomization` 原子同步寄存器；原 `searchPreferences` 三个基础字段保持独立。
-- Dexie 12→13 为预置引擎补空覆盖，保留现有设置、寄存器时钟/设备身份、同步身份、generation、密钥和本机提供方凭据，失败事务回滚；当前 Beta 2 的 Dexie 11 仍按 11→12→13 迁移。
+- 当前新写入为 Dexie 14、ZIP 11、同步快照 13（2026-10-25 Niagara 主页升级），显式支持 Dexie 11–13、ZIP 8–10、同步 10–12；主页迁移见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。搜索外观、工具、关键词和预置引擎覆盖位于 `AppSettings.search.customization`，共用独立 `searchCustomization` 原子同步寄存器；原 `searchPreferences` 三个基础字段保持独立，主页固定顶部搜索不改变这些规则。
+- 历史搜索迁移：Dexie 12→13 为预置引擎补空覆盖，保留现有设置、寄存器时钟/设备身份、同步身份、generation、密钥和本机提供方凭据，失败事务回滚；Dexie 11 按 11→12→13→14 依次升级，13→14 另增 home 并规范化旧布局字段，不重置搜索配置。
 - ZIP 9 和同步快照 11 先按旧格式严格验证，再为预置引擎补空覆盖；ZIP 8 与同步快照 10 仍显式补搜索默认值。迁移保留既有数据与寄存器时钟，不覆盖已经编辑的新配置。
 - 并发删除自定义引擎时，合并会移除该引擎的关键词，并以本机设备 ID 和高于全部已观察时钟的新逻辑版本保存裁剪结果，避免同版本内容被改写。
-- ZIP 10 和同步 12 缺字段或含未知字段均拒绝；本地当前设置缺字段也明确报错，不通过运行时默认值掩盖损坏。
+- 当前 ZIP 11 和同步 13 缺字段或含未知字段均拒绝；接收旧文件夹格式时先按对应版本严格校验，再执行显式迁移（包括 ZIP 10 / 同步 12 的 home 升级）。本地当前设置缺字段也明确报错，不通过运行时默认值掩盖损坏。
+- 本轮源码未发布；普通网页与自动检查不替代真实扩展或用户视觉验收，既有 WebDAV 真实验收不覆盖新增小组件与全库媒体组合，真实 R2 尚未验收，具体结果见 VERIFICATION。
 - 旧分组数据库、ZIP 1–7、同步 1–9 和开发期 JSON 继续拒绝。旧客户端不支持新格式时明确失败，不自动清空、降级写入或重建远端库。
 - Vault descriptor、ORINUI01 envelope 和 AAD 的加密版本保持 1；不轮换密钥或改变 vault/device 身份。
 

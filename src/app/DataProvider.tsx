@@ -7,6 +7,7 @@ import { useDataState } from '@/app/use-data-state';
 import { db } from '@/storage/db';
 import { listFolderShortcuts } from '@/storage/shortcuts';
 import { readSettings } from '@/storage/settings';
+import { changeWidgetHeight, moveHomeItem, saveWidget, deleteWidget } from '@/storage/home';
 import { WebDavSyncProvider } from '@/app/WebDavSyncProvider';
 import { S3SyncProvider } from '@/app/S3SyncProvider';
 import { useOperations } from '@/app/operations';
@@ -31,9 +32,13 @@ export function DataProvider({ children }: { readonly children: ReactNode }) {
   const value = useMemo<DataContextValue>(() => ({
     status, error, folders, shortcuts, settings, loadFolderShortcuts,
     readMediaAsset,
+    moveHomeItem: async (placement) => { await moveHomeItem(db, placement); await refreshData(); },
+    saveWidget: async (widget) => { await saveWidget(db, widget); await refreshData(); },
+    updateWidgetHeight: async (id, height) => { await changeWidgetHeight(db, id, height); await refreshData(); },
+    deleteWidget: async (id) => { await deleteWidget(db, id); await refreshData(); },
     isDark: isDarkActive(settings.appearance.theme, systemPrefersDark),
     ...reportedCommands,
-  }), [status, error, folders, shortcuts, settings, loadFolderShortcuts, readMediaAsset, systemPrefersDark, reportedCommands]);
+  }), [status, error, folders, shortcuts, settings, loadFolderShortcuts, readMediaAsset, systemPrefersDark, reportedCommands, refreshData]);
   return <DataContext value={value}><WebDavSyncProvider db={db} refreshData={refreshData}>
     <S3SyncProvider db={db} refreshData={refreshData}>{children}</S3SyncProvider>
   </WebDavSyncProvider></DataContext>;

@@ -1,4 +1,5 @@
 import { fail } from '@/domain/errors';
+import { reconcileStoredHome } from '@/storage/home';
 import type { Folder } from '@/domain/folder';
 import { newId } from '@/domain/id';
 import { LIMITS } from '@/domain/limits';
@@ -14,12 +15,13 @@ export async function listFolders(db: Database): Promise<Folder[]> {
 export async function createFolder(db: Database, name: string): Promise<Folder> {
   const normalized = normalizeFolderName(name);
 
-  return db.transaction('rw', db.folders, async () => {
+  return db.transaction('rw', db.folders, db.shortcuts, db.settings, async () => {
     const existing = await db.folders.toArray();
     if (existing.length >= LIMITS.folders) fail(`最多只能有 ${LIMITS.folders} 个文件夹`);
 
     const folder: Folder = { id: newId(), name: normalized, order: nextOrder(existing) };
     await db.folders.add(folder);
+    await reconcileStoredHome(db);
     return folder;
   });
 }
@@ -58,7 +60,7 @@ export async function deleteFolder(db: Database, id: string): Promise<{ movedSho
     await db.folders.delete(id);
     await db.folders.bulkPut(renumber(remainingFolders));
     await pruneUnreferencedAssets(db);
-
+    await reconcileStoredHome(db);
     return { movedShortcuts: contained.length };
   });
 }

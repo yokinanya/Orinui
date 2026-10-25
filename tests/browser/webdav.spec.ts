@@ -6,6 +6,7 @@ async function openDataPanel(page: import('@playwright/test').Page) {
   await page.goto('/newtab.html');
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '数据', exact: true }).click();
+  await page.getByRole('region', { name: 'WebDAV 同步', exact: true }).locator('summary').click();
 }
 
 test('WebDAV 设置表单标注字段并将应用密码遮蔽', async ({ page }) => {

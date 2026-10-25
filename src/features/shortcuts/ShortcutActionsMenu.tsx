@@ -82,7 +82,8 @@ function MoveToFolderItems({ folders, includeHome, onMove }: MoveToFolderItemsPr
 }
 
 function ShortcutMenuItems({ shortcut, onEdit, containerShortcuts, onChanged }: ShortcutMenuProps) {
-  const { folders, moveShortcut, moveShortcutToFolder, deleteShortcut, restoreShortcut } = useData();
+  const { folders, settings, moveHomeItem, moveShortcut, moveShortcutToFolder, deleteShortcut, restoreShortcut } = useData();
+  const placement = settings.home?.placements.find(({ id }) => id === `shortcut:${shortcut.id}`);
   const operations = useOperations();
   const index = containerShortcuts.findIndex((item) => item.id === shortcut.id);
   // 主页网格上的网站可以移进任意文件夹；文件夹里的网站还能移回主页。
@@ -99,7 +100,8 @@ function ShortcutMenuItems({ shortcut, onEdit, containerShortcuts, onChanged }: 
     })();
   };
   const move = async (direction: 'up' | 'down') => {
-    await moveShortcut(shortcut.id, direction);
+    if (shortcut.folderId === null && placement) await moveHomeItem({ ...placement, row: placement.row + (direction === 'up' ? -1 : 1) });
+    else await moveShortcut(shortcut.id, direction);
     onChanged();
   };
   const moveToFolder = async (folderId: string | null) => {
@@ -114,7 +116,9 @@ function ShortcutMenuItems({ shortcut, onEdit, containerShortcuts, onChanged }: 
         编辑
       </ContextMenuItem>
       <ContextMenuSeparator />
-      <ShortcutPositionItems index={index} total={containerShortcuts.length} onMove={(direction) => { void move(direction).catch(notifyError); }} />
+      <ShortcutPositionItems index={shortcut.folderId === null ? placement?.row ?? 0 : index}
+        total={shortcut.folderId === null ? Number.MAX_SAFE_INTEGER : containerShortcuts.length}
+        onMove={(direction) => { void move(direction).catch(notifyError); }} />
       <MoveToFolderItems folders={candidates} includeHome={shortcut.folderId !== null}
         onMove={(folderId) => { void moveToFolder(folderId).catch(notifyError); }} />
       <ContextMenuSeparator />

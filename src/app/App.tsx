@@ -12,6 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { DEFAULT_LAYOUT, visibleSlots } from '@/domain/layout';
+import type { HomeWidget } from '@/domain/home';
+import { newId } from '@/domain/id';
 import { Clock } from '@/features/clock/Clock';
 import { SearchField } from '@/features/search/SearchField';
 import { ShortcutsRegion } from '@/features/shortcuts/ShortcutsRegion';
@@ -59,6 +61,7 @@ interface HomePageProps {
   readonly editing: boolean;
   readonly searchInputRef: RefObject<HTMLInputElement | null>;
   readonly openFolder: (folderId: string) => void;
+  readonly pendingHomeItem: string | null;
 }
 
 function BackgroundMessages({ photo }: { readonly photo: ReturnType<typeof useLocalImage> }) {
@@ -72,7 +75,7 @@ function BackgroundMessages({ photo }: { readonly photo: ReturnType<typeof useLo
   </>;
 }
 
-function HomePage({ editing, searchInputRef, openFolder }: HomePageProps) {
+function HomePage({ editing, searchInputRef, openFolder, pendingHomeItem }: HomePageProps) {
   const { status, error, settings, updateLayout } = useData();
   const systemPrefersDark = useSystemPrefersDark();
   const background = settings.appearance.background;
@@ -87,11 +90,9 @@ function HomePage({ editing, searchInputRef, openFolder }: HomePageProps) {
   if (status === 'loading') return <LoadingPage />;
   if (status === 'error') return <DataErrorPage error={error} />;
 
-  const mainAlignment = settings.layout.style === 'top-search' ? 'items-center justify-start py-8'
-    : settings.layout.style === 'left-stack' ? 'home-main-left items-start justify-center py-16'
-      : 'items-center justify-center pt-12 pb-24';
+  const mainAlignment = 'home-main-left items-start justify-start pt-16 pb-32';
   return (
-    <main data-layout-style={settings.layout.style}
+    <main data-layout-style="niagara"
       className={`flex min-h-dvh flex-col px-6 ${mainAlignment}`}>
       {renderHomeLayout({
         layout: settings.layout,
@@ -101,6 +102,7 @@ function HomePage({ editing, searchInputRef, openFolder }: HomePageProps) {
         openFolder,
         messages: <BackgroundMessages photo={photo} />,
         restoreContent: () => void updateLayout({ order: [...DEFAULT_LAYOUT.order], hidden: [] }).catch(notifyError),
+        pendingHomeItem,
       })}
     </main>
   );
@@ -109,6 +111,7 @@ function HomePage({ editing, searchInputRef, openFolder }: HomePageProps) {
 /** 点空白退出编辑：只看点击起点是否落在可交互对象（格子、按钮、菜单、输入）之外。 */
 const EDIT_SURFACE_SELECTOR = [
   '[data-shortcut-frame]',
+  '[data-home-item]',
   '[data-slot="dialog-content"]',
   '[role="menu"]',
   '[role="dialog"]',
@@ -132,12 +135,22 @@ function useLeaveEditingOnBlankClick(editing: boolean, leaveEditing: () => void)
   }, [editing, leaveEditing]);
 }
 
+function useAddWidgetAction(onCreated: (id: string) => void): (kind: HomeWidget['kind']) => void {
+  const { saveWidget } = useData();
+  return (kind) => {
+    const id = newId();
+    void saveWidget({ id, kind, text: '', items: [] }).then(() => onCreated(`widget:${id}`)).catch(notifyError);
+  };
+}
+
 function HomeContent() {
   const { status, settings } = useData();
   const [editing, setEditing] = useState(false);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const initialFocusHandled = useRef(false);
+  const [pendingHomeItem, setPendingHomeItem] = useState<string | null>(null);
+  const addWidget = useAddWidgetAction(setPendingHomeItem);
   useEffect(() => {
     if (status !== 'ready' || initialFocusHandled.current) return;
     initialFocusHandled.current = true;
@@ -156,9 +169,10 @@ function HomeContent() {
   return (
     <>
       <BackgroundLayer />
-      <HomePage editing={editing} searchInputRef={searchInputRef} openFolder={setOpenFolderId} />
+      <HomePage editing={editing} searchInputRef={searchInputRef} openFolder={setOpenFolderId}
+        pendingHomeItem={pendingHomeItem} />
       <HomeActions editing={editing} canEdit={canEdit} onEditingChange={setEditing}
-        onOpenFolder={setOpenFolderId} openFolderId={openFolderId} />
+        onOpenFolder={setOpenFolderId} openFolderId={openFolderId} onAddWidget={addWidget} />
     </>
   );
 }

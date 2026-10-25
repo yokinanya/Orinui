@@ -8,13 +8,16 @@ import { useData } from '@/app/data-context';
 import { notifyError } from '@/lib/notify';
 
 export function FolderPositionItems({ folder }: { readonly folder: Folder }) {
-  const { folders, moveFolder } = useData();
-  const index = folders.findIndex((item) => item.id === folder.id);
+  const { settings, moveHomeItem } = useData();
+  const placement = settings.home?.placements.find(({ id }) => id === `folder:${folder.id}`);
+  const move = (delta: number) => {
+    if (placement) void moveHomeItem({ ...placement, row: placement.row + delta }).catch(notifyError);
+  };
   return <>
-    <ContextMenuItem disabled={index <= 0} onClick={() => { void moveFolder(folder.id, 'up').catch(notifyError); }}>
+    <ContextMenuItem disabled={!placement || placement.row === 0} onClick={() => move(-1)}>
       <ArrowUpIcon />上移
     </ContextMenuItem>
-    <ContextMenuItem disabled={index < 0 || index === folders.length - 1} onClick={() => { void moveFolder(folder.id, 'down').catch(notifyError); }}>
+    <ContextMenuItem disabled={!placement} onClick={() => move(1)}>
       <ArrowDownIcon />下移
     </ContextMenuItem>
   </>;

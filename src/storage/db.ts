@@ -8,6 +8,7 @@ import type { SyncRecordRow, SyncStateRow, SyncKeyRow } from '@/storage/sync/typ
 import { createSyncCaptureMiddleware } from '@/storage/sync/middleware';
 import { migrateSearchCustomization } from '@/storage/search-customization-migration';
 import { migrateSearchEngineOverrides } from '@/storage/search-engine-override-migration';
+import { migrateHome } from '@/storage/home-migration';
 
 /** 设置只保存一行，id 固定；结构随版本升级迁移。 */
 export type SettingsRow = AppSettings & { id: 'app' };
@@ -43,6 +44,7 @@ function registerSchemaVersions(database: OrinuiDatabase): void {
   });
   database.version(12).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchCustomization);
   database.version(13).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchEngineOverrides);
+  database.version(14).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateHome);
 }
 
 

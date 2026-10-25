@@ -13,7 +13,7 @@ export function FolderTile({ name, editing, onClick }: {
   readonly onClick: () => void;
 }) {
   const className = cn(
-    'home-readable-focus group flex w-full flex-col items-center gap-2 rounded-2xl p-2 text-center transition-colors outline-none md:p-3',
+    'home-readable-focus group flex h-20 w-full flex-row items-center gap-3 rounded-2xl p-2 text-left transition-colors outline-none',
     editing ? 'bg-glass/30 ring-1 ring-glass-border' : 'hover:bg-glass/60',
   );
   return (
@@ -24,7 +24,7 @@ export function FolderTile({ name, editing, onClick }: {
       >
         <FolderIcon className="size-5" />
       </span>
-      <span className="home-readable-chip home-readable-muted block w-full min-w-0 truncate text-xs text-glass-foreground-muted group-hover:text-glass-foreground">
+      <span className="home-readable-chip home-readable-muted block min-w-0 flex-1 truncate text-base text-glass-foreground-muted group-hover:text-glass-foreground">
         {name}
       </span>
     </button>

@@ -28,6 +28,10 @@ export interface DataContextValue {
   /** 打开文件夹弹层时，按需读取其中的网站。 */
   loadFolderShortcuts: (folderId: string) => Promise<Shortcut[]>;
 
+  moveHomeItem: (placement: import('@/domain/home').HomePlacement) => Promise<void>;
+  saveWidget: (widget: import('@/domain/home').HomeWidget) => Promise<void>;
+  updateWidgetHeight: (id: string, height: number) => Promise<void>;
+  deleteWidget: (id: string) => Promise<void>;
   updateAppearance: (patch: Partial<AppearanceSettings>) => Promise<void>;
   updateLayout: (patch: Partial<LayoutConfig>) => Promise<void>;
   resetLayout: () => Promise<void>;

@@ -68,8 +68,6 @@ test('320px 取色弹层完整位于设置面板内', async ({ page }) => {
   await page.setViewportSize(NARROW_VIEWPORT);
   const panel = await openSettings(page);
   await page.getByRole('tab', { name: '外观', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
   await page.getByRole('button', { name: '渐变', exact: true }).click();
   await page.getByRole('button', { name: /^起始颜色，当前 / }).click();
 

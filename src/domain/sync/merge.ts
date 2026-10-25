@@ -1,4 +1,5 @@
 import { fail } from '@/domain/errors';
+import { mergeSyncHome, resolveSyncHome } from '@/domain/sync/home';
 import { SyncMergeConflictError } from '@/domain/sync/conflicts';
 import { parseSyncSnapshot } from '@/domain/sync/validate';
 import { BUILT_IN_ENGINES, type SearchEngine } from '@/domain/search-engines';
@@ -62,6 +63,7 @@ function mergeSettings(snapshots: readonly SyncSnapshot[]): SyncSettings {
   let merged: SyncSettings = { ...first.settings, customEngines };
   for (const snapshot of snapshots.slice(1)) {
     merged = {
+      home: mergeSyncHome([merged.home ?? {}, snapshot.settings.home ?? {}]),
       appearance: choose(merged.appearance, snapshot.settings.appearance),
       defaultEngineId: choose(merged.defaultEngineId, snapshot.settings.defaultEngineId),
       layout: choose(merged.layout, snapshot.settings.layout),
@@ -176,7 +178,9 @@ export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput):
     .toSorted((left, right) => left.position.value - right.position.value
       || registerOrder(right.position, left.position) || compareText(left.id, right.id));
   const shortcuts = mergedShortcuts;
-  const settings = mergeSettings(snapshots);
+  const mergedSettings = mergeSettings(snapshots);
+  const settings = { ...mergedSettings, home: resolveSyncHome({ fields: mergedSettings.home ?? {},
+    deviceId: local.deviceId, clock: Math.max(...snapshots.map(maximumSyncClock)) }) };
   const engines = settings.customEngines.filter(({ value }) => !deleted.has(tombstoneKey('custom-engine', value.id)));
   const liveSettings = removeDeletedEngineKeywords({ settings: { ...settings, customEngines: engines },
     snapshots, deviceId: local.deviceId });

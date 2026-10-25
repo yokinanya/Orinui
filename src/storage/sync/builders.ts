@@ -1,4 +1,6 @@
 import type { MediaAsset } from '@/domain/asset';
+import { buildSyncHome } from '@/domain/sync/home';
+import { EMPTY_HOME } from '@/domain/home';
 import type { Folder } from '@/domain/folder';
 import type { AppSettings } from '@/domain/settings';
 import type { SearchEngine } from '@/domain/search-engines';
@@ -119,6 +121,8 @@ export function buildAssetRecord(asset: MediaAsset, previous: SyncRecordRow | un
 export function buildSettingsRecord(settings: AppSettings, previous: SyncRecordRow | undefined, clock: SyncClock): Extract<SyncRecordRow, { kind: 'settings' }> {
   const old = livePrevious(previous, 'settings');
   const value: SyncSettings = {
+    home: buildSyncHome({ home: settings.home ?? EMPTY_HOME, previous: old?.value.home,
+      register: (value, previous) => clock.register(value, previous) }),
     appearance: clock.register(settings.appearance, old?.value.appearance),
     defaultEngineId: clock.register(settings.search.defaultEngineId, old?.value.defaultEngineId),
     layout: clock.register(settings.layout, old?.value.layout),

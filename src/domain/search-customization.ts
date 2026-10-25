@@ -17,7 +17,7 @@ export interface SearchCustomization {
 }
 export type SearchCustomizationPatch = Partial<Omit<SearchCustomization, 'engineKeywords' | 'engineOverrides'>>;
 
-const DEFAULT_PLACEHOLDER = '搜索、查找网站或计算';
+const DEFAULT_PLACEHOLDER = '';
 const DEFAULT_TOOLS: readonly SearchToolGroup[] = ['calculation', 'datetime', 'color', 'github'];
 const CORNERS = ['small', 'standard', 'pill'] as const;
 const TOOL_GROUPS = ['calculation', 'datetime', 'color', 'github'] as const;

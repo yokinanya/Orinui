@@ -63,17 +63,20 @@ export function AssetNameDialog({ asset, open, onOpenChange, onRename }: AssetNa
   </Dialog>;
 }
 
-export function AssetDeleteDialog({ asset, active, onDelete }: {
+export function AssetDeleteDialog({ asset, active, onDelete, open: controlledOpen, onOpenChange }: {
   readonly asset: MediaAsset; readonly active: boolean; readonly onDelete: (id: string) => Promise<void>;
+  readonly open?: boolean; readonly onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const action = useWallpaperDialogAction();
   return <AlertDialog open={open} onOpenChange={(next) => {
     if (action.busy) return;
     if (next) action.clearError();
     setOpen(next);
   }}>
-    <AlertDialogTrigger render={<Button type="button" size="icon" variant="ghost" aria-label="删除壁纸素材"><Trash2Icon /></Button>} />
+    {controlledOpen === undefined && <AlertDialogTrigger render={<Button type="button" size="icon" variant="ghost" aria-label="删除壁纸素材"><Trash2Icon /></Button>} />}
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>删除这份壁纸素材？</AlertDialogTitle>

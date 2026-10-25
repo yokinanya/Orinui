@@ -1,7 +1,12 @@
 # 当前工程架构
 
-本文描述当前代码职责；2026-10-19 搜索升级与此前文件夹界面已实现，自动检查、受控扩展检查和用户验收分别记录。未来同步设计单独见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)；功能进度见 [TASKS.md](./TASKS.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
+本文描述截至 2026-10-25 的当前代码职责，包含 Niagara 双列主页、小组件和 UI 自动保存；源码未发布。自动检查、普通网页、真实扩展和用户验收分别记录，既有 WebDAV 真实验收不外推至新小组件/全库媒体组合，真实 R2 尚未验收。同步设计见 [SYNC-DESIGN.md](./SYNC-DESIGN.md)；功能进度见 [TASKS.md](./TASKS.md)，检查证据见 [VERIFICATION.md](./VERIFICATION.md)。
 
+## Niagara 主页升级（2026-10-25）
+
+当前版本 Dexie 14 / ZIP 11 / sync 13。`domain/home` 定义格位、便签/待办、校验、空位分配和同列连锁下推纯函数；`storage/home` 注入数据库执行事务写入，`home-migration` 升级旧布局与主页位置。小组件与格位位于 settings.home，不增加浏览器存储或网络入口。
+
+`domain/sync/home` 把主页拆成位置、组件类型/文本、待办文本/完成/顺序独立字段寄存器；settings 捕获/seed/export/apply 与首次连接/ZIP 身份重映射共同覆盖该数据。`features/layout/HomeGrid` 是主页双列容器，`Widget` 复用现有 Button/Input/Textarea/Checkbox/AlertDialog；整理模式由卡片根节点承载拖动，隔离输入控件，便签/待办右下角手柄直接调整高度。`use-home-keyboard` 在卡片自身处理 Space 拾起、方向键选择格位、Space 放下与 Esc 取消，不劫持内部控件按键。HomeLayout 只组合固定顶部与内容，不再有四模板运行分支；竖屏专项暂缓，不自动改为单列。旧布局字段仍保留在受版本校验的设置结构中，但 UI 不再提供对应选项。
 ## 工具链
 
 | 职责 | 当前实现 |
@@ -62,7 +67,7 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 
 ## 本地数据与事务
 
-当前 Dexie schema 为版本 13；ZIP formatVersion 10 与同步 schema 12 独立于 Dexie schema。对上一版 Dexie 12、ZIP 9、同步 11 和当前 Beta 2 的 Dexie 11、ZIP 8、同步 10 均提供显式升级，见 [搜索设计](./SEARCH-DESIGN.md)。主页个性化设置与文件夹/网站层级分别保存。
+当前 Dexie schema 为版本 14；ZIP formatVersion 11 与同步 schema 13 独立于 Dexie schema。对 Dexie 11–13、ZIP 8–10、同步 10–12 提供显式升级，搜索历次升级见 [搜索设计](./SEARCH-DESIGN.md)，主页升级见 [数据契约](./DATA-CONTRACT.md)。主页小组件与格位存于 settings.home，与文件夹/网站实体分开保存并事务维护引用。
 
 | 表 | 主键与索引 | 作用 |
 |---|---|---|
@@ -76,22 +81,24 @@ WXT 入口位于 `src/entrypoints`，`@/` 指向 src，public 位于仓库根目
 
 - 多表/多次写入使用单一读写事务；失败整体回滚。
 - 领域校验在写入前执行；文件夹可删除；删除时同一事务把其中网站移回主页，不丢弃网站数据。
-- 排序维护集中在 order.ts。拖放使用 assignOrder 按传入数组顺序编号；renumber 先按现有 order 排序，不能用它替代拖放结果。
+- 实体序列和文件夹内部排序集中在 order.ts：assignOrder 按传入数组顺序编号，renumber 先按现有 order 排序，不能替代拖放结果。主页几何由 domain/home 格位规则维护，不以连续 order 压缩空洞。
 - 未发生移动时返回 null，避免无意义写入。
-以下 1–8 为历史升级行为，不表示当前 Dexie 13 接受旧分组数据库：
+以下 1–8 为历史升级行为，不表示当前 Dexie 14 接受旧分组数据库：
 
 - 版本 1 → 2 迁移补齐外观字段并新增 assets，不重建既有网站。
 - 版本 2 → 3 只新增同步表；没有配置同步库时不捕获业务记录。DBCore 中间件把本机版本与领域写入原子提交，接收事务暂停捕获防回声。
 - 版本 3 → 4 不改表/索引；将旧网站图标像素尺寸迁移为占比，并同步规范化本地同步寄存器中的图标值。
 - 版本 4 → 5 不改表/索引；为时钟、布局、搜索和网站偏好补新增字段默认值，并为新同步寄存器使用零逻辑版本，保留既有逻辑版本。已连接同步的旧库在同一升级事务中暂时暂停变更捕获，迁移完成后恢复原暂停状态；失败则整笔回滚。旧设置仍经过领域校验，损坏数据会使迁移失败。
 - 版本 5 → 6 不改表/索引；为旧布局和对应本地同步寄存器加入 `style: centered`，保留区域设置与逻辑版本。版本 6 → 7 将旧 `toolbar`/`sidebar` 映射到新命名布局，并补 `clockPosition: left`；版本 7 → 8 为设置和同步布局寄存器添加 `hideGroupNameWhenSingle: false`。迁移时暂停并恢复既有同步捕获状态，损坏值使整笔迁移回滚。
-- ZIP formatVersion 8 使用 folders/folderId 清单；旧 formatVersion 2–7 的 groups/groupId 数据明确拒绝，不能静默合并成一个文件夹。同步 schema 10–12 使用 folder 实体与 folderId placement；旧 schema 1–9 格式拒绝，不能清空或重映射远端状态。Dexie schema 11 遇到旧分组数据明确拒绝，不把网站搬到主页后清空旧表，不自动清理数据、同步身份或密钥；用户接受主动卸载重装旧版本，但不授权自动重置。Beta 1 ZIP v1、开发期 JSON 与旧 wire formats 保持拒绝。
+- 文件夹格式升级基线：ZIP formatVersion 8 开始使用 folders/folderId 清单；旧 formatVersion 2–7 的 groups/groupId 数据明确拒绝，不能静默合并成一个文件夹。同步 schema 10–13 使用 folder 实体与 folderId placement，schema 13 另增 home 字段；旧 schema 1–9 格式拒绝，不能清空或重映射远端状态。Dexie schema 11 遇到旧分组数据明确拒绝，不把网站搬到主页后清空旧表，不自动清理数据、同步身份或密钥；用户接受主动卸载重装旧版本，但不授权自动重置。Beta 1 ZIP v1、开发期 JSON 与旧 wire formats 保持拒绝。
 
 完整规则与限额见 [DATA-CONTRACT.md](./DATA-CONTRACT.md)。
 
 ## 界面数据桥
 
-DataProvider 注入数据库，由 use-data-state 加载状态、data-commands 绑定仓储操作。布局样式、时钟角落、区域、时钟、搜索和网站偏好都按字段补丁更新，在仓储事务中与当前设置合并。居中留白服从保存的区域顺序；顶部工作台与左侧锚点使用固定区域位置，排序控件会明确禁用。
+DataProvider 注入数据库，由 use-data-state 加载状态、data-commands 绑定仓储操作。有效的区域显隐、宽度/间距、时钟、搜索和网站打开偏好按字段补丁更新，在仓储事务中与当前设置合并；固定顶部和双列主页不再读取模板、角落、区域排序与最大列数作为布局分支。
+
+`features/layout/widget-draft` 管理每个组件的串行保存和字段草稿合并；`widget-autosave` 调度 600ms 防抖与未保存离开提醒，控件失焦触发提交。保存期间的新修改由同一队列继续提交，接收刷新保留本地改动字段并接受不相关字段；失败状态可见、保留草稿供显式重试，不自动重试。新增待办由保存成功结果决定是否清空输入。该 UI 控制器不替代领域校验或同步寄存器合并。
 
 启动先 ensureInitialized，读取设置、文件夹与主页网站。文件夹弹层按需读取其网站。写入成功后刷新受影响的本地状态；表单错误在字段处显示，其他失败通过提示条显示，初始化失败进入明确错误状态。
 
@@ -116,7 +123,7 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 - SVG 不通过清洗后继续使用，而是拒绝白名单外的元素、属性和引用；照片背景栅格化为静态 PNG。安全图标以 `image/svg+xml` 保存为规范化 XML：显式设置最长边不超过 1024 的宽高，缺少 `viewBox` 时按原尺寸补入 `0 0 <width> <height>`，由 XMLSerializer 序列化；保留允许的矢量几何与展示属性，不保证原字节相同。图标 MIME 在领域、资源存储、ZIP 备份与同步校验；提供 `ShortcutIcon.color` 时用本地 CSS mask 整体着色，无值则用原 SVG 图片显示。
 - 图片链接下载只在用户主动操作中联网，使用 omit credentials/no-referrer，并对每一跳阻止浏览器自动重定向。临时 webRequest 观察读取响应头中的 Location，领域层严格校验目标；同来源继续，跨来源交回界面确认并重新请求具体来源权限。同一链接通过原生独占锁串行观察，请求结束后移除监听，不常驻收集网络信息。
 - Manifest 声明可选 HTTPS 与精确 localhost HTTP 来源，不安装时授予全部站点访问。私有 DNS 最终地址判定存在平台限制。
-- ZIP 备份由 platform 流式逐资源编解码、domain 严格校验、storage 事务化替换；manifest formatVersion 为 10，全部背景素材原件和被引用的网站图标位于 `assets/<assetId>` 并带长度与 SHA-256。导入须整包验证后预览和确认，不重新下载来源 URL；开发期 JSON 与 Beta 1 ZIP v1 均不兼容。
+- ZIP 备份由 platform 流式逐资源编解码、domain 严格校验、storage 事务化替换；manifest formatVersion 为 11，包含 home 组件与格位，全部背景素材原件和被引用的网站图标位于 `assets/<assetId>` 并带长度与 SHA-256。导入须整包验证后预览和确认，不重新下载来源 URL；显式升级文件夹格式 v8–10，旧分组 ZIP、开发期 JSON 与 Beta 1 ZIP v1 均不兼容。
 - 静态图片继续保留单文件 10 MiB 及既有像素/输出规则。取消 50 MiB 本地媒体总量和 70 MiB JSON 文件限制；不设动态视频应用级单文件大小或时长上限。实际浏览器配额、文件 API 或解码容量失败必须明确显示。
 
 ## 外观与交互实现注意事项
@@ -125,10 +132,9 @@ DataProvider 注入数据库，由 use-data-state 加载状态、data-commands �
 
 颜色面板内部 HSV 保留浮点，保存为规范化 hex。测试覆盖采样色和全部灰阶；不将历史穷举或规范目标当成本次验收。高频选色写入通过 use-throttled-emit 合并，并在结束时提交尾值。
 
-主页对象管理共用菜单内容，网站与文件夹的右键/菜单键和编辑模式「⋯」提供可聚焦操作。一层文件夹与主页网站在同一网格平铺，文件夹在前、网站在后，文件夹与网站分别排序，不支持跨类型任意排序，不使用分组标签、主页导航栏或侧栏；文件夹弹层显示其网站，移动网站通过移入文件夹/移回主页操作。
+主页对象管理共用菜单内容，网站与文件夹的右键/菜单键和整理模式「⋯」提供可聚焦操作。网站、文件夹和小组件使用 settings.home 格位跨类型排列，可留空，同列碰撞链下推；order 保留给旧格式迁移、实体序列与文件夹内部排序。无分组标签、主页导航栏或侧栏；文件夹弹层显示其网站，移入文件夹/移回主页同步事务维护格位。
 
-键盘拖放用空格拿起/放下、Escape 取消，Enter 保留给对象自身动作；菜单提供不依赖拖动的排序路径。编辑模式状态由主页组合层持有。删除文件夹先查询网站数量并确认，事务内把网站返回主页，不级联删除网站。
-
+整理模式由主页组合层持有；卡片键盘移动与整卡拖动共用领域位置规则，便签/待办高度由 `features/layout/use-widget-resize` 的右下角手柄按行吸附后提交。新增网站/文件夹/小组件统一由右下角添加菜单进入，成功后最近边界定位并聚焦新卡片；编辑、删除和移动不自动滚到底，网格禁用滚动锚定。删除文件夹先查询网站数量并确认，事务内把网站返回主页，不级联删除网站。
 设置面板使用模态 Dialog，左侧分区标签仅属于设置面板，不是主页侧栏。右侧使用轻边框分区与主题/布局/背景可视选项；壁纸库和自定义引擎编辑在面板内二级页完成，提供返回入口，不另开层层弹窗。壁纸选中只是界面状态，较大详情预览通过显式“应用”写入当前背景。网站实时预览来自草稿；“保存并继续添加”保存成功后保留目标文件夹、重置本条内容，失败时保留草稿并明确显示错误。主页与文件夹弹层遵循同一网格/菜单和减少动态效果规则。
 
 ## shadcn 与样式约定
@@ -156,6 +162,6 @@ Playwright 使用 Chrome channel 访问构建产物的 HTTP 网页预览；它�
 
 ## 同步实现边界
 
-提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器和 WebDAV 提供方已实现；本轮加入全背景素材与删除墓碑，并增加 S3 提供方。Cloudflare R2 是首个实际兼容验收目标；真实 R2 和窗口焦点验收尚待完成。Beta 1 动态媒体同步审计的限制见 [Beta 发布记录](./BETA-0.1.0.md)。基础 API 见 SYNC-PROTOCOL.md，协调流程见 SYNC-COORDINATOR.md，WebDAV 和 S3 细节分别见 SYNC-WEBDAV.md 与 SYNC-S3.md。
+提供方、媒体范围、端到端加密和高层合并方向已经选定。同步基础层、手动协调器和 WebDAV 提供方已实现；本轮加入全背景素材与删除墓碑，并增加 S3 提供方。Cloudflare R2 是首个实际兼容验收目标；真实 R2 和窗口焦点验收尚待完成。Beta 1 动态媒体同步审计的限制见 [Beta 发布记录](./VERIFICATION.md)。协议、协调流程与 WebDAV/S3 细节统一见 [同步设计](./SYNC-DESIGN.md)。
 
 domain/sync 定义协议、对象边界校验和合并规则，storage/sync 管理状态/版本与短事务，sync 注入这些依赖协调手动操作，platform 管理原生锁/加密/媒体。请求与计算在事务外；本机完整提交先于上传/远端发布，后续新编辑保留更高代次并返回 pending。发布保护由提供方模式决定；运行身份与基线独立于发布成功，集成测试不代表云端验收。

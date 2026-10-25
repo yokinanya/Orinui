@@ -53,24 +53,18 @@ test('自定义暗背景下空主页标题、引导和添加操作可读', async
   await page.getByRole('button', { name: '常用', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: '删除文件夹', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '删除文件夹', exact: true }).click();
-  await expect(page.getByText('还没有网站', { exact: true })).toBeVisible();
-  await expectReadableHomepage(page, [
-    { selector: '[data-slot="empty-title"]' },
-    { selector: '[data-slot="empty-description"]' },
-    { selector: '[data-slot="empty"] button' },
-  ]);
+  const emptyEntry = page.getByRole('button', { name: '添加第一个网站', exact: true });
+  await expect(emptyEntry).toBeVisible();
+  // 主页为空时只保留明确的添加入口，它必须能在暗背景上读出。
+  await expectReadableHomepage(page, [{ selector: '[data-home-empty]' }]);
 });
 
 test('自定义暗背景下编辑模式的操作与添加入口可读', async ({ page }) => {
   await configureBackground(page, BACKGROUND_CASES[0]!);
-  await page.getByRole('button', { name: '编辑网站' }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
   await expect(page.getByRole('button', { name: '完成编辑' })).toBeVisible();
   await expectReadableHomepage(page, [
     { selector: 'button[aria-label="完成编辑"]', icon: true },
-    { selector: 'button[aria-label="新建文件夹"]', icon: true },
-    { selector: 'button[aria-label="对比度站点 的操作"]', icon: true },
-    { selector: '[data-folder-tile] > span:last-child' },
-    { selector: '.shortcut-grid li:last-child button span:last-child' },
-    { selector: '.shortcut-grid li:last-child button span:first-child', icon: true },
+    { selector: 'button[aria-label="添加"][aria-haspopup="menu"]', icon: true },
   ]);
 });

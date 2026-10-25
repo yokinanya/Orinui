@@ -121,14 +121,14 @@ export function OperationCenterButton() {
     timer.current = window.setTimeout(() => setOpen(false), UNDO_REVEAL_MS);
     return () => window.clearTimeout(timer.current);
   }, [undoable]);
-  if (operations.length === 0) return null;
+  if (!operations.some((operation) => operation.status !== 'succeeded' || operation.undo)) return null;
   const running = operations.filter(({ status }) => status === 'running').length;
   return <Popover open={open} onOpenChange={setOpen}>
     <PopoverTrigger render={<Button type="button" variant="ghost" size="icon" aria-label={operationButtonLabel(operations)}
       className="home-readable-control home-readable-focus relative rounded-full"><ActivityIcon />
       {running > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary" />}
       {undoable && <span className="absolute -top-0.5 -left-0.5 size-2 rounded-full bg-destructive" />}</Button>} />
-    <PopoverContent side="bottom" align="end" role="region" aria-label="操作状态"
+    <PopoverContent side="bottom" align="end" role="region" aria-label="操作状态" initialFocus={false} finalFocus={false}
       className="max-h-[min(38rem,calc(100dvh-2rem))] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto">
       <h2 className="text-sm font-semibold">操作状态</h2>
       <ul className="flex flex-col gap-2">

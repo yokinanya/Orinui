@@ -2,30 +2,13 @@ import assert from 'node:assert/strict';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 
 const extensionPath = resolve('.output/chrome-mv3');
 const auditDirectory = resolve('.output/search-audit');
 const reportPath = join(auditDirectory, 'migration-report.json');
 const databaseName = 'orinui';
 
-async function waitForFreshSettings(page) {
-  await page.waitForFunction(async (name) => {
-    if (!(await indexedDB.databases()).some((database) => database.name === name)) return false;
-    const database = await new Promise((resolve, reject) => {
-      const request = indexedDB.open(name);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const settings = await new Promise((resolve, reject) => {
-      const request = database.transaction('settings').objectStore('settings').get('app');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    database.close();
-    return Boolean(settings);
-  }, databaseName, { timeout: 15_000 });
-}
 
 async function readSettings(page) {
   return page.evaluate(async (name) => {
@@ -40,7 +23,6 @@ async function readSettings(page) {
       request.onerror = () => reject(request.error);
     });
     database.close();
-    if (!settings) throw new Error('Fresh extension database has no settings row');
     return settings;
   }, databaseName);
 }
@@ -67,7 +49,8 @@ async function createCryptoProof(page) {
 
 function createLegacyRows(currentSettings, deviceId, vaultId) {
   const { customization: _customization, ...oldSearch } = currentSettings.search;
-  const oldSettings = { ...currentSettings, search: { ...oldSearch, width: 'wide', autoFocus: true, openTarget: 'new-tab' } };
+  const { home: _home, ...legacySettings } = currentSettings;
+  const oldSettings = { ...legacySettings, search: { ...oldSearch, width: 'wide', autoFocus: true, openTarget: 'new-tab' } };
   const syncRegister = (value, clock) => ({ value, clock, deviceId });
   const rows = {
     folders: [{ id: 'audit-folder', name: '迁移文件夹', order: 2 }],
@@ -133,7 +116,7 @@ async function waitForMigration(page) {
       request.onsuccess = () => {
         const version = request.result.version;
         request.result.close();
-        resolve(version === 130);
+        resolve(version === 140);
       };
       request.onerror = () => reject(request.error);
     });
@@ -176,7 +159,11 @@ async function readMigratedData(page, proof) {
 
 function assertMigratedData(input) {
   const { migrated, currentSettings, proof, externalRequests } = input;
-  assert.equal(migrated.version, 130);
+  assert.equal(migrated.version, 140);
+  assert.deepEqual(migrated.settings.home, { widgets: [], placements: [
+    { id: 'folder:audit-folder', column: 0, row: 0, height: 1 },
+  ] });
+  assert.ok(migrated.settingsRecord.value.home, 'Home sync registers must be seeded');
   assert.deepEqual(migrated.state, { id: 'app', vaultId: proof.vaultId, deviceId: proof.deviceId,
     clock: 42, generation: 13, suspended: false, hasAcceptedSnapshot: true });
   assert.deepEqual(migrated.settings.search.customization, currentSettings.search.customization);
@@ -198,6 +185,44 @@ function assertMigratedData(input) {
   assert.equal(externalRequests, 0);
 }
 
+async function verifyHomePersistence(page, extensionId) {
+  await page.goto(`chrome-extension://${extensionId}/newtab.html`);
+  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
+  await page.getByRole('button', { name: '添加便签', exact: true }).click();
+  const note = page.getByLabel('便签内容');
+  await note.fill('<b>真实扩展纯文本</b>\n迁移后保存');
+  const item = page.locator('[data-home-item]').filter({ has: note });
+  await item.hover();
+  await item.getByRole('button', { name: '选择位置', exact: true }).click();
+  await page.getByRole('button', { name: '下移一格', exact: true }).click();
+  await page.getByRole('button', { name: '添加待办', exact: true }).click();
+  const draft = page.getByLabel('新待办', { exact: true });
+  await draft.fill('真实扩展待办');
+  await draft.press('Enter');
+  const checkbox = page.getByRole('checkbox', { name: '完成 真实扩展待办' });
+  await checkbox.press('Space');
+  await page.waitForFunction(async () => {
+    const request = indexedDB.open('orinui');
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const settings = await new Promise((resolve, reject) => {
+      const query = db.transaction('settings').objectStore('settings').get('app');
+      query.onsuccess = () => resolve(query.result);
+      query.onerror = () => reject(query.error);
+    });
+    db.close();
+    return settings.home.widgets.some((widget) => widget.items.some((item) => item.completed));
+  });
+  const saved = (await readSettings(page)).home;
+  await page.reload();
+  assert.equal(await note.inputValue(), '<b>真实扩展纯文本</b>\n迁移后保存');
+  assert.equal(await checkbox.isChecked(), true);
+  assert.deepEqual((await readSettings(page)).home, saved);
+  return saved;
+}
+
 async function runAudit() {
   const profilePath = join(auditDirectory, `profile-${randomUUID()}`);
   await mkdir(profilePath, { recursive: true });
@@ -205,7 +230,10 @@ async function runAudit() {
   let externalRequests = 0;
   try {
     context = await chromium.launchPersistentContext(profilePath, {
-      channel: 'chrome', headless: true, ignoreDefaultArgs: ['--disable-extensions'],
+      ...(process.env.ORINUI_AUDIT_CHROMIUM
+        ? { executablePath: process.env.ORINUI_AUDIT_CHROMIUM, channel: 'chromium' }
+        : { channel: 'chrome' }),
+      headless: true, ignoreDefaultArgs: ['--disable-extensions'],
       args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     });
     const pages = context.pages();
@@ -214,7 +242,11 @@ async function runAudit() {
     await page.goto('chrome://newtab');
     await page.waitForURL(/^chrome-extension:\/\//, { timeout: 15_000 });
     const extensionId = new URL(page.url()).hostname;
-    await waitForFreshSettings(page);
+    await page.goto(`chrome-extension://${extensionId}/newtab.html`);
+    await page.getByRole('button', { name: '设置', exact: true }).waitFor();
+    await expect.poll(() => readSettings(page), { timeout: 15_000 }).toMatchObject({
+      search: { customization: expect.any(Object) },
+    });
     const currentSettings = await readSettings(page);
     assert.ok(currentSettings.search?.customization, 'Fresh extension must expose current settings');
     for (const extraPage of context.pages()) if (extraPage !== page) await extraPage.close();
@@ -227,7 +259,9 @@ async function runAudit() {
     await page.goto(`chrome-extension://${extensionId}/icon/16.png`);
     const migrated = await readMigratedData(page, proof);
     assertMigratedData({ migrated, currentSettings, proof, externalRequests });
-    return { status: 'passed', chromeVersion: context.browser()?.version() ?? 'unknown', extensionId,
+    const persistedHome = await verifyHomePersistence(page, extensionId);
+    assert.equal(externalRequests, 0);
+    return { status: 'passed', persistedHome, chromeVersion: context.browser()?.version() ?? 'unknown', extensionId,
       databaseVersion: migrated.version, preserved: ['settings', 'folder', 'shortcut', 'vaultId', 'deviceId',
         'clock', 'generation', 'nonextractable CryptoKey'], migratedSearchRegister: migrated.settingsRecord.value.searchCustomization,
       externalRequests };

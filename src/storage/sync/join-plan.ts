@@ -40,6 +40,7 @@ function promoteLocal(input: {
     })),
     assets: local.assets.map((asset) => ({ ...asset, sourceUrl: register(asset.sourceUrl) })),
     settings: {
+      home: Object.fromEntries(Object.entries(local.settings.home ?? {}).map(([id, value]) => [id, register(value)])),
       appearance: register(local.settings.appearance), defaultEngineId: register(local.settings.defaultEngineId),
       layout: register(local.settings.layout), clock: register(local.settings.clock),
       searchPreferences: register(local.settings.searchPreferences),

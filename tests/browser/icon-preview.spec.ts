@@ -92,8 +92,8 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await page.reload();
   await expect(shortcut.locator('[role="img"]')).toHaveCSS('background-color', 'rgb(192, 32, 32)');
 
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
-  await page.getByRole('button', { name: 'SVG站点 的操作' }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
+  await page.getByRole('button', { name: 'SVG站点 的操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   await expect(page.getByRole('button', { name: 'SVG 图标颜色，当前 #c02020' })).toBeVisible();
   await page.getByRole('button', { name: '恢复原色', exact: true }).click();
@@ -103,8 +103,8 @@ test('安全 SVG 图标可着色、保存并恢复原色', async ({ page }) => {
   await expect(shortcut.locator('img')).toBeVisible();
   await expect(shortcut.locator('[role="img"]')).toHaveCount(0);
 
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
-  await page.getByRole('button', { name: 'SVG站点 的操作' }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
+  await page.getByRole('button', { name: 'SVG站点 的操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   await page.getByRole('button', { name: '选择内置图标' }).click();
   await page.getByRole('button', { name: '使用爱心图标' }).click();
@@ -133,8 +133,8 @@ test('SVG 图片处理中颜色预览控件暂时禁用', async ({ page }) => {
   await page.getByLabel('选择图标文件').setInputFiles({ name: 'icon.svg', mimeType: 'image/svg+xml', buffer: svg });
   await expect(page.getByRole('button', { name: /^SVG 图标颜色/ })).toBeVisible();
   await visibleSubmitButton(page).click();
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
-  await page.getByRole('button', { name: '忙碌中的SVG 的操作' }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
+  await page.getByRole('button', { name: '忙碌中的SVG 的操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '编辑', exact: true }).click();
   const colorPicker = page.getByRole('button', { name: /^SVG 图标颜色/ });
   await page.evaluate(() => {

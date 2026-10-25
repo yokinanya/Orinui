@@ -29,7 +29,7 @@ export function ResetDataPanel() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>永久删除本地数据？</AlertDialogTitle>
-            <AlertDialogDescription>本机网站、文件夹、背景和设置都会删除，并恢复为空白主页。</AlertDialogDescription>
+            <AlertDialogDescription>本机网站、文件夹、便签与待办、全库壁纸素材与图标和设置都会删除，并恢复为空白主页。</AlertDialogDescription>
           </AlertDialogHeader>
           {error && <FieldError role="alert">{error}</FieldError>}
           <AlertDialogFooter>

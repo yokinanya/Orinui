@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowLeft, ArrowRight, Images } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BackgroundPanel } from '@/features/settings/BackgroundPanel';
 import { DynamicColorPanel } from '@/features/settings/DynamicColorPanel';
 import { SettingsSection } from '@/features/settings/SettingsSection';
 import { ThemePanel } from '@/features/settings/ThemePanel';
 import { WallpaperLibrary } from '@/features/settings/WallpaperLibrary';
+import { WallpaperUploadPanel } from '@/features/settings/WallpaperUploadPanel';
 
 export function AppearancePanel() {
   const [page, setPage] = useState<'appearance' | 'background' | 'create'>('appearance');
-  const backgroundTrigger = useRef<HTMLButtonElement>(null);
+  const backgroundTrigger = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   const returnFromCreate = useRef(false);
   useEffect(() => {
     if (page === 'appearance' && restoreFocus.current) {
-      backgroundTrigger.current?.focus();
+      backgroundTrigger.current?.querySelector('[data-open-wallpaper-library]')?.closest('button')?.focus();
       restoreFocus.current = false;
     }
   }, [page]);
@@ -28,8 +29,8 @@ export function AppearancePanel() {
       <Button autoFocus variant="ghost" className="self-start" onClick={returnToParent}>
         <ArrowLeft data-icon="inline-start" />返回壁纸库
       </Button>
-      <SettingsSection title="新建壁纸" description="选择背景类型或上传壁纸。">
-        <BackgroundPanel fresh />
+      <SettingsSection title="添加壁纸" description="上传照片、动态素材，或主动下载图片。">
+        <WallpaperUploadPanel />
       </SettingsSection>
     </div>
   );
@@ -41,22 +42,20 @@ export function AppearancePanel() {
       <WallpaperLibrary focusCreate={returnFromCreate.current} onCreate={() => setPage('create')} />
     </div>
   );
-  return <AppearanceHome trigger={backgroundTrigger} onOpen={() => setPage('background')} />;
+  return <AppearanceHome trigger={backgroundTrigger} returning={restoreFocus.current} onOpen={() => setPage('background')} />;
 }
 
-function AppearanceHome({ trigger, onOpen }: {
-  readonly trigger: RefObject<HTMLButtonElement | null>;
+function AppearanceHome({ trigger, onOpen, returning }: {
+  readonly trigger: RefObject<HTMLDivElement | null>;
   readonly onOpen: () => void;
+  readonly returning: boolean;
 }) {
   return (
     <div className="settings-columns grid items-start gap-4">
       <div className="flex min-w-0 flex-col gap-4">
         <SettingsSection title="主题模式"><ThemePanel /></SettingsSection>
         <SettingsSection title="背景">
-          <Button ref={trigger} variant="outline" className="w-full justify-between" onClick={onOpen}>
-            <span className="flex items-center gap-2"><Images data-icon="inline-start" />壁纸与背景</span>
-            <ArrowRight data-icon="inline-end" />
-          </Button>
+          <div ref={trigger} tabIndex={-1} className="focus:outline-none"><BackgroundPanel onOpenLibrary={onOpen} initialWallpaper={returning} /></div>
         </SettingsSection>
       </div>
       <SettingsSection title="界面配色"><DynamicColorPanel /></SettingsSection>

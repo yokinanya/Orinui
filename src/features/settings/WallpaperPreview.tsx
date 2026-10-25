@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 export function WallpaperStatus({ className }: { readonly className?: string }) {
   return <Badge className={className}>
-    <CheckIcon aria-hidden="true" />当前壁纸
+    <CheckIcon aria-hidden="true" />已应用
   </Badge>;
 }
 

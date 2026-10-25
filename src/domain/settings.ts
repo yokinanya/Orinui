@@ -10,6 +10,7 @@ import { resolveEngine, validateEngineTemplate, type SearchEngine } from '@/doma
 import { normalizeEngineName } from '@/domain/text';
 import { createDefaultSearchCustomization, validateSearchCustomization, type SearchCustomization } from '@/domain/search-customization';
 import { asRecord } from '@/domain/validate';
+import { EMPTY_HOME, validateHome, type HomeData } from '@/domain/home';
 
 /** 时钟格式三态：跟随系统或手动固定。 */
 export type ClockFormat = 'system' | '12h' | '24h';
@@ -30,6 +31,7 @@ export interface ShortcutPreferences {
 }
 
 export interface AppSettings {
+  home?: HomeData;
   appearance: AppearanceSettings;
   search: {
     defaultEngineId: string;
@@ -70,6 +72,7 @@ function booleanSetting(value: unknown, label: string): boolean {
 /** 数据契约 §10 的默认值。 */
 export function createDefaultSettings(): AppSettings {
   return {
+    home: EMPTY_HOME,
     appearance: createDefaultAppearance(),
     search: { defaultEngineId: 'google', customEngines: [], width: 'standard', autoFocus: false, openTarget: 'current-tab',
       customization: createDefaultSearchCustomization() },
@@ -163,6 +166,7 @@ export function validateSettings(value: unknown): AppSettings {
     if (!resolveEngine(engineId, customEngines, customization.engineOverrides)) fail(`搜索引擎关键词引用不存在：${engineId}`);
   }
   return {
+    home: raw.home === undefined ? EMPTY_HOME : validateHome(raw.home),
     appearance: validateAppearance(raw.appearance),
     search: { defaultEngineId: search.defaultEngineId, customEngines, ...searchPreferences, customization },
     shortcuts: validateShortcutPreferences(raw.shortcuts),

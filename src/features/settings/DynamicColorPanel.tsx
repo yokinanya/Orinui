@@ -10,8 +10,8 @@ function SeedField({ seed, onChange }: { readonly seed: string; readonly onChang
   return (
     <Field>
       <div className="flex items-center justify-between gap-2">
-        <FieldLabel htmlFor="seed-color">种子色</FieldLabel>
-        <ColorPicker id="seed-color" label="种子色" value={seed} onChange={onChange} />
+        <FieldLabel htmlFor="seed-color">主题色</FieldLabel>
+                <ColorPicker id="seed-color" label="主题色" value={seed} onChange={onChange} />
       </div>
     </Field>
   );
@@ -29,14 +29,14 @@ export function DynamicColorPanel() {
     <FieldGroup>
       <Field>
         <div className="flex items-center justify-between gap-2">
-          <FieldLabel htmlFor="dynamic-color">跟随背景取色</FieldLabel>
+          <FieldLabel htmlFor="dynamic-color">启用动态配色</FieldLabel>
           <Switch id="dynamic-color" checked={color.enabled}
             onCheckedChange={(enabled) => update({ dynamicColor: { ...color, enabled } })} />
         </div>
       </Field>
       {color.enabled && <Field>
-        <FieldLabel>取色方式</FieldLabel>
-        <ToggleGroup className="settings-segmented" value={[color.mode]} onValueChange={(value) => {
+        <FieldLabel id="dynamic-color-source">配色来源</FieldLabel>
+        <ToggleGroup aria-labelledby="dynamic-color-source" className="settings-segmented" value={[color.mode]} onValueChange={(value) => {
           if (value[0] === 'follow') update({ dynamicColor: { ...color, mode: 'follow', seed: null } });
           if (value[0] === 'locked') selectSeed(seedDraft);
         }}>

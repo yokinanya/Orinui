@@ -1,6 +1,9 @@
 import { validateAppearance } from '@/domain/appearance';
+import { validateSyncHome, seedHome } from '@/domain/sync/home';
+import { EMPTY_HOME, reconcileHome } from '@/domain/home';
+import { LEGACY_HOME_SYNC_SCHEMA_VERSION } from '@/domain/sync/types';
 import { fail } from '@/domain/errors';
-import { validateLayout } from '@/domain/layout';
+import { DEFAULT_LAYOUT, validateLayout } from '@/domain/layout';
 import { LIMITS } from '@/domain/limits';
 import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import type { ShortcutIcon } from '@/domain/shortcut';
@@ -100,6 +103,7 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
   const raw = asRecord(value, '同步设置');
   const keys = ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'];
   if (schemaVersion >= LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION) keys.push('searchCustomization');
+  if (schemaVersion === SYNC_SCHEMA_VERSION && Object.hasOwn(raw, 'home')) keys.push('home');
   exactKeys(raw, keys, '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
   if (raw.customEngines.length > LIMITS.customEngines) fail('自定义搜索引擎数量超限');
@@ -108,7 +112,10 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
   if (new Set(customEngines.map(({ value: engine }) => engine.id)).size !== customEngines.length) fail('自定义搜索引擎标识重复');
   if (customEngines.some(({ value: engine }) => BUILT_IN_ENGINES.some(({ id }) => id === engine.id))) fail('自定义引擎不能使用内置标识');
   const appearance = validateRegister(raw.appearance, '外观设置', parseAppearance);
-  const layout = validateRegister(raw.layout, '布局设置', parseLayout);
+  const originalLayout = validateRegister(raw.layout, '布局设置', parseLayout);
+  const layout = schemaVersion === SYNC_SCHEMA_VERSION ? originalLayout : { ...originalLayout,
+    value: { ...originalLayout.value, style: DEFAULT_LAYOUT.style, order: [...DEFAULT_LAYOUT.order],
+      clockPosition: DEFAULT_LAYOUT.clockPosition, columns: DEFAULT_LAYOUT.columns } };
   const defaultEngineId = validateRegister(raw.defaultEngineId, '默认引擎', (item) => parseString(item, '默认引擎'));
   const clock = validateRegister(raw.clock, '时钟设置', (item) => validateSettings({
     ...createDefaultSettings(), clock: item,
@@ -125,9 +132,11 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
   const shortcutPreferences = validateRegister(raw.shortcutPreferences, '网站偏好', (item) => {
     const value = asRecord(item, '网站偏好');
     exactKeys(value, ['showNames', 'openTarget'], '网站偏好');
-    return validateSettings({ ...createDefaultSettings(), shortcuts: value }).shortcuts;
+    const parsed = validateSettings({ ...createDefaultSettings(), shortcuts: value }).shortcuts;
+    return schemaVersion === SYNC_SCHEMA_VERSION ? parsed : { ...parsed, showNames: true };
   });
-  const settings = { appearance, defaultEngineId, layout, clock, searchPreferences, searchCustomization, shortcutPreferences, customEngines };
+  const home = raw.home === undefined ? undefined : validateSyncHome(raw.home);
+  const settings = { ...(home ? { home } : {}), appearance, defaultEngineId, layout, clock, searchPreferences, searchCustomization, shortcutPreferences, customEngines };
   const rawSettings = {
     appearance: appearance.value,
     search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine),
@@ -225,14 +234,14 @@ function isSupportedSchemaVersion(value: unknown): value is SupportedSyncSchemaV
     || value === LEGACY_LAYOUT_SYNC_SCHEMA_VERSION || value === LEGACY_GROUP_SYNC_SCHEMA_VERSION
     || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION
     || value === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION || value === LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION
-    || value === SYNC_SCHEMA_VERSION;
+    || value === LEGACY_HOME_SYNC_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
 }
 
 function validateSnapshotEnvelope(raw: RecordValue): SupportedSyncSchemaVersion {
   const schemaVersion = raw.schemaVersion;
   if (!isSupportedSchemaVersion(schemaVersion)) fail('同步快照版本不受支持');
   if (schemaVersion !== LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION &&
-    schemaVersion !== LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
+    schemaVersion !== LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION && schemaVersion !== LEGACY_HOME_SYNC_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
     fail('旧分组同步协议不兼容当前文件夹版本；需要重新启用同步并显式重置远端库');
   }
   exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'folders', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
@@ -270,7 +279,12 @@ function validateSnapshotEntities(snapshot: SyncSnapshot): void {
 export function parseSyncSnapshot(value: unknown): SyncSnapshot {
   const raw = asRecord(value, '同步快照');
   const schemaVersion = validateSnapshotEnvelope(raw);
-  const snapshot = parseSnapshotFields(raw as SnapshotEnvelope, schemaVersion);
+  const parsed = parseSnapshotFields(raw as SnapshotEnvelope, schemaVersion);
+  const legacyHome = reconcileHome({ home: EMPTY_HOME,
+    folders: parsed.folders.map((folder) => ({ id: folder.id, order: folder.position.value })),
+    shortcuts: parsed.shortcuts.map((shortcut) => ({ id: shortcut.id, ...shortcut.placement.value })) });
+  const snapshot = parsed.settings.home === undefined && schemaVersion !== SYNC_SCHEMA_VERSION
+    ? { ...parsed, settings: { ...parsed.settings, home: seedHome(legacyHome, parsed.deviceId) } } : parsed;
   validateSnapshotEntities(snapshot);
   validateReferences(snapshot);
   return snapshot;

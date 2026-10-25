@@ -1,15 +1,15 @@
 import { WallpaperSortableGrid } from '@/features/settings/WallpaperSortableGrid';
 import { PlusIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { BackgroundPanel } from '@/features/settings/BackgroundPanel';
 import { useState } from 'react';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { FieldDescription, FieldGroup, FieldTitle } from '@/components/ui/field';
+import { FieldGroup, FieldTitle } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { MediaAsset } from '@/domain/asset';
 import { AssetNameDialog } from '@/features/settings/WallpaperCard';
 import { WallpaperDetails } from '@/features/settings/WallpaperDetails';
+
 import { useWallpaperLibrary } from '@/features/settings/use-wallpaper-library';
 import { useWallpaperSelection } from '@/features/settings/use-wallpaper-selection';
 
@@ -27,7 +27,7 @@ function WallpaperEmpty({ hasAssets }: { readonly hasAssets: boolean }) {
   return <Empty className="border border-dashed border-border/60 py-10">
     <EmptyHeader>
       <EmptyTitle>{hasAssets ? '还没有这类壁纸' : '还没有壁纸'}</EmptyTitle>
-      <EmptyDescription>{hasAssets ? '试试其他分类。' : '点击“新建壁纸”添加。'}</EmptyDescription>
+      <EmptyDescription>{hasAssets ? '试试其他分类。' : '点击“添加壁纸”上传或下载素材。'}</EmptyDescription>
     </EmptyHeader>
   </Empty>;
 }
@@ -58,7 +58,7 @@ export function WallpaperLibrary({ onCreate, focusCreate = false }: {
   return <FieldGroup className="wallpaper-workspace min-h-0 flex-1 gap-2">
     <div className="grid min-h-0 min-w-0 flex-1 items-start gap-4 md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
       <section aria-label="壁纸库" className="flex h-full min-h-0 min-w-0 flex-col gap-2">
-        <Button autoFocus={focusCreate} type="button" variant="outline" className="self-start" onClick={onCreate}><PlusIcon data-icon="inline-start" />新建壁纸</Button>
+        <Button autoFocus={focusCreate} type="button" variant="outline" className="self-start" onClick={onCreate}><PlusIcon data-icon="inline-start" />添加壁纸</Button>
         <WallpaperLibraryHeader count={library.assets.length} filter={filter}
           onFilter={(next) => { setFilter(next); clear(); }} />
         {library.error && <p role="alert" className="text-sm text-destructive">{library.error}</p>}
@@ -71,14 +71,12 @@ export function WallpaperLibrary({ onCreate, focusCreate = false }: {
 
       </section>
       <div ref={detailRef} tabIndex={-1} aria-label="壁纸预览和编辑" className="min-w-0 focus:outline-none">
-        {selected ? <>
-          <WallpaperDetails key={selected.id} asset={selected} active={selected.id === library.activeId} busy={library.busy}
-            onClose={close} onActivate={library.activate} onDelete={library.remove}
-            onRenameRequest={setRenaming} />
-          {selected.id === library.activeId && <div className="mt-2"><BackgroundPanel editing /></div>}
-        </> : <Empty className="min-h-48 rounded-2xl border border-dashed border-border/60">
+        {selected ? <WallpaperDetails key={selected.id} asset={selected} active={selected.id === library.activeId}
+          busy={library.busy} onClose={close} onActivate={library.activate} onDelete={library.remove}
+          onRenameRequest={setRenaming} />
+          : <Empty className="min-h-48 rounded-2xl border border-dashed border-border/60">
           <EmptyHeader><EmptyTitle>选择壁纸</EmptyTitle>
-            <EmptyDescription>从左侧选择壁纸。</EmptyDescription></EmptyHeader>
+            <EmptyDescription>选择仅查看详情，不会更换当前背景。</EmptyDescription></EmptyHeader>
         </Empty>}
       </div>
     </div>

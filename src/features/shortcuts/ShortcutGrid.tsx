@@ -179,7 +179,7 @@ export function ShortcutGrid(props: ShortcutGridProps) {
       <SortableContext items={items} strategy={rectSortingStrategy}>
         <div data-shortcut-frame className={cn('min-w-0 w-full max-w-full', alignment === 'center' ? 'mx-auto' : 'mx-0')}>
           <ul data-shortcut-alignment={alignment} className="shortcut-grid w-full"
-            style={{ gridTemplateColumns: shortcutColumns(settings.layout.columns) }}>
+            style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             {folders.map((folder) => (
               <SortableFolder key={folder.id} folder={folder} editing={editing} onOpen={onOpenFolder}
                 onRename={onEditFolder} onDelete={onDeleteFolder} />

@@ -6,7 +6,8 @@ const child = spawn(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 
 });
 const timer = setTimeout(() => {
   console.error('测试超过 60 秒，已终止。');
-  child.kill();
+  if (process.platform === 'win32') spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'inherit' });
+  else child.kill('SIGKILL');
   process.exitCode = 1;
 }, TEST_TIMEOUT_MS);
 child.on('error', (error) => { clearTimeout(timer); console.error(error); process.exitCode = 1; });

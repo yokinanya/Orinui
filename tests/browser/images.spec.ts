@@ -13,7 +13,7 @@ const svg = (content = '<rect width="40" height="20" fill="#37a1b2"/>') => ({
 test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
 
 async function selectPhotoBackground(page: Page) {
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
 }
 
 async function rasterFile(page: Page, input: { readonly mime: string; readonly width: number; readonly height: number }) {
@@ -34,8 +34,9 @@ async function rasterFile(page: Page, input: { readonly mime: string; readonly w
 
 test('照片上传、动态色、遮罩与刷新持久化', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('55%');
@@ -46,15 +47,17 @@ test('照片上传、动态色、遮罩与刷新持久化', async ({ page }) => 
   await page.reload();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
   await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('80%');
 });
 
 test('危险 SVG 被明确拒绝，不修改现有照片', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
@@ -100,8 +103,9 @@ for (const content of [
 ]) {
   test(`拒绝 SVG 危险或未支持内容：${content.slice(0, 30)}`, async ({ page }) => {
     await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
     await selectPhotoBackground(page);
     await page.getByLabel('上传照片').setInputFiles(svg(content));
     await expect(page.getByText(/SVG (含不支持|不允许)/)).toBeVisible();
@@ -114,8 +118,9 @@ for (const mime of ['image/png', 'image/jpeg', 'image/webp']) {
     const requests: string[] = [];
     page.on('request', (request) => { requests.push(request.url()); });
     await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
     await selectPhotoBackground(page);
     await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, { mime, width: 80, height: 40 }));
     await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
@@ -136,11 +141,12 @@ test('拒绝解码损坏文件与超过图标像素上限的图片', async ({ pa
 
 test('主页全部隐藏后可从主页一键恢复', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '布局' }).click();
-  for (const slot of ['时钟', '搜索', '快捷方式']) {
-    await page.getByRole('switch', { name: `显示${slot}` }).click();
+  for (const slot of ['时钟', '搜索', '主页内容']) {
+    await page.getByRole('switch', { name: `显示${slot}`, exact: true }).click();
   }
   await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: '关闭' }).click();
   const homepageRestore = page.getByRole('main').getByRole('button', { name: '恢复主页内容' });
@@ -154,23 +160,26 @@ test('主页全部隐藏后可从主页一键恢复', async ({ page }) => {
 
 test('时钟格式在设置和重新打开页面后保持', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '布局' }).click();
   await page.getByRole('button', { name: '24 小时', exact: true }).click();
   await expect(page.getByRole('button', { name: '24 小时', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '布局' }).click();
   await expect(page.getByRole('button', { name: '24 小时', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('ZIP 可导出、预览导入并在确认后完整替换本地数据', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -192,12 +201,13 @@ test('ZIP 可导出、预览导入并在确认后完整替换本地数据', asyn
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('link', { name: '将被覆盖的网站' })).toBeVisible();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   await page.getByLabel('选择本地 ZIP 备份文件').setInputFiles({ name: download.suggestedFilename(),
     mimeType: 'application/zip', buffer: await readFile(path) });
-  await expect(page.getByRole('alertdialog')).toContainText('备份包含 0 个文件夹、0 个网站、0 个壁纸素材及 0 个媒体文件');
+  await expect(page.getByRole('alertdialog')).toContainText('备份包含 0 个文件夹、0 个网站、0 个小组件（0 个便签、0 个待办列表）、0 个壁纸素材及 0 个媒体文件');
   await page.getByRole('button', { name: '确认替换' }).click();
   await expect(page.getByRole('link', { name: '将被覆盖的网站' })).toHaveCount(0);
 });
@@ -208,8 +218,9 @@ test('本地重置需要确认并恢复初始空主页', async ({ page }) => {
   await page.getByLabel('网址', { exact: true }).fill('example.com');
   await visibleSubmitButton(page).click();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '数据' }).click();
   await page.getByRole('button', { name: '重置本地数据' }).click();
   await expect(page.getByRole('alertdialog')).toContainText('永久删除本地数据');
@@ -234,8 +245,9 @@ test('新建网站可选择内置图形并保存在本地', async ({ page }) => 
 
 test('带照片的 ZIP 备份可恢复本地图片与外观设置', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await selectPhotoBackground(page);
   await page.getByLabel('上传照片').setInputFiles(svg());
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
@@ -260,7 +272,8 @@ test('带照片的 ZIP 备份可恢复本地图片与外观设置', async ({ pag
   await page.reload();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue('--wallpaper'))).toContain('blob:');
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
   await expect(page.getByLabel('当前照片遮罩强度')).toHaveText('70%');
 });

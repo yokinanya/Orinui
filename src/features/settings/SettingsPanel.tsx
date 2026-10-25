@@ -28,7 +28,7 @@ export function SettingsPanel({ trigger }: SettingsPanelProps) {
     <Dialog>
       <Tooltip>
         <TooltipTrigger render={<DialogTrigger render={trigger} />} />
-        <TooltipContent>设置</TooltipContent>
+        <TooltipContent side="left">设置</TooltipContent>
       </Tooltip>
       <DialogContent className="settings-panel flex h-[min(44rem,calc(100dvh-2rem))] w-[min(76rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden border-border/60 bg-popover/95 p-0 shadow-2xl backdrop-blur-xl sm:max-w-none">
         <DialogHeader className="flex-row items-center justify-between gap-4 border-b border-border/40 py-5 pr-16 pl-5 sm:pl-7">

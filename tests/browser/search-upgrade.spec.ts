@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openAddMenu } from './form-helpers';
 
 function searchBox(page: Page) {
   return page.getByRole('textbox', { name: '搜索', exact: true });
@@ -28,7 +29,7 @@ async function openSearchSettings(page: Page) {
 }
 
 async function createFolder(page: Page, name: string): Promise<Locator> {
-  await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
+  await openAddMenu(page, '新建文件夹');
   const form = page.getByRole('dialog', { name: '新建文件夹', exact: true });
   await form.getByLabel('文件夹名称', { exact: true }).fill(name);
   await form.getByRole('button', { name: '创建', exact: true }).click();

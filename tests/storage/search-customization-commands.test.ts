@@ -15,6 +15,15 @@ beforeEach(async () => {
 
 afterEach(async () => { db.close(); await db.delete(); });
 
+it('defaults to an empty placeholder and preserves explicit text on unrelated updates', async () => {
+  expect((await readSettings(db)).search.customization.placeholder).toBe('');
+  await commands.updateSearchCustomization({ placeholder: '搜索、查找网站或计算' });
+  await commands.updateSearchCustomization({ corner: 'pill' });
+  expect((await readSettings(db)).search.customization.placeholder).toBe('搜索、查找网站或计算');
+  await commands.updateSearchCustomization({ placeholder: '' });
+  expect((await readSettings(db)).search.customization.placeholder).toBe('');
+});
+
 it('serializes rapid tool switches against persisted state without restoring another group', async () => {
   await Promise.all([commands.setSearchToolEnabled('github', false), commands.setSearchToolEnabled('color', false)]);
   expect((await readSettings(db)).search.customization.enabledTools).toEqual(['calculation', 'datetime']);

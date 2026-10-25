@@ -61,8 +61,8 @@ export function MotionBackgroundPanel({ onBusyChange, editing = false, fresh = f
       {!editing && image.url && <img src={image.url} alt="动态壁纸封面预览" className="aspect-video w-full rounded-xl object-cover" />}
       <MotionPlaybackButton />
       {reducedMotion && <FieldDescription>已跟随系统减少动态效果；可主动播放。</FieldDescription>}
-      <BackgroundMaskField key={background.assetId} dynamic strength={background.maskStrength}
-        onUpdate={(maskStrength) => updateAppearance({ background: { ...background, maskStrength } })} />
+      {!editing && <BackgroundMaskField key={background.assetId} dynamic strength={background.maskStrength}
+        onUpdate={(maskStrength) => updateAppearance({ background: { ...background, maskStrength } })} />}
     </>}
   </FieldGroup>;
 }

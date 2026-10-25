@@ -1,64 +1,12 @@
-/* Templates change composition only; user widths, spacing and visibility remain authoritative. */
-.home-layout-workbench-sites {
-  margin-top: clamp(3rem, 8vh, 5.5rem);
-}
-
-.home-layout-split .home-layout-messages {
-  grid-column: 1 / -1;
-}
-
-.home-layout-messages:empty {
-  display: none;
-}
-
-@media (min-width: 64rem) {
-  .home-main-left {
-    padding-left: 10vw;
-  }
-
-  .home-layout-left {
-    max-width: min(100%, 40rem);
-  }
-
-  .home-layout-left.max-w-\[40rem\] { max-width: 32rem; }
-  .home-layout-left.max-w-5xl { max-width: 48rem; }
-
-  .home-layout-header {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
-    column-gap: 1.5rem;
-  }
-
-  .home-layout-header [data-layout-clock-position] {
-    grid-row: 1;
-  }
-
-  .home-layout-header [data-layout-clock-position='left'] { grid-column: 1; }
-  .home-layout-header [data-layout-clock-position='right'] { grid-column: 3; }
-  .home-layout-header [data-layout-search] { grid-column: 2; grid-row: 1; }
-
-  .home-layout-header [data-clock-size='small'] time { font-size: 2.5rem; }
-  .home-layout-header [data-clock-size='standard'] time { font-size: 3rem; }
-  .home-layout-header [data-clock-size='large'] time { font-size: 3.5rem; }
-  .home-layout-header time + p { font-size: 0.75rem; }
-  .home-layout-header > [role='alert'] { grid-column: 1 / -1; }
-
-  .home-layout-split {
-    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.65fr);
-    align-content: center;
-    align-items: start;
-  }
-
-  .home-layout-split [data-layout-region='clock'] {
-    grid-column: 1;
-    grid-row: 2 / 4;
-  }
-
-  .home-layout-split [data-layout-region='search'] { grid-column: 2; grid-row: 2; }
-  .home-layout-split [data-layout-region='shortcuts'] { grid-column: 2; grid-row: 3; }
-  .home-layout-split[data-clock-visible='false'] { grid-template-columns: minmax(0, 1fr); }
-  .home-layout-split[data-clock-visible='false'] [data-layout-region] { grid-column: 1; }
-  .home-layout-split [data-clock-size='small'] time { font-size: clamp(2rem, 4.5vw, 3.5rem); }
-  .home-layout-split [data-clock-size='standard'] time { font-size: clamp(2.5rem, 5.8vw, 4.5rem); }
-  .home-layout-split [data-clock-size='large'] time { font-size: clamp(3rem, 6.5vw, 5rem); }
-  .home-layout-split time + p { overflow-wrap: anywhere; }
-}
+.home-main-left { padding-left: 10vw; }
+.home-layout-left { max-width: min(100%, 40rem); }
+.home-layout-left.max-w-\[40rem\] { max-width: 32rem; }
+.home-layout-left.max-w-5xl { max-width: 48rem; }
+.home-grid { isolation: isolate; }
+.home-grid [data-home-cell] { opacity: 0.65; }
+.home-grid [data-home-cell][data-over='true'] { background: var(--accent); }
+/* 调高手柄在卡片右下角，避免压住小组件底部工具与输入。 */
+.home-resize-handle { z-index: 5; }
+[data-home-item]:focus-within { z-index: 40; }
+[data-home-item][data-dragging='true'] { opacity: 0.5; }
+.home-grid [data-home-item] { padding-bottom: 8px; }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { visibleSubmitButton } from './form-helpers';
+import { visibleSubmitButton, openAddMenu } from './form-helpers';
 
 interface MotionCall {
   target: string | null;
@@ -35,7 +35,8 @@ interface AddShortcutOptions {
 
 async function addShortcut(page: Page, name: string, options: AddShortcutOptions = {}) {
   const { first = false, editing = false } = options;
-  await page.getByRole('button', { name: first ? '添加第一个网站' : '添加网站', exact: true }).click();
+  if (!first) await openAddMenu(page, '添加网站');
+  else await page.getByRole('button', { name: '添加第一个网站', exact: true }).click();
   await page.getByLabel('名称', { exact: true }).fill(name);
   await page.getByLabel('网址', { exact: true }).fill(`${name.toLowerCase()}.example.com`);
   await visibleSubmitButton(page).click();
@@ -63,7 +64,7 @@ test('主页首次进入时轻量淡入且内容立即可交互', async ({ page 
 
 
 async function addFolder(page: Page, name: string): Promise<void> {
-  await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
+  await openAddMenu(page, '新建文件夹');
   const dialog = page.getByRole('dialog', { name: '新建文件夹' });
   await dialog.getByLabel('文件夹名称', { exact: true }).fill(name);
   await dialog.locator('button[type="submit"]').click();
@@ -72,14 +73,16 @@ async function addFolder(page: Page, name: string): Promise<void> {
 
 test('网格内容淡入使用统一动效，编辑状态保留', async ({ page }) => {
   await addShortcut(page, '主页站点', { first: true });
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
   await addFolder(page, '工作');
 
-  await expect(page.getByRole('button', { name: '工作', exact: true })).toBeVisible();
+  // 文件夹条目是整卡拖拽容器，不再渲染为可点击按钮；按文本确认条目存在。
+  await expect(page.locator('[data-home-item]').filter({ hasText: '工作' })).toBeVisible();
   await expect(page.getByRole('button', { name: '完成编辑', exact: true })).toBeVisible();
-  await expect(page.locator('[data-shortcut-frame]').getByRole('button', { name: '主页站点', exact: true })).toBeVisible();
-  // 新建文件夹后网格仍是同一个列表，条数为「网站 + 文件夹 + 添加网站」。
-  await expect(page.locator('[data-shortcut-frame] li')).toHaveCount(3);
+  // 编辑模式下条目不是链接；用条目的可访问名称确认内容仍在。
+  await expect(page.locator('[data-home-item]').filter({ hasText: '主页站点' })).toBeVisible();
+  // 新建文件夹后网格仍是同一个容器，条目数为「网站 + 文件夹」。
+  await expect(page.locator('[data-home-item]')).toHaveCount(2);
 });
 
 test('打开文件夹弹层显示其中的网站，主页网格不显示它们', async ({ page }) => {

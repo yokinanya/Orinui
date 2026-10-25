@@ -4,7 +4,8 @@ import { useData } from '@/app/data-context';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { FieldError, FieldGroup, FieldTitle } from '@/components/ui/field';
+import { FieldDescription, FieldError, FieldGroup, FieldTitle } from '@/components/ui/field';
+import { BackupContentsPreview } from '@/features/settings/BackupContentsPreview';
 import { Input } from '@/components/ui/input';
 import { readBackupFile, type RestorableBackup } from '@/platform/backup-file';
 import { downloadBackupFile } from '@/platform/backup-download';
@@ -85,7 +86,7 @@ function ImportConfirmation({ actions }: { readonly actions: BackupActions }) {
         <AlertDialogHeader>
           <AlertDialogTitle>替换本机数据？</AlertDialogTitle>
           <AlertDialogDescription>
-            {preview && `备份包含 ${preview.folderCount} 个文件夹、${preview.shortcutCount} 个网站、${preview.backgroundCount} 个壁纸素材及 ${preview.assetCount} 个媒体文件，原件共 ${preview.totalAssetBytes.toLocaleString()} 字节。默认搜索引擎「${preview.engine}」。`}
+            {preview && <BackupContentsPreview backup={preview} />}
             {' '}继续后会完整替换当前数据。{actions.syncConfigured && '恢复数据会参与后续跨设备同步。'}
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -129,6 +130,7 @@ export function BackupPanel() {
   return (
     <FieldGroup className="gap-2">
       <BackupActionRow actions={actions} />
+      <FieldDescription>完整 ZIP 包含全库壁纸素材与图标、网站与文件夹、便签与待办、设置。ZIP 默认不加密，请妥善保管。</FieldDescription>
       {actions.error && !actions.confirmOpen && <FieldError role="alert">{actions.error}</FieldError>}
       <ImportConfirmation actions={actions} />
     </FieldGroup>

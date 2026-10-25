@@ -4,8 +4,9 @@ test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
 
 test('自定义搜索引擎可新增、设为默认并删除', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '搜索' }).click();
   await page.getByRole('button', { name: '管理搜索引擎', exact: true }).click();
   await page.getByRole('button', { name: '添加自定义引擎', exact: true }).click();
@@ -22,8 +23,9 @@ test('自定义搜索引擎可新增、设为默认并删除', async ({ page }) 
   await expect(selectedEcosia.getByRole('button', { name: '删除 Ecosia' })).toBeDisabled();
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
   await page.getByRole('tab', { name: '搜索' }).click();
   await expect(page.getByRole('group', { name: '默认搜索引擎' }).getByRole('button')).toContainText('Ecosia');
   await selectSettingsEngine(page, 'Google');

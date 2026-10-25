@@ -1,4 +1,6 @@
 import { fail } from '@/domain/errors';
+import { materializeHome } from '@/domain/sync/home';
+import { reconcileHome } from '@/domain/home';
 import type { Folder } from '@/domain/folder';
 import type { MediaAsset } from '@/domain/asset';
 import type { AppSettings } from '@/domain/settings';
@@ -53,6 +55,7 @@ export function materializeSyncSnapshot(input: SyncSnapshot): MaterializedSyncDa
       icon, iconSourceUrl: asset?.sourceUrl.value ?? null });
   }
   const settings: AppSettings = {
+    home: reconcileHome({ home: materializeHome(snapshot.settings.home), folders, shortcuts }),
     appearance: snapshot.settings.appearance.value,
     search: { defaultEngineId: snapshot.settings.defaultEngineId.value,
       customEngines: snapshot.settings.customEngines.map(({ value }) => value),

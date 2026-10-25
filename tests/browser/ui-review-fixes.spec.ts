@@ -47,7 +47,7 @@ test('编辑模式的网站操作入口可聚焦并打开菜单', async ({ page 
   await page.goto('/newtab.html');
   await importFixture(page, [SHORTCUT]);
 
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
   const actions = page.getByRole('button', { name: '示例站点 的操作', exact: true });
   await actions.focus();
   await page.keyboard.press('Enter');

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { openAddMenu } from './form-helpers';
 
 test.setTimeout(60_000);
 
@@ -53,7 +54,7 @@ test('网站实时预览在桌面并列，在手机纵向排列', async ({ page 
 
 test('连续添加保留文件夹目的地，编辑模式不提供连续添加', async ({ page }) => {
   await page.goto('/newtab.html');
-  await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
+  await openAddMenu(page, '新建文件夹');
   const create = page.getByRole('dialog', { name: '新建文件夹', exact: true });
   await create.getByLabel('文件夹名称', { exact: true }).fill('收藏夹');
   await create.getByRole('button', { name: '创建', exact: true }).click();

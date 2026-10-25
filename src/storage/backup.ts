@@ -1,4 +1,5 @@
 import { createDefaultSettings } from '@/domain/settings';
+import { reconcileStoredHome } from '@/storage/home';
 import { fail } from '@/domain/errors';
 import { newId } from '@/domain/id';
 import { SETTINGS_ID, type Database } from '@/storage/db';
@@ -21,6 +22,7 @@ export interface BackupSnapshot {
 }
 
 export async function createBackupSnapshot(db: Database): Promise<BackupSnapshot> {
+  await db.transaction('rw', [db.folders, db.shortcuts, db.settings], () => reconcileStoredHome(db));
   const state = await db.transaction('r', db.folders, db.shortcuts, db.settings, db.assets, async () => ({
     folders: await db.folders.toArray(),
     shortcuts: await db.shortcuts.toArray(),
@@ -71,9 +73,9 @@ async function writeReplacement(db: Database, backup: RestoreBackupInput): Promi
 }
 
 export async function replaceAllData(db: Database, backup: RestoreBackupInput): Promise<void> {
-  parseBackup(backup.document);
-  validateRestoreAssets(backup.document, backup.assets);
-  await writeReplacement(db, backup);
+  const document = parseBackup(backup.document).document;
+  validateRestoreAssets(document, backup.assets);
+  await writeReplacement(db, { document, assets: backup.assets });
 }
 
 export async function resetLocalData(db: Database): Promise<void> {

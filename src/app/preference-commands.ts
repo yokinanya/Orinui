@@ -4,6 +4,7 @@ import { DEFAULT_LAYOUT } from '@/domain/layout';
 import { createSearchPreferenceCommands } from '@/app/search-preference-commands';
 import type { Database } from '@/storage/db';
 import { updateSettings } from '@/storage/settings';
+import { resetHomePositions } from '@/storage/home';
 
 type PreferenceCommands = Pick<DataContextValue, 'updateLayout' | 'resetLayout' | 'updateClockFormat' | 'updateClockSettings'
   | 'updateShortcutPreferences'> & ReturnType<typeof createSearchPreferenceCommands>;
@@ -17,6 +18,7 @@ export function createPreferenceCommands(input: { readonly db: Database;
       setSettings(await updateSettings(db, (current) => ({ ...current, layout: { ...current.layout, ...patch } })));
     },
     async resetLayout() {
+      await resetHomePositions(db);
       setSettings(await updateSettings(db, (current) => ({ ...current,
         layout: { ...DEFAULT_LAYOUT, order: [...DEFAULT_LAYOUT.order], hidden: [] },
         shortcuts: { ...current.shortcuts, showNames: true } })));

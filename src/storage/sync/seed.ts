@@ -1,4 +1,5 @@
 import { createDefaultSettings } from '@/domain/settings';
+import { reconcileStoredHome } from '@/storage/home';
 import { fail } from '@/domain/errors';
 import type { AppSettings } from '@/domain/settings';
 import type { Folder } from '@/domain/folder';
@@ -21,7 +22,7 @@ function addIfChanged(input: { readonly records: Map<string, SyncRecordRow>; rea
 }
 
 function settingsValue(row: SettingsRow | undefined): AppSettings {
-  return row ? { appearance: row.appearance, search: row.search, shortcuts: row.shortcuts,
+  return row ? { home: row.home, appearance: row.appearance, search: row.search, shortcuts: row.shortcuts,
     layout: row.layout, clock: row.clock } : createDefaultSettings();
 }
 
@@ -77,6 +78,7 @@ export async function seedSyncRecords(db: Database): Promise<SyncStateRow> {
     if (!state) fail('创建同步状态后才能初始化同步记录');
     if (state.suspended) fail('接收远端数据期间不能初始化本机同步记录');
 
+    await reconcileStoredHome(db);
     const [folders, shortcuts, settingsRow, assets, previousRows] = await Promise.all([
       db.folders.toArray(), db.shortcuts.toArray(), db.settings.get('app'), db.assets.toArray(), db.sync_records.toArray(),
     ]);

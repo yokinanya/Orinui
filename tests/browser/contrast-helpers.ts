@@ -74,9 +74,10 @@ export async function configureBackground(page: Page, input: BackgroundCase) {
 export async function uploadContrastPhoto(page: Page, input: { readonly color: 'black' | 'white'; readonly mask: number }) {
   await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('tab', { name: '外观', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="${input.color}"/></svg>`;
   await page.getByLabel('上传照片').setInputFiles({ name: 'contrast.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
   const mask = page.getByRole('slider', { name: '照片遮罩强度（%）' });

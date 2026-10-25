@@ -17,9 +17,10 @@ test.beforeEach(async ({ page }) => { await page.goto('/newtab.html'); });
 
 test('已保存的图片直链在重新打开时回填，包括资源保留来源的网站旧记录', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -28,9 +29,11 @@ test('已保存的图片直链在重新打开时回填，包括资源保留来�
   await page.reload();
 
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
-  await expect(page.locator('#photo-url')).toHaveValue(PHOTO_SOURCE);
+  // 当前已应用照片的来源地址在详情卡片内回填。
+  await expect(page.getByRole('region', { name: '壁纸详情' }).locator('#photo-url')).toHaveValue(PHOTO_SOURCE);
   await page.keyboard.press('Escape');
 
   await link.click({ button: 'right' });
@@ -40,9 +43,10 @@ test('已保存的图片直链在重新打开时回填，包括资源保留来�
 
 test('图片来源异步读取完成时不会覆盖用户已输入的地址', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -51,11 +55,12 @@ test('图片来源异步读取完成时不会覆盖用户已输入的地址', as
   await page.reload();
 
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await expect(page.getByRole('button', { name: /^查看.+详情$/ }).first()).toBeVisible();
   await holdAssetSourceWriteLock(page, ids.photoId);
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   const input = page.locator('#photo-url');
   await expect(input).toHaveValue('');
   await input.fill('https://typed.example.test/photo.png');
@@ -67,9 +72,10 @@ test('图片来源异步读取完成时不会覆盖用户已输入的地址', as
 
 test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留并写入ZIP备份', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -95,7 +101,8 @@ test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留�
   expect(state.shortcut).toMatchObject({ title: '本地图标网站', icon: { assetId: ids.iconId }, iconSourceUrl: null });
 
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
   await page.getByRole('tab', { name: '数据' }).click();
   const [download] = await Promise.all([
@@ -110,9 +117,10 @@ test('清除照片和图标来源只移除URL，撤销其他编辑后仍保留�
 
 test('来源已被外部清除时显示错误且仍可重试', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-  await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '照片', exact: true }).click();
   await page.getByLabel('上传照片').setInputFiles(await rasterFile(page, 'photo.png'));
   await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
   const ids = await page.evaluate(async (sourceUrl) => {
@@ -141,7 +149,8 @@ test('来源已被外部清除时显示错误且仍可重试', async ({ page }) 
   }, PHOTO_SOURCE);
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
   await page.getByRole('button', { name: /^查看.+详情$/ }).first().click();
   await expect(page.getByRole('button', { name: '清除来源', exact: true })).toBeVisible();
   await clearFixtureSource(page, ids);

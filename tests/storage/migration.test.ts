@@ -8,11 +8,11 @@ afterEach(async () => {
   for (const database of databases.splice(0)) { database.close(); await database.delete(); }
 });
 
-it('opens a fresh schema 13 database without legacy tables or content', async () => {
+it('opens a fresh schema 14 database without legacy tables or content', async () => {
   const database = createDatabase(crypto.randomUUID());
   databases.push(database);
   await database.open();
-  expect(database.verno).toBe(13);
+  expect(database.verno).toBe(14);
   expect(database.tables.map(({ name }) => name)).not.toContain('groups');
   expect(await database.folders.count()).toBe(0);
   expect(await database.shortcuts.count()).toBe(0);
@@ -80,7 +80,7 @@ it('migrates version 11 settings while preserving sync identity, clocks, and key
   const current = createDatabase(name);
   databases.push(current);
   await current.open();
-  expect(current.verno).toBe(13);
+  expect(current.verno).toBe(14);
   expect((await current.settings.get('app'))?.search.customization.corner).toBe('standard');
   const migratedRecord = await current.sync_records.get('settings:app');
   if (migratedRecord?.kind !== 'settings') throw new Error('迁移后同步设置记录缺失');

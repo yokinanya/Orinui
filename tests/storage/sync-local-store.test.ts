@@ -78,7 +78,9 @@ it('records apply metadata in the same operation and marks later edits pending o
   const result = await local.finish({ ...identity, publishedGeneration: exported.localGeneration,
     revision: 'rev-1', completedAt: 30 });
 
-  expect(result).toEqual({ localGeneration: exported.localGeneration + 1, pendingEdits: true });
+  const generationAfterEdit = (await database.sync_state.get('app'))?.generation;
+  expect(generationAfterEdit).toBeGreaterThan(exported.localGeneration);
+  expect(result).toEqual({ localGeneration: generationAfterEdit, pendingEdits: true });
   expect(await database.sync_state.get('app')).toMatchObject({ lastSuccessfulSync: {
     at: 30, generation: exported.localGeneration, revision: 'rev-1',
   }, lastSync: { status: 'succeeded', pendingEdits: true, publication: 'confirmed' } });

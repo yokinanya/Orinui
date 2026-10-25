@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import { ArrowRight, Images } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { BackgroundTypePicker, BACKGROUND_OPTIONS } from '@/features/settings/BackgroundTypePicker';
+import { BackgroundTypePicker, BACKGROUND_OPTIONS, type BackgroundChoice } from '@/features/settings/BackgroundTypePicker';
 import type { Background, GradientBackground } from '@/domain/appearance';
 import { ColorPicker } from '@/features/appearance/ColorPicker';
 import { useAppearanceActions } from '@/features/settings/appearance-actions';
-import { PhotoBackgroundPanel } from '@/features/settings/PhotoBackgroundPanel';
-import { MotionBackgroundPanel } from '@/features/settings/MotionBackgroundPanel';
 
 const DEFAULT_SOLID = { kind: 'solid', color: '#f2ece3' } as const;
 const DEFAULT_GRADIENT = { kind: 'gradient', from: '#f4efe6', to: '#c9d6e4', angle: 160 } as const;
@@ -41,41 +41,35 @@ function GradientFields({ background, onChange }: { readonly background: Gradien
   );
 }
 
-export function BackgroundPanel({ editing = false, fresh = false }: { readonly editing?: boolean; readonly fresh?: boolean }) {
+export function BackgroundPanel({ onOpenLibrary, initialWallpaper = false }: { readonly onOpenLibrary: () => void; readonly initialWallpaper?: boolean }) {
   const { appearance, update } = useAppearanceActions();
   const { background } = appearance;
-  const [requestedKind, setRequestedKind] = useState<Background['kind'] | null>(fresh ? 'default' : null);
-  const initialAssetId = useRef(background.kind === 'photo' || background.kind === 'motion' ? background.assetId : null);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const selectedKind: Background['kind'] = requestedKind ?? background.kind;
+  const [requestedKind, setRequestedKind] = useState<BackgroundChoice | null>(initialWallpaper ? 'wallpaper' : null);
+  const currentKind = background.kind === 'photo' || background.kind === 'motion' ? 'wallpaper' : background.kind;
+  const selectedKind = requestedKind ?? currentKind;
   const setBackground = (next: Background) => update({ background: next });
-  useEffect(() => {
-    if ((background.kind === 'photo' || background.kind === 'motion')
-      && (!fresh || background.assetId !== initialAssetId.current)) setRequestedKind(null);
-  }, [background, fresh]);
-
   const selectKind = (value: string[]) => {
     const next = BACKGROUND_OPTIONS.find((option) => option.value === value[0])?.value;
     if (!next) return;
-    setRequestedKind(fresh || next === 'photo' || next === 'motion' ? next : null);
-    if (next === 'photo' || next === 'motion') return;
+    setRequestedKind(next === 'wallpaper' ? next : null);
     if (next === 'default') setBackground({ kind: 'default' });
     if (next === 'solid') setBackground(DEFAULT_SOLID);
     if (next === 'gradient') setBackground(DEFAULT_GRADIENT);
   };
-
-  return (
-    <FieldGroup>
-      {!editing && <BackgroundTypePicker value={selectedKind} disabled={photoBusy} onChange={selectKind} />}
-      {!fresh && background.kind === 'photo' && selectedKind !== 'photo'
-        && <FieldDescription>切换背景后，当前照片仍保留在壁纸素材库中。</FieldDescription>}
-      {selectedKind === 'photo' && <PhotoBackgroundPanel fresh={fresh} editing={editing} onBusyChange={setPhotoBusy} />}
-      {selectedKind === 'motion' && <MotionBackgroundPanel fresh={fresh} editing={editing} onBusyChange={setPhotoBusy} />}
-      {selectedKind === 'solid' && <ColorField id="background-color" label="背景颜色"
-        value={background.kind === 'solid' ? background.color : DEFAULT_SOLID.color}
-        onChange={(color) => setBackground({ kind: 'solid', color })} />}
-      {selectedKind === 'gradient' && <GradientFields
-        background={background.kind === 'gradient' ? background : DEFAULT_GRADIENT} onChange={setBackground} />}
-    </FieldGroup>
-  );
+  return <FieldGroup>
+    <BackgroundTypePicker value={selectedKind} disabled={false} onChange={selectKind} />
+    {selectedKind === 'default' && <FieldDescription>使用默认中性渐变，无需联网。</FieldDescription>}
+    {selectedKind === 'wallpaper' && <>
+      <Button variant="outline" className="w-full justify-between" onClick={onOpenLibrary}>
+        <span data-open-wallpaper-library className="flex items-center gap-2"><Images data-icon="inline-start" />打开壁纸库</span>
+        <ArrowRight data-icon="inline-end" />
+      </Button>
+      <FieldDescription>选择素材查看详情，点击“应用壁纸”后才会更换背景。</FieldDescription>
+    </>}
+    {selectedKind === 'solid' && <ColorField id="background-color" label="背景颜色"
+      value={background.kind === 'solid' ? background.color : DEFAULT_SOLID.color}
+      onChange={(color) => setBackground({ kind: 'solid', color })} />}
+    {selectedKind === 'gradient' && <GradientFields
+      background={background.kind === 'gradient' ? background : DEFAULT_GRADIENT} onChange={setBackground} />}
+  </FieldGroup>;
 }

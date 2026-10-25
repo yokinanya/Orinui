@@ -13,13 +13,13 @@ const HOMEPAGE_TARGETS: readonly ReadabilityTarget[] = [
   { selector: 'time' }, { selector: 'time + p' },
   { selector: 'section[aria-label="快捷方式"] a > span:last-child' },
   { selector: '[data-folder-tile] > span:last-child' },
-  { selector: 'button[aria-label="编辑网站"]', icon: true },
+  { selector: 'button[aria-label="整理主页"]', icon: true },
   { selector: 'button[aria-label="设置"]', icon: true },
 ];
 const PHOTO_TEXT_TARGETS = HOMEPAGE_TARGETS.slice(0, 4);
 const PHOTO_CONTROL_TARGETS: readonly ReadabilityTarget[] = [
   { selector: 'button[aria-label="设置"]', icon: true },
-  { selector: 'button[aria-label="编辑网站"]', icon: true },
+  { selector: 'button[aria-label="整理主页"]', icon: true },
   { selector: 'section[aria-label="快捷方式"] a > span:first-child', icon: true },
   { selector: 'form[role="search"] input' },
   { selector: 'form[role="search"] svg', icon: true },
@@ -41,7 +41,7 @@ const CONTROL_GLYPH_PIXEL_MIN = 4;
 const CONTROL_PIXELS_PER_CHARACTER = 1.5;
 const REMOVE_GLYPHS = `time, time + p, section[aria-label="快捷方式"] a > span:first-child,
   section[aria-label="快捷方式"] a > span:last-child, form[role="search"] input,
-  main button, button[aria-label="编辑网站"], button[aria-label="完成编辑"],
+  main button, button[aria-label="整理主页"], button[aria-label="完成编辑"],
   [data-slot="empty-title"], [data-slot="empty-description"],
   [data-slot="empty"] button, .shortcut-grid button span,
   button[aria-label="新建文件夹"], button[aria-label$=" 的操作"],
@@ -50,8 +50,8 @@ const REMOVE_GLYPHS = `time, time + p, section[aria-label="快捷方式"] a > sp
     text-shadow: none !important; -webkit-text-stroke: 0 !important;
   }
   form[role="search"] input::placeholder { color: transparent !important; -webkit-text-fill-color: transparent !important; }
-  main svg, button[aria-label="编辑网站"] svg,
-  button[aria-label="完成编辑"] svg, button[aria-label="新建文件夹"] svg,
+  main svg, button[aria-label="整理主页"] svg,
+  button[aria-label="完成编辑"] svg, button[aria-label="添加"][aria-haspopup="menu"] svg,
   button[aria-label$=" 的操作"] svg, button[aria-label="设置"] svg { visibility: hidden !important; }`;
 const PHOTO_BACKGROUND_STYLE = `time, time + p, section[aria-label="快捷方式"] a > span:last-child {
   color: transparent !important; -webkit-text-fill-color: transparent !important;

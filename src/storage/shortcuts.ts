@@ -1,4 +1,5 @@
 import { fail } from '@/domain/errors';
+import { reconcileStoredHome } from '@/storage/home';
 import { newId } from '@/domain/id';
 import { LIMITS } from '@/domain/limits';
 import type { Shortcut, ShortcutIcon } from '@/domain/shortcut';
@@ -91,7 +92,7 @@ export async function createShortcut(db: Database, input: NewShortcut): Promise<
   const url = normalizeShortcutUrl(input.url);
   const folderId = input.folderId ?? null;
 
-  return db.transaction('rw', db.folders, db.shortcuts, db.assets, async () => {
+  return db.transaction('rw', db.folders, db.shortcuts, db.assets, db.settings, async () => {
     if (folderId !== null && !await db.folders.get(folderId)) fail('目标文件夹不存在');
 
     if ((await db.shortcuts.count()) >= LIMITS.shortcuts) {
@@ -110,6 +111,7 @@ export async function createShortcut(db: Database, input: NewShortcut): Promise<
     };
 
     await db.shortcuts.add(shortcut);
+    await reconcileStoredHome(db);
     return shortcut;
   });
 }
@@ -146,13 +148,14 @@ async function siblingsOf(db: Database, shortcut: Pick<Shortcut, 'folderId'>): P
 
 /** 删除并返回被删除的记录，供调用方在提示条中提供撤销。 */
 export async function deleteShortcut(db: Database, id: string): Promise<RemovedShortcut> {
-  return db.transaction('rw', db.shortcuts, db.assets, db.settings, async () => {
+  return db.transaction('rw', db.folders, db.shortcuts, db.assets, db.settings, async () => {
     const current = await db.shortcuts.get(id);
     if (!current) fail('网站不存在');
 
     const removedAsset = current.icon.kind === 'asset' ? await db.assets.get(current.icon.assetId) : null;
     const siblings = await siblingsOf(db, current);
     await db.shortcuts.delete(id);
+    await reconcileStoredHome(db);
     await db.shortcuts.bulkPut(renumber(siblings.filter((shortcut) => shortcut.id !== id)));
     await pruneUnreferencedAssets(db);
     return { ...current, removedAsset: removedAsset ?? null };
@@ -161,7 +164,7 @@ export async function deleteShortcut(db: Database, id: string): Promise<RemovedS
 
 /** 恢复被删除的记录；原文件夹已不存在时明确报错，不静默放到别处。 */
 export async function restoreShortcut(db: Database, shortcut: Shortcut & { readonly removedAsset?: MediaAsset | null }): Promise<Shortcut> {
-  return db.transaction('rw', db.folders, db.shortcuts, db.assets, async () => {
+  return db.transaction('rw', db.folders, db.shortcuts, db.assets, db.settings, async () => {
     if (shortcut.folderId !== null && !await db.folders.get(shortcut.folderId)) fail('原文件夹已被删除，无法撤销');
 
     if (await db.shortcuts.count() >= LIMITS.shortcuts) fail('网站数量已达上限，无法撤销');
@@ -173,6 +176,7 @@ export async function restoreShortcut(db: Database, shortcut: Shortcut & { reado
     const siblings = await siblingsOf(db, shortcut);
     const restored: Shortcut = { ...record, order: nextOrder(siblings) };
     await db.shortcuts.add(restored);
+    await reconcileStoredHome(db);
     return restored;
   });
 }
@@ -212,7 +216,7 @@ export async function reorderShortcut(db: Database, id: string, index: number): 
  * `folderId` 为 null 表示移回主页网格。
  */
 export async function moveShortcutToFolder(db: Database, id: string, folderId: string | null): Promise<Shortcut> {
-  return db.transaction('rw', db.folders, db.shortcuts, async () => {
+  return db.transaction('rw', db.folders, db.shortcuts, db.settings, async () => {
     const current = await db.shortcuts.get(id);
     if (!current) fail('网站不存在');
     if (current.folderId === folderId) return current;
@@ -225,7 +229,7 @@ export async function moveShortcutToFolder(db: Database, id: string, folderId: s
 
     const sourceSiblings = (await siblingsOf(db, current)).filter((shortcut) => shortcut.id !== id);
     await db.shortcuts.bulkPut(renumber(sourceSiblings));
-
+    await reconcileStoredHome(db);
     return moved;
   });
 }

@@ -1,10 +1,12 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { openAddMenu } from './form-helpers';
+
 const DRAG_STEPS = 12;
 const NARROW_VIEWPORT = { width: 375, height: 812 };
 
 async function createFolder(page: Page, name: string) {
-  await page.getByRole('button', { name: '新建文件夹', exact: true }).click();
+  await openAddMenu(page, '新建文件夹');
   const dialog = page.getByRole('dialog', { name: '新建文件夹', exact: true });
   await dialog.getByLabel('文件夹名称', { exact: true }).fill(name);
   await dialog.getByRole('button', { name: '创建', exact: true }).click();
@@ -14,7 +16,9 @@ async function createFolder(page: Page, name: string) {
 
 async function addWebsite(page: Page, input: { readonly name: string; readonly container?: Locator }) {
   const container = input.container ?? page.getByRole('region', { name: '快捷方式' });
-  await container.getByRole('button', { name: /添加(第一个)?网站/, exact: true }).click();
+  // 主页网格的新增入口在右下角「添加」菜单；文件夹弹层里仍是自己的添加按钮。
+  if (input.container) await container.getByRole('button', { name: /添加(第一个)?网站/, exact: true }).click();
+  else await openAddMenu(page, '添加网站');
   const form = page.getByRole('dialog', { name: '添加网站', exact: true });
   await form.getByLabel('名称', { exact: true }).fill(input.name);
   await form.getByLabel('网址', { exact: true }).fill(`${input.name}.example.com`);
@@ -98,6 +102,7 @@ test('文件夹添加、移出与删除后的内容刷新，删除文件夹保�
   await page.getByRole('menuitem', { name: '删除', exact: true }).click();
   await expect(page.getByRole('menu')).toBeHidden();
   await expect(folder.getByRole('link')).toHaveCount(1);
+  await expect.poll(() => folder.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.keyboard.press('Escape');
   await expect(folder).toBeHidden();
   await tile.click();
@@ -134,17 +139,28 @@ test('窄屏文件夹与网站共享网格，弹层留在视口内且可通过�
   await expect(page.getByRole('navigation', { name: '分组' })).toHaveCount(0);
 });
 
-test('混合网格中网站拖动使用相同 sortable 标识并持久化次序', async ({ page }) => {
+test('混合网格中整块网站拖到占用格位，同列下推且持久化位置', async ({ page }) => {
   await page.goto('/newtab.html');
   await addWebsite(page, { name: 'first' });
-  await page.getByRole('button', { name: '编辑网站', exact: true }).click();
+  await page.getByRole('button', { name: '整理主页', exact: true }).click();
   await addWebsite(page, { name: 'second' });
   await createFolder(page, '独立文件夹');
   const home = page.getByRole('region', { name: '快捷方式' });
-  await drag(page, { source: home.getByText('first', { exact: true }), target: home.getByText('second', { exact: true }) });
-  await expect(home.locator('.shortcut-grid > li').nth(1)).toContainText('second');
+  const first = home.locator('[data-home-item]').filter({ hasText: 'first' });
+  const second = home.locator('[data-home-item]').filter({ hasText: 'second' });
+  await first.hover();
+  // 整张卡片即拖拽手柄，从条目中心按下即可拖动。
+  await drag(page, { source: first,
+    target: home.locator('[data-home-cell="0:1"]') });
+  await expect(first).toHaveCSS('grid-column-start', '2');
+  await expect(first).toHaveCSS('grid-row-start', '1');
+  await expect(second).toHaveCSS('grid-column-start', '2');
+  await expect(second).toHaveCSS('grid-row-start', '2');
   await page.reload();
-  await expect(home.getByRole('link').first()).toHaveAccessibleName('second');
+  await expect(first).toHaveCSS('grid-column-start', '2');
+  await expect(first).toHaveCSS('grid-row-start', '1');
+  await expect(second).toHaveCSS('grid-row-start', '2');
+  await expect(home.getByRole('link')).toHaveCount(2);
   await expect(home.locator('[data-folder-tile]')).toHaveText(['独立文件夹']);
 });
 

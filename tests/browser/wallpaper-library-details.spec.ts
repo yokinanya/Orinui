@@ -10,9 +10,10 @@ for (const viewport of VIEWPORTS) {
     await page.setViewportSize(viewport);
     await page.goto('/newtab.html');
     await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '壁纸与背景', exact: true }).click();
-  await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-    await page.getByRole('button', { name: '图片', exact: true }).click();
+  await page.getByRole('button', { name: '壁纸', exact: true }).click();
+  await page.getByRole('button', { name: '打开壁纸库', exact: true }).click();
+  await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+    await page.getByRole('button', { name: '照片', exact: true }).click();
     await page.getByLabel('上传照片', { exact: true }).setInputFiles(await rasterFile(page, 'first.png'));
     await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
     await page.getByLabel('上传照片', { exact: true }).setInputFiles(await rasterFile(page, 'second.png'));
@@ -20,13 +21,13 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByRole('button', { name: '返回外观', exact: true })).toBeVisible();
     const cards = page.getByRole('button', { name: /^查看.+详情$/ });
     await expect(cards).toHaveCount(2);
-    await expect(cards.first()).toContainText('当前壁纸');
+    await expect(cards.first()).toContainText('已应用');
     const editor = page.locator('[aria-label="壁纸预览和编辑"]');
     await expect(editor.getByRole('img')).toHaveCount(0);
     await expect(page.getByText('当前背景', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: '新建壁纸', exact: true }).click();
-    await expect(page.getByRole('button', { name: '默认', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: '图片', exact: true }).click();
+    await page.getByRole('button', { name: '添加壁纸', exact: true }).click();
+    await expect(page.getByRole('button', { name: '默认', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: '照片', exact: true }).click();
     await expect(page.locator('#photo-url')).toHaveValue('');
     await expect(page.getByRole('slider', { name: '照片遮罩强度（%）' })).toHaveCount(0);
     await page.getByRole('button', { name: '返回壁纸库', exact: true }).click();
@@ -37,6 +38,7 @@ for (const viewport of VIEWPORTS) {
       const libraryBox = await page.getByRole('region', { name: '壁纸库', exact: true }).boundingBox();
       const detailBox = await details.boundingBox();
       const settingsBox = await page.getByRole('dialog', { name: '设置', exact: true }).boundingBox();
+      // 遮罩设置在详情卡片内部，不再是详情之外的独立区域。
       expect(libraryBox!.x + libraryBox!.width).toBeLessThan(detailBox!.x);
       expect(detailBox!.width).toBeLessThan(libraryBox!.width / 1.7);
       expect(Math.abs(detailBox!.y - libraryBox!.y)).toBeLessThan(2);
@@ -46,11 +48,12 @@ for (const viewport of VIEWPORTS) {
       await expect(cards.first()).toBeVisible();
     }
     await expect(details.getByRole('button', { name: '应用壁纸', exact: true })).toBeEnabled();
-    await expect(details.getByText('当前壁纸', { exact: true })).toHaveCount(0);
+    await expect(details.getByText('已应用', { exact: true })).toHaveCount(0);
     const preview = details.getByRole('img');
     await expect(preview).toHaveAttribute('src', /^blob:/);
     await expect(preview).toBeVisible();
-    await details.getByRole('button', { name: '重命名', exact: true }).click();
+    await details.getByRole('button', { name: '壁纸更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '重命名', exact: true }).click();
     const rename = page.getByRole('dialog', { name: '重命名壁纸素材' });
     await rename.getByLabel('素材名称', { exact: true }).fill('本地山景');
     await rename.getByRole('button', { name: '保存名称' }).click();
@@ -61,13 +64,19 @@ for (const viewport of VIEWPORTS) {
     await handle.press('ArrowLeft');
     await handle.press('Space');
     await details.getByRole('button', { name: '应用壁纸', exact: true }).click();
-    await expect(details.getByRole('button', { name: '已应用', exact: true })).toBeDisabled();
-    await expect(details.getByText('当前壁纸', { exact: true })).toBeVisible();
-    await details.getByRole('button', { name: '删除壁纸素材' }).click();
+    await expect(details.getByRole('button', { name: '应用壁纸', exact: true })).toHaveCount(0);
+    await expect(details.getByText('已应用', { exact: true })).toBeVisible();
+    // 已应用照片的遮罩调整与详情的重命名、删除同在一张卡片内。
+    await expect(details.getByRole('slider', { name: '照片遮罩强度（%）' })).toBeVisible();
+    const detailFrame = await details.boundingBox();
+    const controlsBox = await details.getByRole('slider', { name: '照片遮罩强度（%）' }).boundingBox();
+    expect(controlsBox!.y).toBeGreaterThan(detailFrame!.y);
+    await details.getByRole('button', { name: '壁纸更多操作', exact: true }).click();
+    await page.getByRole('menuitem', { name: '删除壁纸素材', exact: true }).click();
     const removal = page.getByRole('alertdialog');
     await expect(removal).toContainText('当前背景会切换为默认中性渐变');
     await removal.getByRole('button', { name: '取消', exact: true }).click();
-    await details.getByRole('button', { name: '返回素材列表' }).click();
+    await details.getByRole('button', { name: '关闭壁纸详情' }).click();
     await expect(page.getByRole('region', { name: '壁纸详情' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '查看本地山景详情' })).toBeFocused();
     await expect(cards).toHaveCount(2);

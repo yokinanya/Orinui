@@ -22,7 +22,7 @@ export function PhotoBackgroundPanel({ onBusyChange, editing = false, fresh = fa
     {!editing && <ImageUpload id="photo-upload" kind="background" onReady={setPhotoBackground} onBusyChange={onBusyChange} />}
     {<RemoteImageDownload id="photo-url" kind="background" initialSourceUrl={sourceUrl} onReady={setPhotoBackground}
       onBusyChange={onBusyChange}
-      headerAction={assetId ? <ClearImageSourceButton key={assetId} assetId={assetId} sourceUrl={sourceUrl}
+      headerAction={!fresh && assetId ? <ClearImageSourceButton key={assetId} assetId={assetId} sourceUrl={sourceUrl}
         onCleared={() => setClearedSourceAssetId(assetId)} iconOnly /> : undefined} />}
     {background.kind === 'photo' && visibleAsset && <BackgroundMaskField key={background.assetId} strength={background.maskStrength}
       onUpdate={(maskStrength) => updateAppearance({ background: { ...background, maskStrength } })} />}

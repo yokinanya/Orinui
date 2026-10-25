@@ -7,6 +7,7 @@ import type { Database } from '@/storage/db';
 import { listFolders } from '@/storage/folders';
 import { ensureInitialized } from '@/storage/init';
 import { listHomepageShortcuts } from '@/storage/shortcuts';
+import { readSettings } from '@/storage/settings';
 
 function useInitialization(db: Database) {
   const [status, setStatus] = useState<DataStatus>('loading');
@@ -50,9 +51,13 @@ export function useDataState(db: Database) {
   const loadFolders = useCallback(async () => {
     const next = await homepage.loadFolders();
     state.setFolders(next);
+    state.setSettings(await readSettings(db));
     return next;
   }, [homepage.loadFolders, state.setFolders]);
-  const loadShortcuts = homepage.loadShortcuts;
+  const loadShortcuts = useCallback(async () => {
+    await homepage.loadShortcuts();
+    state.setSettings(await readSettings(db));
+  }, [homepage.loadShortcuts, state.setSettings, db]);
   const { status, setError, setStatus } = state;
   useEffect(() => {
     if (status !== 'ready') return;
