@@ -124,10 +124,12 @@ export function assertHomeDisjoint(items: readonly HomePlacement[]): void {
 export function compactHome(ids: readonly string[]): HomePlacement[] {
   return ids.map((id, index) => ({ id, row: Math.floor(index / HOME_COLUMNS), column: index % HOME_COLUMNS, height: 1 }));
 }
-export function reconcileHome(input: { readonly home: HomeData; readonly folders: readonly { readonly id: string; readonly order: number }[];
+export function reconcileHome(input: { readonly home: HomeData; readonly folders: readonly { readonly id: string; readonly order: number; readonly parentId?: string | null }[];
   readonly shortcuts: readonly { readonly id: string; readonly order: number; readonly folderId: string | null }[] }): HomeData {
   const ordered = (items: readonly { readonly id: string; readonly order: number }[]) => items.toSorted((a, b) => a.order - b.order || a.id.localeCompare(b.id));
-  const ids = [...ordered(input.folders).map(({ id }) => homeKey('folder', id)),
+  // 只有顶层（parentId 为 null 或旧数据缺字段）文件夹进入主页格位；嵌套文件夹留在父容器内。
+  const rootFolders = input.folders.filter(({ parentId }) => (parentId ?? null) === null);
+  const ids = [...ordered(rootFolders).map(({ id }) => homeKey('folder', id)),
     ...ordered(input.shortcuts.filter(({ folderId }) => folderId === null)).map(({ id }) => homeKey('shortcut', id)),
     ...input.home.widgets.map(({ id }) => homeKey('widget', id))];
   let placements = input.home.placements.filter(({ id }) => ids.includes(id));

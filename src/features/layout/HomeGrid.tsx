@@ -12,6 +12,7 @@ import type { Folder } from '@/domain/folder';
 import type { Shortcut } from '@/domain/shortcut';
 import { FolderTile } from '@/features/folders/FolderTile';
 import { FolderContextMenu } from '@/features/folders/FolderActionsMenu';
+import { folderPlacementConflict } from '@/features/folders/folder-placement';
 import { ShortcutTile } from '@/features/shortcuts/ShortcutTile';
 import { ShortcutActionsButton, ShortcutContextMenu } from '@/features/shortcuts/ShortcutActionsMenu';
 import { Widget } from '@/features/layout/Widget';
@@ -31,17 +32,29 @@ interface HomeGridProps {
   readonly onDeleteFolder: (folder: Folder) => void;
   readonly pendingHomeItem: string | null;
 }
+/**
+ * 文件夹位置固定：非文件夹条目落点或改高都不能挤开文件夹。
+ *
+ * 判断集中在 `folderPlacementConflict`，拖动、键盘、菜单与改高共用同一套结果，
+ * 避免同一种移动在不同入口表现不一致。
+ */
 export function HomeGrid(props: HomeGridProps) {
   const { settings, folders, shortcuts, moveHomeItem, updateWidgetHeight } = useData();
+  // 领域层的 reconcileHome 只让顶层文件夹占格位；这里不重复筛选，避免两处规则漂移。
   const home = reconcileHome({ home: settings.home ?? EMPTY_HOME, folders, shortcuts });
-  const keyboard = useHomeKeyboard(moveHomeItem);
+  const moveItem = (placement: HomePlacement) => {
+    const reason = folderPlacementConflict(placement, home.placements);
+    return reason === null ? moveHomeItem(placement) : Promise.reject(new Error(reason));
+  };
+  const keyboard = useHomeKeyboard(moveItem);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_DISTANCE } }));
   const end = home.placements.reduce((max, item) => Math.max(max, item.row + item.height), 0);
   const rows = end + (props.editing ? 1 : 0);
   const drop = (event: DragEndEvent) => {
     const placement = home.placements.find(({ id }) => id === event.active.id);
     const target = event.over?.data.current;
-      if (placement && target) void moveHomeItem({ ...placement, row: target.row, column: target.column }).catch(notifyError);
+    if (!placement || !target) return;
+    void moveItem({ ...placement, row: target.row, column: target.column }).catch(notifyError);
   };
   return <div data-shortcut-frame className="w-full">
     {!props.editing && home.placements.length === 0 && <Button variant="secondary" data-home-empty onClick={props.onAdd}>添加第一个网站</Button>}
@@ -53,7 +66,10 @@ export function HomeGrid(props: HomeGridProps) {
                   onKeyDown={(event) => keyboard.handle(event, placement)}
                   resize={(height) => {
             const id = widgetId(placement.id);
-            if (id) void updateWidgetHeight(id, height).catch(notifyError);
+            if (!id) return;
+            const reason = folderPlacementConflict({ ...placement, height }, home.placements);
+            if (reason !== null) { notifyError(new Error(reason)); return; }
+            void updateWidgetHeight(id, height).catch(notifyError);
           }}>
           <HomeItem id={placement.id} props={props} widgets={home.widgets} />
         </GridItem>)}
@@ -66,9 +82,9 @@ function HomeItem({ id, props, widgets }: { readonly id: string; readonly props:
   const { folders, shortcuts, settings } = useData();
   const widget = widgets.find((item) => homeKey('widget', item.id) === id);
   if (widget) return <Widget widget={widget} editing={props.editing} />;
-  const folder = folders.find((item) => homeKey('folder', item.id) === id);
+  const folder = folders.find((item) => item.parentId === null && homeKey('folder', item.id) === id);
   if (folder) return <FolderContextMenu folder={folder} onOpen={props.onOpenFolder} onRename={props.onRenameFolder} onDelete={props.onDeleteFolder}>
-    <FolderTile name={folder.name} editing={props.editing} onClick={() => props.onOpenFolder(folder.id)} /></FolderContextMenu>;
+    <FolderTile folderId={folder.id} name={folder.name} editing={props.editing} onClick={() => props.onOpenFolder(folder.id)} /></FolderContextMenu>;
   const shortcut = shortcuts.find((item) => homeKey('shortcut', item.id) === id);
   if (!shortcut) return null;
   return <ShortcutContextMenu shortcut={shortcut} onEdit={props.onEdit} containerShortcuts={shortcuts} onChanged={() => undefined}>
@@ -106,7 +122,10 @@ function ResizeHandle({ height, handle }: { readonly height: number; readonly ha
 function GridItem({ placement, editing, children, resize, reveal, onKeyDown }: GridItemProps) {
   const element = useRef<HTMLDivElement | null>(null);
   useEffect(() => { if (reveal && element.current) revealHomeItem(element.current); }, [reveal]);
-  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: placement.id, disabled: !editing });
+  // 文件夹不可移动或重排：即使主页在编辑模式，它也是静态块，不接入拖拽与键盘移动。
+  const isFolder = placement.id.startsWith('folder:');
+  const movable = editing && !isFolder;
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: placement.id, disabled: !movable });
   const [liveHeight, setLiveHeight] = useState<number>(placement.height);
   const resizing = useRef(false);
   useEffect(() => { if (!resizing.current) setLiveHeight(placement.height); }, [placement.height]);
@@ -117,19 +136,21 @@ function GridItem({ placement, editing, children, resize, reveal, onKeyDown }: G
     preview: (next) => { resizing.current = true; setLiveHeight(next); },
     commit: (next) => { resizing.current = false; resize(next); },
   });
-  // 编辑模式下整张卡片都是拖拽手柄。落点在控件上时由控件自己处理，卡片不启动拖动。
-  const dragProps = editing ? { ...attributes, ...listeners } : {};
+  // 编辑模式下整张可移动卡片都是拖拽手柄。落点在控件上时由控件自己处理，卡片不启动拖动。
+  const dragProps = movable ? { ...attributes, ...listeners } : {};
   return <div data-home-item={placement.id} data-home-row={placement.row} data-home-column={placement.column}
-    data-home-height={liveHeight} ref={(node) => { element.current = node; setNodeRef(node); }} data-dragging={isDragging}
-    className={cn('relative min-h-0 min-w-0', editing && 'cursor-grab touch-none active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-ring')}
+    data-home-height={liveHeight} data-home-static={isFolder || undefined}
+    ref={(node) => { element.current = node; setNodeRef(node); }} data-dragging={isDragging}
+    className={cn('relative min-h-0 min-w-0', movable && 'cursor-grab touch-none active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-ring')}
     style={{ gridColumn: placement.column + 1, gridRow: `${placement.row + 1} / span ${liveHeight}`, zIndex: 1 }}
-    {...dragProps} onKeyDown={editing ? onKeyDown : undefined}
+    {...dragProps} onKeyDown={movable ? onKeyDown : undefined}
     onPointerDown={(event) => {
+      if (!movable) return;
       const target = event.target as Element;
       if (target.closest('button:not([data-folder-tile]), input, textarea, select, a, [data-hit], [role="checkbox"], [contenteditable="true"]')) return;
       listeners?.onPointerDown?.(event);
     }}>
-    <div className={cn('h-full min-h-0 min-w-0', editing && DRAG_TRAY_CLASS)}>{children}</div>
+    <div className={cn('h-full min-h-0 min-w-0', movable && DRAG_TRAY_CLASS)}>{children}</div>
     {resizable && <ResizeHandle height={liveHeight} handle={handle} />}
   </div>;
 }

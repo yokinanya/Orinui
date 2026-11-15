@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 import { BackgroundLayer } from '@/app/BackgroundLayer';
+import { BookmarkFeatureProvider } from '@/app/BookmarkFeatureProvider';
+import { useBookmarks } from '@/app/bookmark-context';
 import { MotionPlaybackProvider, useMotionPlayback } from '@/app/MotionPlayback';
 import { HomeActions } from '@/app/HomeActions';
 import { useData } from '@/app/data-context';
@@ -14,6 +16,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { DEFAULT_LAYOUT, visibleSlots } from '@/domain/layout';
 import type { HomeWidget } from '@/domain/home';
 import { newId } from '@/domain/id';
+import { BookmarkFolderHost } from '@/features/bookmarks/BookmarkFolderHost';
+import { BookmarkRegion } from '@/features/bookmarks/BookmarkRegion';
 import { Clock } from '@/features/clock/Clock';
 import { SearchField } from '@/features/search/SearchField';
 import { ShortcutsRegion } from '@/features/shortcuts/ShortcutsRegion';
@@ -77,6 +81,7 @@ function BackgroundMessages({ photo }: { readonly photo: ReturnType<typeof useLo
 
 function HomePage({ editing, searchInputRef, openFolder, pendingHomeItem }: HomePageProps) {
   const { status, error, settings, updateLayout } = useData();
+  const bookmarks = useBookmarks();
   const systemPrefersDark = useSystemPrefersDark();
   const background = settings.appearance.background;
   const staticPhoto = useLocalImage(background.kind === 'photo' ? background.assetId : null,
@@ -91,6 +96,10 @@ function HomePage({ editing, searchInputRef, openFolder, pendingHomeItem }: Home
   if (status === 'error') return <DataErrorPage error={error} />;
 
   const mainAlignment = 'home-main-left items-start justify-start pt-16 pb-32';
+  // 功能关闭时不注入任何节点：HomeLayout 不渲染空的书签区域，也不把它计入「全隐藏」判断。
+  const bookmarkRegion = bookmarks && bookmarks.snapshot.status !== 'disabled'
+    ? <BookmarkRegion bookmarks={bookmarks} />
+    : null;
   return (
     <main data-layout-style="niagara"
       className={`flex min-h-dvh flex-col px-6 ${mainAlignment}`}>
@@ -103,6 +112,7 @@ function HomePage({ editing, searchInputRef, openFolder, pendingHomeItem }: Home
         messages: <BackgroundMessages photo={photo} />,
         restoreContent: () => void updateLayout({ order: [...DEFAULT_LAYOUT.order], hidden: [] }).catch(notifyError),
         pendingHomeItem,
+        bookmarks: bookmarkRegion,
       })}
     </main>
   );
@@ -145,6 +155,7 @@ function useAddWidgetAction(onCreated: (id: string) => void): (kind: HomeWidget[
 
 function HomeContent() {
   const { status, settings } = useData();
+  const bookmarks = useBookmarks();
   const [editing, setEditing] = useState(false);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -156,7 +167,13 @@ function HomeContent() {
     initialFocusHandled.current = true;
     if (settings.search.autoFocus && visibleSlots(settings.layout).includes('search')) searchInputRef.current?.focus();
   }, [settings.layout, settings.search.autoFocus, status]);
-  const canEdit = status === 'ready' && visibleSlots(settings.layout).includes('shortcuts');
+  // 书签功能关闭时不渲染书签区域，也就不能把它算作「仍有一块可整理的内容」。
+  const visibleRegions = visibleSlots(settings.layout)
+    .filter((slot) => slot !== 'bookmarks' || (bookmarks !== null && bookmarks.snapshot.status !== 'disabled'));
+  // 区域排序/显隐是全局布局操作：只要还有实际可见区域就能整理，不再要求快捷方式可见。
+  const canEdit = status === 'ready' && visibleRegions.length > 0;
+  // 新增网站、文件夹与小组件仍写主页自有内容，只在快捷方式区域可见时开放。
+  const canAddContent = status === 'ready' && visibleRegions.includes('shortcuts');
   const leaveEditing = useCallback(() => setEditing(false), []);
 
   useEffect(() => {
@@ -171,8 +188,11 @@ function HomeContent() {
       <BackgroundLayer />
       <HomePage editing={editing} searchInputRef={searchInputRef} openFolder={setOpenFolderId}
         pendingHomeItem={pendingHomeItem} />
-      <HomeActions editing={editing} canEdit={canEdit} onEditingChange={setEditing}
-        onOpenFolder={setOpenFolderId} openFolderId={openFolderId} onAddWidget={addWidget} />
+      <HomeActions editing={editing} canEdit={canEdit} canAddContent={canAddContent}
+        onEditingChange={setEditing} onOpenFolder={setOpenFolderId} openFolderId={openFolderId}
+        onAddWidget={addWidget} />
+      {/* 书签区域被布局隐藏时仍需响应搜索结果：外部文件夹请求由这个区域外宿主持有。 */}
+      <BookmarkFolderHost />
     </>
   );
 }
@@ -182,7 +202,9 @@ export function App() {
     <TooltipProvider>
       <Toaster>
         <OperationProvider><DataProvider>
-          <MotionPlaybackProvider><HomeContent /></MotionPlaybackProvider>
+          <BookmarkFeatureProvider>
+            <MotionPlaybackProvider><HomeContent /></MotionPlaybackProvider>
+          </BookmarkFeatureProvider>
         </DataProvider></OperationProvider>
       </Toaster>
     </TooltipProvider>

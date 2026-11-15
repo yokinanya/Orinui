@@ -1,29 +1,29 @@
 import { browser } from 'wxt/browser';
 import { parseWebDavConfiguration } from '@/domain/webdav/configuration';
+import { isExtensionPage, restrictStorageToTrustedContexts } from '@/platform/extension-runtime';
 import type { WebDavConfigurationStore } from '@/sync/webdav-types';
 
 const CONFIGURATION_KEY = 'orinui.webdav.v1';
 
-export function isExtensionPage(): boolean {
-  return location.protocol === 'chrome-extension:';
-}
+// 保持既有导出名，现有调用方继续从本模块读取。
+export { isExtensionPage };
 
 function requireExtension(): void {
-  if (!isExtensionPage()) throw new Error('WebDAV 同步需要在已加载的 Chrome 扩展中使用');
+  if (!isExtensionPage()) throw new Error('WebDAV 同步需要在已加载的 Chrome 或 Firefox 扩展中使用');
 }
 
 export function createWebDavConfigurationStore(): WebDavConfigurationStore {
   return {
     async read() {
       requireExtension();
-      await browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+      await restrictStorageToTrustedContexts(browser.storage.local);
       const stored = await browser.storage.local.get(CONFIGURATION_KEY);
       return stored[CONFIGURATION_KEY] === undefined ? null : parseWebDavConfiguration(stored[CONFIGURATION_KEY]);
     },
     async write(value) {
       requireExtension();
       const config = parseWebDavConfiguration(value);
-      await browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+      await restrictStorageToTrustedContexts(browser.storage.local);
       await browser.storage.local.set({ [CONFIGURATION_KEY]: config });
     },
     async remove() { requireExtension(); await browser.storage.local.remove(CONFIGURATION_KEY); },

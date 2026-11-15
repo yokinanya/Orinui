@@ -1,11 +1,12 @@
 import { browser } from 'wxt/browser';
 import { parseS3Configuration } from '@/domain/s3-configuration';
 import type { S3Configuration } from '@/domain/s3-configuration';
+import { isExtensionPage, restrictStorageToTrustedContexts } from '@/platform/extension-runtime';
 
 const S3_CONFIGURATION_KEY = 'orinui.s3.v1';
 
 function requireExtension(): void {
-  if (location.protocol !== 'chrome-extension:') throw new Error('S3 同步需要在已加载的 Chrome 扩展中使用');
+  if (!isExtensionPage()) throw new Error('S3 同步需要在已加载的 Chrome 或 Firefox 扩展中使用');
 }
 
 export interface S3ConfigurationStore {
@@ -18,13 +19,13 @@ export function createS3ConfigurationStore(): S3ConfigurationStore {
   return {
     async read() {
       requireExtension();
-      await browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+      await restrictStorageToTrustedContexts(browser.storage.local);
       const stored = await browser.storage.local.get(S3_CONFIGURATION_KEY);
       return stored[S3_CONFIGURATION_KEY] === undefined ? null : parseS3Configuration(stored[S3_CONFIGURATION_KEY]);
     },
     async write(value) {
       requireExtension();
-      await browser.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+      await restrictStorageToTrustedContexts(browser.storage.local);
       await browser.storage.local.set({ [S3_CONFIGURATION_KEY]: parseS3Configuration(value) });
     },
     async remove() { requireExtension(); await browser.storage.local.remove(S3_CONFIGURATION_KEY); },
@@ -44,7 +45,7 @@ export async function checkS3Permission(endpoint: string): Promise<void> {
 }
 
 export function subscribeS3Configuration(changed: () => void): () => void {
-  if (location.protocol !== 'chrome-extension:') return () => {};
+  if (!isExtensionPage()) return () => {};
   const listener = (changes: Record<string, unknown>, area: string) => {
     if (area === 'local' && S3_CONFIGURATION_KEY in changes) changed();
   };

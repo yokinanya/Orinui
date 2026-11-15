@@ -49,7 +49,8 @@ export async function prepareSyncReplacement(db: Database, input: ReplacementDat
   }
   const document: BackupDocument = {
     ...input.document,
-    folders: input.document.folders.map((folder) => ({ ...folder, id: maps.folders.get(folder.id) ?? folder.id })),
+    folders: input.document.folders.map((folder) => ({ ...folder, id: maps.folders.get(folder.id) ?? folder.id,
+      parentId: folder.parentId === null ? null : maps.folders.get(folder.parentId) ?? folder.parentId })),
     shortcuts: input.document.shortcuts.map((shortcut) => ({
       ...shortcut, id: maps.shortcuts.get(shortcut.id) ?? shortcut.id,
       folderId: shortcut.folderId === null ? null : maps.folders.get(shortcut.folderId) ?? shortcut.folderId,

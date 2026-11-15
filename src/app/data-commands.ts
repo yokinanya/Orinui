@@ -62,12 +62,12 @@ function shortcutCommands({ db, loadShortcuts }: CommandDependencies): ShortcutC
   };
 }
 
-type FolderCommands = Pick<DataContextValue, 'createFolder' | 'renameFolder' | 'deleteFolder' | 'moveFolder' | 'reorderFolder'>;
+type FolderCommands = Pick<DataContextValue, 'createFolder' | 'renameFolder' | 'deleteFolder'>;
 
 function folderCommands({ db, loadFolders, loadShortcuts }: CommandDependencies): FolderCommands {
   return {
-    async createFolder(name) {
-      await folders.createFolder(db, name);
+    async createFolder(name, parentId = null) {
+      await folders.createFolder(db, name, parentId);
       await loadFolders();
     },
     async renameFolder(id, name) {
@@ -75,18 +75,10 @@ function folderCommands({ db, loadFolders, loadShortcuts }: CommandDependencies)
       await loadFolders();
     },
     async deleteFolder(id) {
-      // 删除文件夹会把其中的网站移回主页网格，两处都要重新读取。
+      // 删除文件夹会把直接子文件夹与网站提升到父层，两处都要重新读取。
       await folders.deleteFolder(db, id);
       await loadFolders();
       await loadShortcuts();
-    },
-    async moveFolder(id, direction) {
-      await folders.moveFolder(db, id, direction);
-      await loadFolders();
-    },
-    async reorderFolder(id, index) {
-      await folders.reorderFolder(db, id, index);
-      await loadFolders();
     },
   };
 }

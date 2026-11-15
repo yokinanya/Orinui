@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest';
 import { createDefaultSettings } from '@/domain/settings';
 import { parseSyncSnapshot, materializeSyncSnapshot, mergeSyncSnapshots, SYNC_SCHEMA_VERSION,
-  LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION } from '@/domain/sync';
-import { register, snapshot } from './snapshot-fixture';
+  LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
+  LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION } from '@/domain/sync';
+import { legacyWireSettings, register, snapshot } from './snapshot-fixture';
 
 it('upgrades schema 10 search settings to explicit defaults with a zero register clock', () => {
   const current = snapshot('device-a');
-  const { searchCustomization: _ignored, ...legacySettings } = current.settings;
+  const { searchCustomization: _ignored, ...legacySettings } = legacyWireSettings(current.settings);
   const parsed = parseSyncSnapshot({ ...current, schemaVersion: LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION,
     settings: legacySettings });
   expect(parsed.settings.searchCustomization).toEqual({
@@ -18,7 +19,7 @@ it('upgrades schema 10 search settings to explicit defaults with a zero register
 
 it('strictly separates schema 10, 11, and 12 search register shapes', () => {
   const current = snapshot('device-a');
-  const legacySettings = { ...current.settings } as Record<string, unknown>;
+  const legacySettings = legacyWireSettings(current.settings);
   delete legacySettings.searchCustomization;
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: 10,
     settings: { ...legacySettings, searchCustomization: current.settings.searchCustomization } })).toThrow(/字段不正确/);
@@ -26,22 +27,32 @@ it('strictly separates schema 10, 11, and 12 search register shapes', () => {
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: 9, settings: legacySettings })).toThrow(/不兼容/);
   const { engineOverrides: _ignored, ...oldCustomization } = createDefaultSettings().search.customization;
   const oldRegister = { ...current.settings.searchCustomization, value: oldCustomization };
-  const oldSettings = { ...current.settings, searchCustomization: oldRegister };
+  const oldSettings = { ...legacyWireSettings(current.settings), searchCustomization: oldRegister };
   expect(parseSyncSnapshot({ ...current, schemaVersion: LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
     settings: oldSettings }).settings.searchCustomization.value.engineOverrides).toEqual({});
   expect(() => parseSyncSnapshot({ ...current, schemaVersion: LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
-    settings: { ...current.settings, searchCustomization: current.settings.searchCustomization } })).toThrow(/旧搜索自定义设置字段/);
+    settings: { ...legacyWireSettings(current.settings), searchCustomization: current.settings.searchCustomization } }))
+    .toThrow(/旧搜索自定义设置字段/);
 });
 
 it('does not let a schema 10 snapshot overwrite newer customized search settings', () => {
   const local = snapshot('device-a', { settings: { ...snapshot('device-a').settings,
     searchCustomization: register({ ...createDefaultSettings().search.customization, placeholder: '查找' }, 4, 'device-a') } });
   const source = snapshot('device-b');
-  const { searchCustomization: _ignored, ...legacySettings } = source.settings;
+  const { searchCustomization: _ignored, ...legacySettings } = legacyWireSettings(source.settings);
   const legacy = parseSyncSnapshot({ ...source, schemaVersion: LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, settings: legacySettings });
   const merged = mergeSyncSnapshots({ local, remotes: [legacy] });
   expect(merged.settings.searchCustomization.value.placeholder).toBe('查找');
   expect(merged.settings.searchCustomization.clock).toBe(4);
+});
+
+it('upgrades schema 13 flat layout and folder wire shapes without inventing edits', () => {
+  const current = snapshot('device-a');
+  const legacy = parseSyncSnapshot({ ...current, schemaVersion: LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION,
+    settings: legacyWireSettings(current.settings),
+    folders: [{ id: 'work', name: register('工作', 4, 'device-b'), position: register(2, 7, 'device-b') }] });
+  expect(legacy.folders[0]?.position).toEqual({ value: { parentId: null, order: 2 }, clock: 7, deviceId: 'device-b' });
+  expect(legacy.settings.layoutOrder.value.order).toEqual(['clock', 'search', 'shortcuts', 'bookmarks']);
 });
 
 it('keeps search customization in its own register and removes keywords for deleted engines', () => {

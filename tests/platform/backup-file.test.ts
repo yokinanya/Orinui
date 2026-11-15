@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { createDefaultSettings } from '@/domain/settings';
+import { toPortableSettings } from '@/domain/backup-settings';
 import { BACKUP_VERSION } from '@/domain/backup';
 import type { MediaAsset } from '@/domain/asset';
 import { readBackupFile, serializeBackup } from '@/platform/backup-file';
@@ -24,13 +25,13 @@ function archive(manifest: Record<string, unknown>, entries: Record<string, Uint
 }
 
 async function manifestFor(media: MediaAsset, bytes: Uint8Array = MEDIA_BYTES, includeName = true): Promise<Record<string, unknown>> {
-  const settings = createDefaultSettings();
+  const settings = toPortableSettings(createDefaultSettings());
   const asset = { id: media.id, kind: media.kind, mime: media.mime, width: media.width, height: media.height,
     sourceUrl: media.sourceUrl, ...(includeName ? { name: media.name ?? null } : {}),
     motion: media.motion ? { kind: media.motion.kind, duration: media.motion.duration } : null,
     byteLength: bytes.length, sha256: await mediaDigest(bytes) };
   return { formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
-    folders: [{ id: 'main', name: '常用', order: 0 }],
+    folders: [{ id: 'main', parentId: null, name: '常用', order: 0 }],
     shortcuts: [{ id: 'shortcut', folderId: 'main', title: '网站', url: 'https://example.com/',
       icon: media.kind === 'icon' ? { kind: 'asset', assetId: media.id } : { kind: 'letter' },
       iconSourceUrl: media.kind === 'icon' ? media.sourceUrl : null, order: 0 }],
@@ -48,10 +49,10 @@ describe('ZIP backup file', () => {
   it('round-trips manifest and media binary without embedding Base64', async () => {
     const asset = iconAsset();
     const snapshot: BackupSnapshot = { formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
-      folders: [{ id: 'main', name: '常用', order: 0 }],
+      folders: [{ id: 'main', parentId: null, name: '常用', order: 0 }],
       shortcuts: [{ id: 'shortcut', folderId: 'main', title: '网站', url: 'https://example.com/',
         icon: { kind: 'asset', assetId: asset.id }, iconSourceUrl: null, order: 0 }],
-      settings: createDefaultSettings(), assets: [asset] };
+      settings: toPortableSettings(createDefaultSettings()), assets: [asset] };
     const zipped = await serializeBackup(snapshot);
     const restored = await readBackupFile(fileFromBytes(new Uint8Array(await zipped.arrayBuffer())));
     expect(zipped.type).toBe('application/zip');
@@ -60,12 +61,12 @@ describe('ZIP backup file', () => {
   });
 
   it('round-trips motion metadata and omits its locally rebuilt poster', async () => {
-    const settings = createDefaultSettings();
+    const settings = toPortableSettings(createDefaultSettings());
     const asset: MediaAsset = { id: 'wallpaper', kind: 'background', mime: 'video/mp4', width: 1920, height: 1080,
       sourceUrl: null, blob: new Blob([MEDIA_BYTES], { type: 'video/mp4' }),
       motion: { kind: 'video', duration: 2, poster: new Blob(['poster'], { type: 'image/jpeg' }) } };
     const snapshot: BackupSnapshot = { formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
-      folders: [{ id: 'main', name: '常用', order: 0 }],
+      folders: [{ id: 'main', parentId: null, name: '常用', order: 0 }],
       shortcuts: [], settings: { ...settings, appearance: { ...settings.appearance,
         background: { kind: 'motion', assetId: asset.id, maskStrength: 0.5 } } }, assets: [asset] };
     const restored = await readBackupFile(fileFromBytes(new Uint8Array(await (await serializeBackup(snapshot)).arrayBuffer())));
@@ -77,10 +78,10 @@ describe('ZIP backup file', () => {
 describe('ZIP folder wire boundary', () => {
   it('imports current folder format and rejects legacy group formats', async () => {
     const snapshot: BackupSnapshot = { formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(),
-      folders: [{ id: 'work', name: '工作', order: 0 }], shortcuts: [], settings: createDefaultSettings(), assets: [] };
+      folders: [{ id: 'work', parentId: null, name: '工作', order: 0 }], shortcuts: [], settings: toPortableSettings(createDefaultSettings()), assets: [] };
     const zipped = await serializeBackup(snapshot);
     const restored = await readBackupFile(fileFromBytes(new Uint8Array(await zipped.arrayBuffer())));
-    expect(restored.document.folders).toEqual([{ id: 'work', name: '工作', order: 0 }]);
+    expect(restored.document.folders).toEqual([{ id: 'work', parentId: null, name: '工作', order: 0 }]);
 
     const legacyGroup = { formatVersion: 7, exportedAt: new Date().toISOString(),
       groups: [{ id: 'legacy', name: '常用', colorRole: 'primary', order: 0, isDefault: true }],

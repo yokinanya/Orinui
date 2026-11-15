@@ -1,4 +1,4 @@
-import { ArrowUpRightIcon, CircleAlertIcon, CopyIcon, FolderIcon, SearchIcon, WandSparklesIcon } from 'lucide-react';
+import { ArrowUpRightIcon, BookmarkIcon, CircleAlertIcon, CopyIcon, FolderIcon, SearchIcon, WandSparklesIcon } from 'lucide-react';
 import type { SearchFormProps } from '@/features/search/SearchForm';
 import { searchActionName, type SearchSuggestion } from '@/features/search/search-model';
 
@@ -13,6 +13,8 @@ function ResultIcon({ item }: { readonly item: SearchSuggestion }) {
   if (item.kind === 'fill') return <WandSparklesIcon className="size-4 shrink-0" />;
   if (item.kind === 'error') return <CircleAlertIcon className="size-4 shrink-0" />;
   if (item.kind === 'search') return <SearchIcon className="size-4 shrink-0" />;
+  if (item.kind === 'bookmark') return <BookmarkIcon className="size-4 shrink-0" />;
+  if (item.kind === 'bookmark-folder') return <FolderIcon className="size-4 shrink-0" />;
   return item.kind === 'folder' ? <FolderIcon className="size-4 shrink-0" /> : <ArrowUpRightIcon className="size-4 shrink-0" />;
 }
 

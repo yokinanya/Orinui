@@ -1,6 +1,7 @@
 import { createContext, use } from 'react';
 
 import type { AppearanceSettings } from '@/domain/appearance';
+import type { BookmarkHiddenRule, BookmarkPreferences } from '@/domain/bookmark-preferences';
 import type { Folder } from '@/domain/folder';
 import type { LayoutConfig } from '@/domain/layout';
 import type { AppSettings, SearchPreferences, ShortcutPreferences } from '@/domain/settings';
@@ -70,14 +71,28 @@ export interface DataContextValue {
   /** 移动到某个文件夹；folderId 为 null 表示移回主页网格 */
   moveShortcutToFolder: (id: string, folderId: string | null) => Promise<void>;
 
-  createFolder: (name: string) => Promise<void>;
+  createFolder: (name: string, parentId?: string | null) => Promise<void>;
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
-  moveFolder: (id: string, direction: 'up' | 'down') => Promise<void>;
-  /** 拖动排序：移动到全局指定下标 */
-  reorderFolder: (id: string, index: number) => Promise<void>;
   countShortcutsInFolder: (folderId: string) => Promise<number>;
   listAllShortcuts: () => Promise<Shortcut[]>;
+
+  /** 浏览器书签偏好；三个开关各自独立保存，不牵动其他设置。 */
+  updateBookmarkPreferences: (patch: Partial<Pick<BookmarkPreferences, 'enabled' | 'mode' | 'showInSearch'>>) => Promise<void>;
+  /** 新增或更新一条隐藏规则（按 `ruleId`）。`hidden: false` 是显式取消隐藏，不是删除。 */
+  setBookmarkHiddenRule: (rule: Omit<BookmarkHiddenRule, 'updatedAt'> & { readonly updatedAt?: number }) => Promise<void>;
+  /** 删除一条隐藏规则；同步层写成 `null` 墓碑，`ruleId` 之后不得复用。 */
+  removeBookmarkHiddenRule: (ruleId: string) => Promise<void>;
+  /**
+   * 只读观察已提交的浏览器书签偏好（他页启用/模式/搜索开关与隐藏规则）。
+   *
+   * 只读既有 settings 行，不写回、不新增表或存储协议；返回取消订阅函数，
+   * 读取或校验失败经 `onError` 显式上报。
+   */
+  subscribeBookmarkPreferences: (
+    next: (preferences: BookmarkPreferences) => void,
+    onError: (cause: unknown) => void,
+  ) => () => void;
 }
 
 export const DataContext = createContext<DataContextValue | null>(null);

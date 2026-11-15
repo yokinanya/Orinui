@@ -1,5 +1,6 @@
 import type { Transaction } from 'dexie';
 import { validateSearchCustomization, upgradeLegacySearchCustomization } from '@/domain/search-customization';
+import { upgradeSlotOrder } from '@/domain/layout';
 import { validateSettings } from '@/domain/settings';
 import type { SearchCustomization } from '@/domain/search-customization';
 import type { SettingsRow } from '@/storage/db';
@@ -32,7 +33,8 @@ export async function migrateSearchEngineOverrides(transaction: Transaction): Pr
   if (state && settings) await stateTable.put({ ...state, suspended: true });
   if (settings) {
     const customization = migrateCustomization(settings.search.customization);
-    const migrated = validateSettings({ ...settings, search: { ...settings.search, customization } });
+    const migrated = validateSettings({ ...settings, layout: { ...settings.layout,
+      order: upgradeSlotOrder(settings.layout.order) }, search: { ...settings.search, customization } });
     await settingsTable.put({ id: 'app', ...migrated });
   }
   if (record) {

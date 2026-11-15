@@ -6,8 +6,8 @@ import { FieldGroup } from '@/components/ui/field';
 import { SettingsSection } from '@/features/settings/SettingsSection';
 import type { OpenTarget } from '@/domain/settings';
 import { ClockSettingsPanel } from '@/features/settings/ClockSettingsPanel';
+import { LayoutSlotList } from '@/features/settings/LayoutSlotList';
 import { SettingsChoiceField, type ChoiceOption } from '@/features/settings/SettingsChoiceField';
-import { SettingsSwitchField } from '@/features/settings/SettingsSwitchField';
 import { notifyError } from '@/lib/notify';
 
 const WIDTH_OPTIONS: readonly ChoiceOption<'compact' | 'standard' | 'wide'>[] = [
@@ -28,6 +28,7 @@ function LayoutSection({ id, title, children }: { readonly id: string; readonly 
   );
 }
 
+/** 页面尺寸与区域顺序/显隐；顺序与显隐统一由区域列表负责，避免重复开关。 */
 function PageSettings() {
   const { settings, updateLayout } = useData();
   const { layout } = settings;
@@ -39,10 +40,7 @@ function PageSettings() {
           onChange={(pageWidth) => update({ pageWidth })} />
         <SettingsChoiceField responsive label="区域间距" value={layout.regionSpacing} options={GAP_OPTIONS}
           onChange={(regionSpacing) => update({ regionSpacing })} />
-        {(['clock', 'search', 'shortcuts'] as const).map((slot) => <SettingsSwitchField key={slot}
-          label={{ clock: '显示时钟', search: '显示搜索', shortcuts: '显示主页内容' }[slot]}
-          checked={!layout.hidden.includes(slot)} onChange={(shown) => update({ hidden: shown
-            ? layout.hidden.filter((item) => item !== slot) : [...layout.hidden, slot] })} />) }
+        <LayoutSlotList />
       </FieldGroup>
     </LayoutSection>
   );

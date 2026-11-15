@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Database } from '@/storage/db';
 import { observeWebDavLocal, type WebDavObservation } from '@/storage/webdav-observer';
 import { createWebDavScheduler } from '@/sync/webdav-scheduler';
-import { isExtensionPage } from '@/platform/webdav-settings';
+import { isExtensionPage } from '@/platform/extension-runtime';
 import { subscribeS3Configuration } from '@/platform/s3-settings';
 import type { S3SyncService } from '@/sync/s3-types';
 import type { S3SyncStatus } from '@/sync/s3-types';

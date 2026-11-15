@@ -1,8 +1,8 @@
 import type { MediaAsset, MediaAssetMotion } from '@/domain/asset';
-import type { AppSettings } from '@/domain/settings';
+import type { BackupSettings } from '@/domain/backup-settings';
 import { fail } from '@/domain/errors';
-import { CURRENT_BACKUP_VERSION, type SupportedBackupVersion } from '@/domain/backup-settings';
-import type { Folder } from '@/domain/folder';
+import { CURRENT_BACKUP_VERSION, LEGACY_FLAT_FOLDER_BACKUP_VERSION, type SupportedBackupVersion } from '@/domain/backup-settings';
+import { assertFolderTree, type Folder } from '@/domain/folder';
 import { imageOutputSize } from '@/domain/image';
 import { LIMITS } from '@/domain/limits';
 import { normalizeFolderName, normalizeOptionalAssetName, normalizeOptionalShortcutTitle } from '@/domain/text';
@@ -35,20 +35,39 @@ function validateSourceUrl(value: unknown, label: string): string | null {
   return value;
 }
 
-export function validateBackupFolders(value: unknown): Folder[] {
+/**
+ * ZIP 文件夹条目。
+ *
+ * 当前格式（12）要求完整、无环的父引用树；11 及更早是扁平列表（`order` 必须等于数组
+ * 下标，这是当时的合同），升级时补 `parentId: null`，并保留既有 ID、名称、顺序与主页格位。
+ *
+ * 当前格式的 `order` 只是**同层**顺序，不是数组下标：合法删除只提升被删项、不重编号目标层
+ * 既有项，同步物化也保留寄存器原值，因此稀疏（如 0、2）与并列（两项都是 2）都必须原样
+ * 接受并按 `order` 其次 `id` 稳定显示。这里只拒绝负数、非整数、重复 ID 与非法父引用树，
+ * 不重编号、不规范化。
+ */
+export function validateBackupFolders(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): Folder[] {
   if (!Array.isArray(value) || value.length > LIMITS.folders) fail('文件夹数量不符合限制');
+  // `LEGACY_FLAT_FOLDER_BACKUP_VERSION` 是**最后一个扁平版本**（已提交的 11 就是扁平
+  // `id/name/order`，`order` 必须等于下标），带 `parentId` 的树从下一个版本才开始。
+  const tree = formatVersion > LEGACY_FLAT_FOLDER_BACKUP_VERSION;
   const ids = new Set<string>();
-  return value.map((item, index) => {
+  const folders = value.map((item, index) => {
     const raw = record(item, '文件夹');
-    exactKeys(raw, ['id', 'name', 'order'], '文件夹');
+    exactKeys(raw, tree ? ['id', 'parentId', 'name', 'order'] : ['id', 'name', 'order'], '文件夹');
     const id = textField(raw.id, '文件夹标识');
     if (ids.has(id)) fail('文件夹标识不能重复');
     ids.add(id);
     const name = normalizeFolderName(textField(raw.name, '文件夹名称'));
     if (name !== raw.name) fail('文件夹名称必须是已保存的规范格式');
-    if (raw.order !== index) fail('文件夹顺序不正确');
-    return { id, name, order: index };
+    if (!Number.isSafeInteger(raw.order) || (raw.order as number) < 0) fail('文件夹顺序不正确');
+    // 扁平列表是历史合同：位置即数组下标。当前树格式不再施加这条限制。
+    if (!tree && raw.order !== index) fail('文件夹顺序不正确');
+    const parentId = tree ? (raw.parentId === null ? null : textField(raw.parentId, '父文件夹')) : null;
+    return { id, parentId, name, order: raw.order as number };
   });
+  assertFolderTree(folders);
+  return folders;
 }
 
 interface ValidateShortcutInput {
@@ -56,10 +75,11 @@ interface ValidateShortcutInput {
   readonly folderIds: ReadonlySet<string>;
   readonly ids: Set<string>;
   readonly orders: Map<string, Set<number>>;
+  readonly legacy: boolean;
 }
 
 function validateShortcut(input: ValidateShortcutInput): Shortcut {
-  const { value, folderIds, ids, orders } = input;
+  const { value, folderIds, ids, orders, legacy } = input;
   const raw = record(value, '网站');
   exactKeys(raw, ['id', 'folderId', 'title', 'url', 'icon', 'iconSourceUrl', 'order'], '网站');
   const id = textField(raw.id, '网站标识');
@@ -73,21 +93,35 @@ function validateShortcut(input: ValidateShortcutInput): Shortcut {
   const url = normalizeShortcutUrl(textField(raw.url, '网站地址'));
   if (url !== raw.url) fail('网站地址必须是已保存的规范格式');
   if (!Number.isSafeInteger(raw.order) || (raw.order as number) < 0) fail('网站顺序不正确');
-  const key = folderId ?? '';
-  const groupOrders = orders.get(key) ?? new Set<number>();
-  if (groupOrders.has(raw.order as number)) fail('同一文件夹内网站顺序不能重复');
-  groupOrders.add(raw.order as number);
-  orders.set(key, groupOrders);
+  if (legacy) {
+    // 扁平文件夹时代每次删除都会重排容器，历史合同因此要求连续且不重复；不弱化旧格式。
+    const key = folderId ?? '';
+    const groupOrders = orders.get(key) ?? new Set<number>();
+    if (groupOrders.has(raw.order as number)) fail('同一文件夹内网站顺序不能重复');
+    groupOrders.add(raw.order as number);
+    orders.set(key, groupOrders);
+  }
   return { id, folderId, title, url, icon: parseShortcutIcon(raw.icon),
     iconSourceUrl: validateSourceUrl(raw.iconSourceUrl, '图标来源地址'), order: raw.order as number };
 }
 
-export function validateBackupShortcuts(value: unknown, folders: readonly Folder[]): Shortcut[] {
+/**
+ * ZIP 网站条目。
+ *
+ * 当前格式（12）的 `order` 与文件夹同构：同容器内的**相对**位置。合法删除只提升被删项、
+ * 同步物化保留寄存器原值，稀疏与并列因此都是合法持久状态，只校验非负安全整数、标识唯一
+ * 与所属文件夹存在，不要求连续、不重编号。扁平文件夹时代（≤11）沿用当时连续且不重复的
+ * 合同，不无据弱化旧格式。
+ */
+export function validateBackupShortcuts(value: unknown, folders: readonly Folder[],
+  formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): Shortcut[] {
   if (!Array.isArray(value) || value.length > LIMITS.shortcuts) fail('网站数量不符合限制');
+  const legacy = formatVersion <= LEGACY_FLAT_FOLDER_BACKUP_VERSION;
   const folderIds = new Set(folders.map(({ id }) => id));
   const ids = new Set<string>();
   const orders = new Map<string, Set<number>>();
-  const shortcuts = value.map((item) => validateShortcut({ value: item, folderIds, ids, orders }));
+  const shortcuts = value.map((item) => validateShortcut({ value: item, folderIds, ids, orders, legacy }));
+  if (!legacy) return shortcuts;
   for (const containerOrders of orders.values()) {
     if ([...containerOrders].some((order, index) => order !== index)) fail('网站顺序必须连续');
   }
@@ -176,7 +210,7 @@ export function validateBackupAssets(value: unknown, formatVersion: SupportedBac
   return value.map((item) => validateAsset(item, formatVersion));
 }
 
-function referencedBackground(background: AppSettings['appearance']['background'], assets: ReadonlyMap<string, BackupAsset>): string | null {
+function referencedBackground(background: BackupSettings['appearance']['background'], assets: ReadonlyMap<string, BackupAsset>): string | null {
   if (background.kind !== 'photo' && background.kind !== 'motion') return null;
   const asset = assets.get(background.assetId);
   const motion = background.kind === 'motion';
@@ -199,7 +233,7 @@ function referencedShortcut(shortcut: Shortcut, assets: ReadonlyMap<string, Back
 export interface BackupReferencesInput {
   readonly folders: readonly Folder[];
   readonly shortcuts: readonly Shortcut[];
-  readonly settings: AppSettings;
+  readonly settings: BackupSettings;
   readonly assets: readonly BackupAsset[];
 }
 

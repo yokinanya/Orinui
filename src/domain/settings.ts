@@ -11,6 +11,7 @@ import { normalizeEngineName } from '@/domain/text';
 import { createDefaultSearchCustomization, validateSearchCustomization, type SearchCustomization } from '@/domain/search-customization';
 import { asRecord } from '@/domain/validate';
 import { EMPTY_HOME, validateHome, type HomeData } from '@/domain/home';
+import { createDefaultBookmarkPreferences, validateBookmarkPreferences, type BookmarkPreferences } from '@/domain/bookmark-preferences';
 
 /** 时钟格式三态：跟随系统或手动固定。 */
 export type ClockFormat = 'system' | '12h' | '24h';
@@ -40,6 +41,7 @@ export interface AppSettings {
     customization: SearchCustomization;
   } & SearchPreferences;
   shortcuts: ShortcutPreferences;
+  bookmarks: BookmarkPreferences;
   layout: LayoutConfig;
   clock: {
     format: ClockFormat;
@@ -77,6 +79,7 @@ export function createDefaultSettings(): AppSettings {
     search: { defaultEngineId: 'google', customEngines: [], width: 'standard', autoFocus: false, openTarget: 'current-tab',
       customization: createDefaultSearchCustomization() },
     shortcuts: { showNames: true, openTarget: 'current-tab' },
+    bookmarks: createDefaultBookmarkPreferences(),
     layout: { ...DEFAULT_LAYOUT, order: [...DEFAULT_LAYOUT.order], hidden: [...DEFAULT_LAYOUT.hidden] },
     clock: {
       format: 'system', size: 'standard', showSeconds: false, showDate: true, showWeekday: true,
@@ -170,6 +173,7 @@ export function validateSettings(value: unknown): AppSettings {
     appearance: validateAppearance(raw.appearance),
     search: { defaultEngineId: search.defaultEngineId, customEngines, ...searchPreferences, customization },
     shortcuts: validateShortcutPreferences(raw.shortcuts),
+    bookmarks: raw.bookmarks === undefined ? createDefaultBookmarkPreferences() : validateBookmarkPreferences(raw.bookmarks),
     layout: validateLayout(raw.layout),
     clock: validateClockSettings(raw.clock),
   };

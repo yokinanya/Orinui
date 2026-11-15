@@ -80,6 +80,7 @@ function createLiveRecords({ snapshot, pending, allAssets, cachedAssetIds }: Cre
     return { id: recordId('asset', value.id), kind: 'asset', entityId: value.id, value: metadata, sha256,
       ...(retainedAsset ? { retainedAsset } : {}) };
   });
+  // 隐藏规则逐条寄存器随设置记录整体物化；`null` 已由快照携带，不需要额外墓碑。
   const settings: SyncEntityRecordRow = { id: recordId('settings', 'app'), kind: 'settings', entityId: 'app',
     value: { ...snapshot.settings, customEngines: [] } };
   const engines: SyncEntityRecordRow[] = snapshot.settings.customEngines.map((value) => ({

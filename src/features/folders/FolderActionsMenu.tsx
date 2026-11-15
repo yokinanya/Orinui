@@ -1,28 +1,16 @@
 import { openContextMenuFromKeyboard } from '@/features/folders/menu-keyboard';
-import { ArrowDownIcon, ArrowUpIcon, FolderOpenIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { FolderOpenIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu';
 import type { Folder } from '@/domain/folder';
-import { useData } from '@/app/data-context';
-import { notifyError } from '@/lib/notify';
 
-export function FolderPositionItems({ folder }: { readonly folder: Folder }) {
-  const { settings, moveHomeItem } = useData();
-  const placement = settings.home?.placements.find(({ id }) => id === `folder:${folder.id}`);
-  const move = (delta: number) => {
-    if (placement) void moveHomeItem({ ...placement, row: placement.row + delta }).catch(notifyError);
-  };
-  return <>
-    <ContextMenuItem disabled={!placement || placement.row === 0} onClick={() => move(-1)}>
-      <ArrowUpIcon />上移
-    </ContextMenuItem>
-    <ContextMenuItem disabled={!placement} onClick={() => move(1)}>
-      <ArrowDownIcon />下移
-    </ContextMenuItem>
-  </>;
-}
-
+/**
+ * 文件夹操作菜单。
+ *
+ * 自有文件夹可任意嵌套，但不可移动、不可改父、不可重排：这里只保留打开、重命名与删除。
+ * 删除只提升直接子项，深层子树和网站标识都保留，由删除确认说明范围。
+ */
 export function FolderContextMenu({ folder, onOpen, onRename, onDelete, children }: {
   readonly folder: Folder;
   readonly onOpen: (folderId: string) => void;
@@ -36,7 +24,6 @@ export function FolderContextMenu({ folder, onOpen, onRename, onDelete, children
       <ContextMenuContent className="w-52">
         <ContextMenuItem onClick={() => onOpen(folder.id)}><FolderOpenIcon />打开文件夹</ContextMenuItem>
         <ContextMenuItem onClick={() => onRename(folder)}><PencilIcon />重命名</ContextMenuItem>
-        <FolderPositionItems folder={folder} />
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onClick={() => onDelete(folder)}><Trash2Icon />删除文件夹</ContextMenuItem>
       </ContextMenuContent>

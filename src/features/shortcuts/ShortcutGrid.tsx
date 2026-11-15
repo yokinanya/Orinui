@@ -16,7 +16,6 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import { FolderOpenIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import type { ReactNode } from 'react';
 
 import { useData } from '@/app/data-context';
 import { Button } from '@/components/ui/button';
@@ -24,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { Folder } from '@/domain/folder';
 import type { Shortcut } from '@/domain/shortcut';
 import type { OpenTarget } from '@/domain/settings';
-import { FolderContextMenu, FolderPositionItems } from '@/features/folders/FolderActionsMenu';
+import { FolderContextMenu } from '@/features/folders/FolderActionsMenu';
 import { FolderTile } from '@/features/folders/FolderTile';
 import { AddShortcutTile } from '@/features/shortcuts/AddShortcutTile';
 import { ShortcutActionsButton, ShortcutContextMenu } from '@/features/shortcuts/ShortcutActionsMenu';
@@ -32,14 +31,7 @@ import { ShortcutTile } from '@/features/shortcuts/ShortcutTile';
 import { notifyError } from '@/lib/notify';
 import { cn } from '@/lib/utils';
 
-const TILE_MIN_WIDTH_REM = 6;
 const DRAG_ACTIVATION_DISTANCE = 8;
-
-/** 最多使用所选列数；空间不足时自动减少列数，继续向下排列。 */
-function shortcutColumns(columns: number): string {
-  const track = `max(min(100%, ${TILE_MIN_WIDTH_REM}rem), calc((100% - (${columns} - 1) * var(--shortcut-grid-gap)) / ${columns}))`;
-  return `repeat(auto-fill, minmax(${track}, 1fr))`;
-}
 
 interface SortableShortcutProps {
   shortcut: Shortcut;
@@ -85,29 +77,28 @@ function SortableShortcut({ shortcut, editing, onEdit, onChanged, containerShort
   );
 }
 
-interface SortableFolderProps {
+interface StaticFolderProps {
   readonly folder: Folder;
   readonly editing: boolean;
+  readonly showActions: boolean;
   readonly onOpen: (folderId: string) => void;
   readonly onRename: (folder: Folder) => void;
   readonly onDelete: (folder: Folder) => void;
 }
 
-/** 文件夹格子：普通模式点开弹层，编辑模式可拖动排序并通过操作按钮改名或删除。 */
-function SortableFolder({ folder, editing, onOpen, onRename, onDelete }: SortableFolderProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `folder:${folder.id}`,
-    disabled: !editing,
-  });
+/**
+ * 文件夹格子。
+ *
+ * 自有文件夹可任意嵌套，但不能移动、改父或同层重排，因此这里始终是静态块：
+ * 不接入 sortable、不提供上移/下移，编辑模式下也不会变成拖拽手柄。
+ */
+function StaticFolder({ folder, editing, showActions, onOpen, onRename, onDelete }: StaticFolderProps) {
   return (
-    <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn('relative min-w-0', isDragging && 'z-10 opacity-90')}>
+    <li className="relative min-w-0">
       <FolderContextMenu folder={folder} onOpen={onOpen} onRename={onRename} onDelete={onDelete}>
-        <div {...(editing ? { ...attributes, ...listeners, role: 'group', tabIndex: -1 } : {})}>
-          <FolderTile name={folder.name} editing={editing} onClick={() => onOpen(folder.id)} />
-        </div>
+        <FolderTile folderId={folder.id} name={folder.name} editing={editing} onClick={() => onOpen(folder.id)} />
       </FolderContextMenu>
-      {editing && <FolderActionsButton folder={folder} onOpen={onOpen} onRename={onRename} onDelete={onDelete} />}
+      {(editing || showActions) && <FolderActionsButton folder={folder} onOpen={onOpen} onRename={onRename} onDelete={onDelete} />}
     </li>
   );
 }
@@ -129,7 +120,6 @@ function FolderActionsButton({ folder, onOpen, onRename, onDelete }: {
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem onClick={() => onOpen(folder.id)}><FolderOpenIcon />打开文件夹</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onRename(folder)}><PencilIcon />重命名</DropdownMenuItem>
-        <FolderPositionItems folder={folder} />
         <DropdownMenuItem variant="destructive" onClick={() => onDelete(folder)}><Trash2Icon />删除文件夹</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -138,6 +128,7 @@ function FolderActionsButton({ folder, onOpen, onRename, onDelete }: {
 
 interface ShortcutGridProps {
   readonly shortcuts: Shortcut[];
+  /** 当前层的直接子文件夹；主页只传顶层文件夹。 */
   readonly folders: readonly Folder[];
   readonly editing: boolean;
   readonly showActions?: boolean;
@@ -151,28 +142,21 @@ interface ShortcutGridProps {
 }
 
 /**
- * 主页网格。
+ * 网站与当前层文件夹共用的自适应网格。
  *
- * 文件夹与网站共用同一套网格轨道：文件夹排在网站之前，编辑模式下可拖动文件夹调整顺序。
- * 使用自适应网格，按用户设置的最大列数限制宽屏列数，窄屏随可用宽度减少。
- *
- * 编辑模式下整格可拖动（需要移动 8px 才算拖动，点击仍然有效），
- * 键盘通过对象菜单上移、下移，拖动容器不占用 Tab 停靠点。
+ * 文件夹按领域顺序排在网站之前，位置固定；只有网站在编辑模式下可拖动或键盘移动。
+ * 网格按可用宽度减少列数，窄屏继续向下排列。
  */
 export function ShortcutGrid(props: ShortcutGridProps) {
   const { shortcuts, folders, onShortcutsChanged, editing, onEdit, onAdd, onOpenFolder, onEditFolder, onDeleteFolder, alignment } = props;
-  const { reorderShortcut, reorderFolder, settings } = useData();
+  const { reorderShortcut, settings } = useData();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const handleDragEnd = createDragEndHandler({ folders, shortcuts, reorderFolder, reorderShortcut, onShortcutsChanged });
-
-  const items = [
-    ...folders.map((folder) => `folder:${folder.id}`),
-    ...shortcuts.map((shortcut) => `shortcut:${shortcut.id}`),
-  ];
+  const handleDragEnd = createDragEndHandler({ shortcuts, reorderShortcut, onShortcutsChanged });
+  const items = shortcuts.map((shortcut) => `shortcut:${shortcut.id}`);
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -181,12 +165,13 @@ export function ShortcutGrid(props: ShortcutGridProps) {
           <ul data-shortcut-alignment={alignment} className="shortcut-grid w-full"
             style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
             {folders.map((folder) => (
-              <SortableFolder key={folder.id} folder={folder} editing={editing} onOpen={onOpenFolder}
-                onRename={onEditFolder} onDelete={onDeleteFolder} />
+              <StaticFolder key={folder.id} folder={folder} editing={editing} showActions={props.showActions ?? editing}
+                onOpen={onOpenFolder} onRename={onEditFolder} onDelete={onDeleteFolder} />
             ))}
             {shortcuts.map((shortcut) => (
-              <SortableShortcut key={shortcut.id} shortcut={shortcut} editing={editing} showActions={props.showActions ?? editing} onEdit={onEdit} onChanged={onShortcutsChanged}
-                containerShortcuts={shortcuts} showNames={settings.shortcuts.showNames} openTarget={settings.shortcuts.openTarget} />
+              <SortableShortcut key={shortcut.id} shortcut={shortcut} editing={editing} showActions={props.showActions ?? editing}
+                onEdit={onEdit} onChanged={onShortcutsChanged} containerShortcuts={shortcuts}
+                showNames={settings.shortcuts.showNames} openTarget={settings.shortcuts.openTarget} />
             ))}
             {editing && (
               <li className="min-w-0">
@@ -201,36 +186,18 @@ export function ShortcutGrid(props: ShortcutGridProps) {
 }
 
 interface DragHandlerOptions {
-  readonly folders: readonly Folder[];
   readonly shortcuts: readonly Shortcut[];
-  readonly reorderFolder: (id: string, index: number) => Promise<void>;
   readonly reorderShortcut: (id: string, index: number) => Promise<void>;
   readonly onShortcutsChanged: () => void;
 }
 
-function createDragEndHandler({ folders, shortcuts, reorderFolder, reorderShortcut, onShortcutsChanged }: DragHandlerOptions) {
-  // 拖动落点按混合列表的索引处理；跨类型拖动只重排目标类型，不改变网站的容器归属。
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+/** 只处理网站排序；文件夹不可拖动，也不存在跨容器移动。 */
+function createDragEndHandler({ shortcuts, reorderShortcut, onShortcutsChanged }: DragHandlerOptions) {
+  return ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    const orderedFolderIds = folders.map((folder) => `folder:${folder.id}`);
-    const orderedShortcutIds = shortcuts.map((shortcut) => `shortcut:${shortcut.id}`);
-    const activeFolderIndex = orderedFolderIds.indexOf(activeId);
-    const activeShortcutIndex = orderedShortcutIds.indexOf(activeId);
-    const overFolderIndex = orderedFolderIds.indexOf(overId);
-    const overShortcutIndex = orderedShortcutIds.indexOf(overId);
-
-    if (activeFolderIndex >= 0 && overFolderIndex >= 0) {
-      void reorderFolder(folders[activeFolderIndex]!.id, overFolderIndex)
-        .then(onShortcutsChanged).catch(notifyError);
-      return;
-    }
-    if (activeShortcutIndex >= 0 && overShortcutIndex >= 0) {
-      void reorderShortcut(shortcuts[activeShortcutIndex]!.id, overShortcutIndex)
-        .then(onShortcutsChanged).catch(notifyError);
-    }
+    const activeIndex = shortcuts.findIndex((shortcut) => `shortcut:${shortcut.id}` === String(active.id));
+    const overIndex = shortcuts.findIndex((shortcut) => `shortcut:${shortcut.id}` === String(over.id));
+    if (activeIndex < 0 || overIndex < 0) return;
+    void reorderShortcut(shortcuts[activeIndex]!.id, overIndex).then(onShortcutsChanged).catch(notifyError);
   };
-
-  return handleDragEnd;
 }

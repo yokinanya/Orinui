@@ -6,6 +6,7 @@ import { createDatabase, type OrinuiDatabase } from '@/storage/db';
 import {
   createFolder,
   deleteFolder,
+  listChildFolders,
   listFolders,
   moveFolder,
   renameFolder,
@@ -37,7 +38,23 @@ describe('createFolder', () => {
     const folder = await createFolder(db, '  工作  ');
 
     expect(folder.name).toBe('工作');
+    expect(folder.parentId).toBeNull();
     expect(folder.order).toBe(0);
+  });
+
+  it('在指定父层创建时只占用该层顺序', async () => {
+    const root = await createFolder(db, '根');
+    const first = await createFolder(db, '子一', root.id);
+    const second = await createFolder(db, '子二', root.id);
+
+    expect(first).toMatchObject({ parentId: root.id, order: 0 });
+    expect(second).toMatchObject({ parentId: root.id, order: 1 });
+    expect((await listFolders(db)).filter(({ parentId }) => parentId === null)).toHaveLength(1);
+  });
+
+  it('拒绝不存在的父文件夹且不写入', async () => {
+    await expect(createFolder(db, '子', 'missing')).rejects.toThrowError(/父文件夹不存在/);
+    expect(await db.folders.count()).toBe(0);
   });
 
   it('允许同名文件夹并保留独立身份', async () => {
@@ -63,6 +80,24 @@ describe('createFolder', () => {
   });
 });
 
+describe('listChildFolders', () => {
+  it('只返回直接子文件夹并按 order、其次 id 稳定排序', async () => {
+    const root = await createFolder(db, '根');
+    const zed = await createFolder(db, 'Zed', root.id);
+    const alpha = await createFolder(db, 'Alpha', root.id);
+    const nested = await createFolder(db, '嵌套', zed.id);
+    // 人为造出同 order 的合法并存项，确认 tie 由 id 决定而不是读库顺序。
+    await db.folders.put({ ...alpha, order: zed.order });
+
+    const children = await listChildFolders(db, root.id);
+    expect(children.map(({ id }) => id)).toEqual([alpha.id, zed.id].toSorted((left, right) => left < right ? -1 : 1));
+    expect(children.map(({ parentId }) => parentId)).toEqual([root.id, root.id]);
+    // 反复读取顺序一致，深层子树不混入这一层。
+    expect((await listChildFolders(db, root.id)).map(({ id }) => id)).toEqual(children.map(({ id }) => id));
+    expect(children.some(({ id }) => id === nested.id)).toBe(false);
+  });
+});
+
 describe('renameFolder', () => {
   it('改名保持顺序', async () => {
     const folder = await createFolder(db, '工作');
@@ -85,51 +120,21 @@ describe('renameFolder', () => {
   });
 });
 
-describe('moveFolder', () => {
-  it('与相邻文件夹交换位置', async () => {
+describe('文件夹不可移动或重排', () => {
+  it('moveFolder 明确失败且不写入', async () => {
     await createFolder(db, '工作');
     const life = await createFolder(db, '生活');
 
-    expect(await moveFolder(db, life.id, 'up')).toBe(true);
-    expect((await listFolders(db)).map((folder) => folder.name)).toEqual(['生活', '工作']);
+    await expect(moveFolder(db, life.id, 'up')).rejects.toThrowError(/不支持移动/);
+    expect((await listFolders(db)).map((folder) => folder.name)).toEqual(['工作', '生活']);
   });
 
-  it('已在边界时返回 false 且顺序不变', async () => {
-    const folder = await createFolder(db, '工作');
-
-    expect(await moveFolder(db, folder.id, 'up')).toBe(false);
-    expect(await moveFolder(db, folder.id, 'down')).toBe(false);
-    expect((await listFolders(db)).map((item) => item.name)).toEqual(['工作']);
-  });
-});
-
-describe('reorderFolder', () => {
-  it('移动到指定下标并重新编号', async () => {
-    await createFolder(db, '工作');
-    await createFolder(db, '生活');
-    const fun = await createFolder(db, '娱乐');
-
-    await reorderFolder(db, fun.id, 0);
-
-    const folders = await listFolders(db);
-    expect(folders.map((folder) => folder.name)).toEqual(['娱乐', '工作', '生活']);
-    expect(folders.map((folder) => folder.order)).toEqual([0, 1, 2]);
-  });
-
-  it('目标下标越界时收敛到末尾', async () => {
+  it('reorderFolder 明确失败且不写入', async () => {
     const work = await createFolder(db, '工作');
     await createFolder(db, '生活');
 
-    await reorderFolder(db, work.id, 99);
-
-    expect((await listFolders(db)).map((folder) => folder.name)).toEqual(['生活', '工作']);
-  });
-
-  it('标识不存在时报错且顺序不变', async () => {
-    await createFolder(db, '工作');
-
-    await expect(reorderFolder(db, 'missing', 0)).rejects.toThrowError(/文件夹不存在/);
-    expect((await listFolders(db)).map((folder) => folder.name)).toEqual(['工作']);
+    await expect(reorderFolder(db, work.id, 1)).rejects.toThrowError(/不支持重排/);
+    expect((await listFolders(db)).map((folder) => folder.name)).toEqual(['工作', '生活']);
   });
 });
 
@@ -150,7 +155,7 @@ describe('deleteFolder', () => {
     expect(await listFolders(db)).toHaveLength(0);
   });
 
-  it('删除后重新编号，保持位置连续', async () => {
+  it('删除后不重排目标层既有项，也不全局重编号', async () => {
     const work = await createFolder(db, '工作');
     const life = await createFolder(db, '生活');
     const fun = await createFolder(db, '娱乐');
@@ -159,8 +164,38 @@ describe('deleteFolder', () => {
 
     const folders = await listFolders(db);
     expect(folders.map((folder) => folder.name)).toEqual(['工作', '娱乐']);
-    expect(folders.map((folder) => folder.order)).toEqual([0, 1]);
+    expect(folders.map((folder) => folder.order)).toEqual([0, 2]);
     expect(fun.id).toBe(folders[1]?.id);
+    expect(work.order).toBe(0);
+  });
+
+  it('删除中层时只提升直接子文件夹与网站，按相对顺序追加到父层末尾', async () => {
+    const root = await createFolder(db, '根');
+    const middle = await createFolder(db, '中层', root.id);
+    const sibling = await createFolder(db, '既有兄弟', root.id);
+    const directA = await createFolder(db, '直接A', middle.id);
+    const deep = await createFolder(db, '深层', directA.id);
+    const directB = await createFolder(db, '直接B', middle.id);
+    await addShortcut(middle.id, '中层网站一', 0);
+    await addShortcut(middle.id, '中层网站二', 1);
+    await addShortcut(root.id, '根层网站', 0);
+
+    const result = await deleteFolder(db, middle.id);
+
+    expect(result).toEqual({ movedShortcuts: 2, movedFolders: 2 });
+    const layers = await listFolders(db);
+    // 目标层既有项（sibling order 1）保持原位置，不重编号。
+    expect(layers.find(({ id }) => id === sibling.id)?.order).toBe(1);
+    // 直接子文件夹按原相对顺序追加到根层末尾；深层子树与标识不变。
+    expect(layers.find(({ id }) => id === directA.id)).toMatchObject({ parentId: root.id, order: 2 });
+    expect(layers.find(({ id }) => id === directB.id)).toMatchObject({ parentId: root.id, order: 3 });
+    expect(layers.find(({ id }) => id === deep.id)).toMatchObject({ parentId: directA.id, order: 0 });
+    expect(layers.some(({ id }) => id === middle.id)).toBe(false);
+    // 网站按原相对顺序追加到根层末尾，根层既有网站位置不变。
+    const sites = await db.shortcuts.toArray();
+    expect(sites.find(({ title }) => title === '根层网站')?.order).toBe(0);
+    expect(sites.find(({ title }) => title === '中层网站一')).toMatchObject({ folderId: root.id, order: 1 });
+    expect(sites.find(({ title }) => title === '中层网站二')).toMatchObject({ folderId: root.id, order: 2 });
   });
 
   it('文件夹不存在时报错且不影响其他数据', async () => {

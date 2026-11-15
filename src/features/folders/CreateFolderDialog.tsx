@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useData } from '@/app/data-context';
 import { Button } from '@/components/ui/button';
@@ -16,20 +16,36 @@ import { Input } from '@/components/ui/input';
 interface CreateFolderDialogProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
+  /** 新文件夹所属层；缺省或 null 表示在主页顶层创建。 */
+  readonly parentId?: string | null;
+  /** 当前层名称，仅用于说明新文件夹会落在哪里。 */
+  readonly parentName?: string;
 }
 
-/** 新建文件夹。名称校验与唯一性由领域层给出，这里只负责展示原因。 */
-export function CreateFolderDialog({ open, onOpenChange }: CreateFolderDialogProps) {
+/**
+ * 在当前层新建文件夹。
+ *
+ * 名称校验与唯一性由领域层给出，这里只负责展示原因。`parentId` 决定归属层，
+ * 不猜测、也不允许通过路径或名称推断。
+ */
+export function CreateFolderDialog({ open, onOpenChange, parentId = null, parentName }: CreateFolderDialogProps) {
   const { createFolder } = useData();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!open) return;
+    setName('');
+    setError(null);
+  }, [open, parentId]);
+
   const submit = async () => {
     setError(null);
     setSaving(true);
     try {
-      await createFolder(name);
+      // 顶层显式省略父标识，嵌套层传当前层 id；归属只由 parentId 决定，不做路径或名称推断。
+      await createFolder(name, parentId ?? undefined);
       setName('');
       onOpenChange(false);
     } catch (cause) {
@@ -39,13 +55,15 @@ export function CreateFolderDialog({ open, onOpenChange }: CreateFolderDialogPro
     }
   };
 
+  const target = parentId === null ? '主页顶层' : `「${parentName ?? '当前文件夹'}」内`;
+
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!saving) onOpenChange(next); }}>
       <DialogContent>
         <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <DialogHeader>
             <DialogTitle>新建文件夹</DialogTitle>
-            <DialogDescription>输入文件夹名称。</DialogDescription>
+            <DialogDescription>新文件夹会放在{target}。</DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Field data-invalid={error !== null || undefined}>

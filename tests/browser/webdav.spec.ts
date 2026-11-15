@@ -30,7 +30,8 @@ test('普通网页预览的 WebDAV 检查明确报告缺少扩展环境', async 
 
   const error = page.getByRole('alert');
   await expect(error).toBeVisible();
-  await expect(error).toContainText(/Chrome 扩展|扩展环境/);
+  // 本套件跑在 http://127.0.0.1:5173 的普通网页预览，不是扩展环境，必须报告不支持。
+  await expect(error).toContainText('WebDAV 同步需要在已加载的 Chrome 或 Firefox 扩展中使用');
   await expect(page.getByLabel('应用密码')).toHaveValue('test-password');
   await expect(page.getByLabel('恢复密钥（可选）')).toHaveValue('test-recovery-key');
 });
