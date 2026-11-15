@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { BACKUP_VERSION } from '@/domain/backup';
+import { toPortableSettings } from '@/domain/backup-settings';
 import { createDefaultSettings } from '@/domain/settings';
 import { importShortcutFixture } from './contrast-helpers';
 
@@ -15,7 +16,11 @@ function shortcutFixture(shortcuts: readonly object[]) {
     assets: [],
     folders: [],
     shortcuts,
-    settings: { ...defaults, layout: { ...defaults.layout, order: [...defaults.layout.order], hidden: [...defaults.layout.hidden] } },
+    // 当前 ZIP 清单不含运行时的 `bookmarks` 偏好，走与导出相同的可移植设置转换。
+    settings: toPortableSettings({
+      ...defaults,
+      layout: { ...defaults.layout, order: [...defaults.layout.order], hidden: [...defaults.layout.hidden] },
+    }),
   };
 }
 

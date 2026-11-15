@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { createDefaultSettings } from '@/domain/settings';
 import { BACKUP_VERSION } from '@/domain/backup';
+import { toPortableSettings } from '@/domain/backup-settings';
 import { createZipFixture } from './zip-fixtures';
 
 export interface BackgroundCase {
@@ -47,11 +48,13 @@ function fixture(input: BackgroundCase) {
   const defaults = createDefaultSettings();
   return {
     formatVersion: BACKUP_VERSION, exportedAt: new Date().toISOString(), assets: [],
-    folders: [{ id: 'contrast-folder', name: '常用', order: 0 }],
+    // 当前 ZIP 格式（12）的文件夹必须带父引用；顶层为 null，嵌套则指向真实父 ID。
+    folders: [{ id: 'contrast-folder', parentId: null, name: '常用', order: 0 }],
     shortcuts: [{ id: 'contrast-site', folderId: null, title: '对比度站点', url: 'https://example.com/',
       icon: { kind: 'letter' }, iconSourceUrl: null, order: 0 }],
-    settings: { ...defaults, appearance: { ...defaults.appearance, theme: input.theme, background: input.background,
-      dynamicColor: { ...defaults.appearance.dynamicColor, enabled: input.dynamic } } },
+    // 清单不携带运行时的 `bookmarks` 偏好；此处显式转换，不依赖导入端宽容。
+    settings: toPortableSettings({ ...defaults, appearance: { ...defaults.appearance, theme: input.theme,
+      background: input.background, dynamicColor: { ...defaults.appearance.dynamicColor, enabled: input.dynamic } } }),
   };
 }
 
