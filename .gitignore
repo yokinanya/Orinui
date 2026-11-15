@@ -27,4 +27,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
-/.ryugi/
+
+# ryugi
+.ryugi/*
