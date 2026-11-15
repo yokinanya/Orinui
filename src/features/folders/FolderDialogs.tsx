@@ -13,6 +13,7 @@ import {
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import type { Folder } from '@/domain/folder';
+import { folderPathLabel } from '@/features/folders/folder-path';
 
 interface FolderNameDialogProps {
   readonly folder: Folder;
@@ -20,9 +21,12 @@ interface FolderNameDialogProps {
   readonly onOpenChange: (open: boolean) => void;
 }
 
-/** 重命名文件夹。名称唯一性与长度由领域层校验，这里只展示原因。 */
+/**
+ * 重命名文件夹。名称唯一性与长度由领域层校验，这里只展示原因。
+ * 只改名称，不改变所属层或同层顺序；完整路径用于区分同名文件夹。
+ */
 export function RenameFolderDialog({ folder, open, onOpenChange }: FolderNameDialogProps) {
-  const { renameFolder } = useData();
+  const { folders, renameFolder } = useData();
   const [name, setName] = useState(folder.name);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,7 +56,9 @@ export function RenameFolderDialog({ folder, open, onOpenChange }: FolderNameDia
         <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           <DialogHeader>
             <DialogTitle>重命名文件夹</DialogTitle>
-            <DialogDescription>输入新名称。</DialogDescription>
+            <DialogDescription>
+              路径：{folderPathLabel(folders, folder.id)}。只改名称，不改变所属层或顺序。
+            </DialogDescription>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Field data-invalid={error !== null || undefined}>
