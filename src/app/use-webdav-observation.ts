@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Database } from '@/storage/db';
 import { observeWebDavLocal, type WebDavObservation } from '@/storage/webdav-observer';
-import { isExtensionPage, subscribeWebDavConfiguration } from '@/platform/webdav-settings';
+import { isExtensionPage } from '@/platform/extension-runtime';
+import { subscribeWebDavConfiguration } from '@/platform/webdav-settings';
 import { createWebDavScheduler } from '@/sync/webdav-scheduler';
 import type { WebDavSyncService, WebDavSyncStatus } from '@/sync/webdav-types';
 import type { useWebDavActions } from '@/app/use-webdav-actions';

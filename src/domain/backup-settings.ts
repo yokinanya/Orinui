@@ -1,5 +1,5 @@
 import { fail } from '@/domain/errors';
-import { DEFAULT_LAYOUT } from '@/domain/layout';
+import { DEFAULT_LAYOUT, upgradeSlotOrder } from '@/domain/layout';
 import { BUILT_IN_ENGINES } from '@/domain/search-engines';
 import { validateSettings, type AppSettings } from '@/domain/settings';
 import { createDefaultSearchCustomization, upgradeLegacySearchCustomization } from '@/domain/search-customization';
@@ -7,8 +7,30 @@ import { createDefaultSearchCustomization, upgradeLegacySearchCustomization } fr
 export const LEGACY_BACKUP_VERSION = 8 as const;
 export const PREVIOUS_BACKUP_VERSION = 9 as const;
 export const LEGACY_HOME_BACKUP_VERSION = 10 as const;
-export const CURRENT_BACKUP_VERSION = 11 as const;
-export type SupportedBackupVersion = typeof LEGACY_BACKUP_VERSION | typeof PREVIOUS_BACKUP_VERSION | typeof LEGACY_HOME_BACKUP_VERSION | typeof CURRENT_BACKUP_VERSION;
+/** 扁平文件夹 + 单块布局的最后一个版本；升级时补 `parentId: null` 并追加 `bookmarks`。 */
+export const LEGACY_FLAT_FOLDER_BACKUP_VERSION = 11 as const;
+export const CURRENT_BACKUP_VERSION = 12 as const;
+export type SupportedBackupVersion = typeof LEGACY_BACKUP_VERSION | typeof PREVIOUS_BACKUP_VERSION
+  | typeof LEGACY_HOME_BACKUP_VERSION | typeof LEGACY_FLAT_FOLDER_BACKUP_VERSION | typeof CURRENT_BACKUP_VERSION;
+
+/**
+ * 可移植设置：ZIP 能携带的全部设置，**整块排除** `bookmarks`。
+ *
+ * 书签偏好只描述本机这棵浏览器书签树的展示方式，隐藏规则还携带浏览器节点 ID 与路径，
+ * 脱离该树即无意义，因此既不写入清单也不从清单读取。运行时的 `AppSettings` 仍带
+ * `bookmarks`，两者由 `toPortableSettings` / `withLocalBookmarks` 显式转换。
+ */
+export type BackupSettings = Omit<AppSettings, 'bookmarks'>;
+
+export function toPortableSettings(settings: AppSettings): BackupSettings {
+  const { bookmarks: _bookmarks, ...portable } = settings;
+  return portable;
+}
+
+/** 导入时保留本机现状：书签偏好与隐藏规则不随备份变化。 */
+export function withLocalBookmarks(settings: BackupSettings, bookmarks: AppSettings['bookmarks']): AppSettings {
+  return { ...settings, bookmarks };
+}
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(`${label}格式不正确`);
@@ -61,19 +83,25 @@ function validateCurrentLayout(value: unknown): Record<string, unknown> {
   return layout;
 }
 
+/** 旧布局顺序缺 `bookmarks` 时追加到末尾；既有相对顺序与隐藏项不变。 */
+function upgradeLayout(layout: Record<string, unknown>): Record<string, unknown> {
+  return { ...layout, order: upgradeSlotOrder(layout.order) };
+}
+
 function validateClockShape(value: unknown): void {
   const clock = record(value, '时钟设置');
   exactKeys(clock, ['format', 'size', 'showSeconds', 'showDate', 'showWeekday', 'dateFormat', 'weekdayFormat'], '时钟设置');
 }
 
-export function validateBackupSettings(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): AppSettings {
+export function validateBackupSettings(value: unknown, formatVersion: SupportedBackupVersion = CURRENT_BACKUP_VERSION): BackupSettings {
   const raw = record(value, '设置');
+  // 出现 `bookmarks` 键即视为导出错误；清单任何版本都不携带书签偏好或隐藏规则。
   exactKeys(raw, ['appearance', 'search', 'shortcuts', 'layout', 'clock', ...(Object.hasOwn(raw, 'home') ? ['home'] : [])], '设置');
   validateAppearanceShape(raw.appearance);
   if (formatVersion >= LEGACY_HOME_BACKUP_VERSION) validateSearchShape(raw.search);
   else if (formatVersion === PREVIOUS_BACKUP_VERSION) validateLegacySearchFormatShape(raw.search);
   else validateLegacySearchShape(raw.search);
-  const layout = validateCurrentLayout(raw.layout);
+  const layout = upgradeLayout(validateCurrentLayout(raw.layout));
   validateClockShape(raw.clock);
   const legacySearch = raw.search as Record<string, unknown>;
   const settings = formatVersion === LEGACY_BACKUP_VERSION
@@ -81,8 +109,8 @@ export function validateBackupSettings(value: unknown, formatVersion: SupportedB
     : formatVersion === PREVIOUS_BACKUP_VERSION
       ? { ...raw, search: upgradeLegacySearchFormat(legacySearch), layout }
       : { ...raw, layout };
-  const parsed = validateSettings(settings);
-  if (formatVersion === CURRENT_BACKUP_VERSION) return parsed;
+  const parsed = toPortableSettings(validateSettings({ ...settings, bookmarks: undefined }));
+  if (formatVersion === CURRENT_BACKUP_VERSION || formatVersion === LEGACY_FLAT_FOLDER_BACKUP_VERSION) return parsed;
   return { ...parsed, layout: { ...parsed.layout, style: DEFAULT_LAYOUT.style, order: [...DEFAULT_LAYOUT.order],
     clockPosition: DEFAULT_LAYOUT.clockPosition, columns: DEFAULT_LAYOUT.columns }, shortcuts: { ...parsed.shortcuts, showNames: true } };
 }

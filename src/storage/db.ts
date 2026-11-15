@@ -9,6 +9,7 @@ import { createSyncCaptureMiddleware } from '@/storage/sync/middleware';
 import { migrateSearchCustomization } from '@/storage/search-customization-migration';
 import { migrateSearchEngineOverrides } from '@/storage/search-engine-override-migration';
 import { migrateHome } from '@/storage/home-migration';
+import { migrateFolderTree } from '@/storage/folder-tree-migration';
 
 /** 设置只保存一行，id 固定；结构随版本升级迁移。 */
 export type SettingsRow = AppSettings & { id: 'app' };
@@ -26,7 +27,7 @@ const LEGACY_SCHEMA_STORES_WITH_SYNC = {
 };
 
 const SCHEMA_STORES_WITH_SYNC = {
-  folders: 'id, order',
+  folders: 'id, parentId, order',
   shortcuts: 'id, folderId, order',
   settings: 'id',
   assets: 'id, kind',
@@ -39,12 +40,13 @@ function registerSchemaVersions(database: OrinuiDatabase): void {
   database.version(1).stores({ groups: 'id, order, isDefault', shortcuts: 'id, groupId, order', settings: 'id' });
   database.version(2).stores({ groups: 'id, order, isDefault', shortcuts: 'id, groupId, order', settings: 'id', assets: 'id, kind' });
   for (let version = 3; version <= 10; version += 1) database.version(version).stores(LEGACY_SCHEMA_STORES_WITH_SYNC);
-  database.version(11).stores({ ...SCHEMA_STORES_WITH_SYNC, groups: null }).upgrade(() => {
+  database.version(11).stores({ ...SCHEMA_STORES_WITH_SYNC, groups: null, folders: 'id, order' }).upgrade(() => {
     throw new Error('旧分组安装不兼容当前文件夹版本。请先使用旧版本导出备份并保留，再明确确认后卸载、重新安装扩展；旧备份不能直接导入当前版本。本机数据与同步密钥未被清除，远端数据未被修改。');
   });
-  database.version(12).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchCustomization);
-  database.version(13).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateSearchEngineOverrides);
-  database.version(14).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateHome);
+  database.version(12).stores({ ...SCHEMA_STORES_WITH_SYNC, folders: 'id, order' }).upgrade(migrateSearchCustomization);
+  database.version(13).stores({ ...SCHEMA_STORES_WITH_SYNC, folders: 'id, order' }).upgrade(migrateSearchEngineOverrides);
+  database.version(14).stores({ ...SCHEMA_STORES_WITH_SYNC, folders: 'id, order' }).upgrade(migrateHome);
+  database.version(15).stores(SCHEMA_STORES_WITH_SYNC).upgrade(migrateFolderTree);
 }
 
 

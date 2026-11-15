@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { BACKUP_VERSION } from '@/domain/backup';
+import { toPortableSettings } from '@/domain/backup-settings';
 import { createDefaultSettings } from '@/domain/settings';
 import type { HomeData } from '@/domain/home';
 import { readBackupFile } from '@/platform/backup-file';
@@ -33,7 +34,8 @@ vi.mock('@/components/ui/alert-dialog', () => {
 });
 
 async function readWidgetBackup(home?: HomeData) {
-  const settings = createDefaultSettings();
+  // 清单设置整块不含 `bookmarks`，与导出端一致。
+  const settings = toPortableSettings(createDefaultSettings());
   const manifest = { formatVersion: BACKUP_VERSION, exportedAt: '2026-10-25T00:00:00.000Z',
     folders: [], shortcuts: [], assets: [], settings: { ...settings, ...(home ? { home } : {}) } };
   const bytes = zipSync({ 'manifest.json': strToU8(JSON.stringify(manifest)) });

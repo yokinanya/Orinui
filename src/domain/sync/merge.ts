@@ -1,10 +1,13 @@
 import { fail } from '@/domain/errors';
 import { mergeSyncHome, resolveSyncHome } from '@/domain/sync/home';
 import { SyncMergeConflictError } from '@/domain/sync/conflicts';
+import { mergeBookmarkRuleRegisters } from '@/domain/sync/bookmarks';
 import { parseSyncSnapshot } from '@/domain/sync/validate';
 import { BUILT_IN_ENGINES, type SearchEngine } from '@/domain/search-engines';
 import { maximumSyncClock, nextSyncCounter } from '@/domain/sync/version';
-import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
+import { SYNC_SCHEMA_VERSION, type SyncAsset, type SyncEntityType, type SyncFolder,
+  type SyncRegister, type SyncSettings, type SyncShortcut,
+  type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
 
 export interface MergeSyncSnapshotsInput {
   readonly local: SyncSnapshot;
@@ -38,6 +41,7 @@ function mergeRecord<T extends { readonly id: string }>(records: readonly T[], m
 }
 
 function mergeFolder(left: SyncFolder, right: SyncFolder): SyncFolder {
+  // 位置是 { parentId, order } 原子值：父与顺序不可分别胜出，避免混合态。
   return { id: left.id, name: choose(left.name, right.name), position: choose(left.position, right.position) };
 }
 
@@ -60,17 +64,24 @@ function mergeSettings(snapshots: readonly SyncSnapshot[]): SyncSettings {
   const first = snapshots[0];
   if (!first) fail('同步快照不能为空');
   const customEngines = mergeEngines(snapshots.flatMap(({ settings }) => settings.customEngines));
-  let merged: SyncSettings = { ...first.settings, customEngines };
+  const bookmarkRules = mergeBookmarkRuleRegisters(snapshots.map(({ settings }) => settings.bookmarkRules));
+  let merged: SyncSettings = { ...first.settings, customEngines, bookmarkRules };
   for (const snapshot of snapshots.slice(1)) {
     merged = {
       home: mergeSyncHome([merged.home ?? {}, snapshot.settings.home ?? {}]),
       appearance: choose(merged.appearance, snapshot.settings.appearance),
       defaultEngineId: choose(merged.defaultEngineId, snapshot.settings.defaultEngineId),
-      layout: choose(merged.layout, snapshot.settings.layout),
+      layoutOrder: choose(merged.layoutOrder, snapshot.settings.layoutOrder),
+      layoutVisibility: choose(merged.layoutVisibility, snapshot.settings.layoutVisibility),
+      layoutPreferences: choose(merged.layoutPreferences, snapshot.settings.layoutPreferences),
       clock: choose(merged.clock, snapshot.settings.clock),
       searchPreferences: choose(merged.searchPreferences, snapshot.settings.searchPreferences),
       searchCustomization: choose(merged.searchCustomization, snapshot.settings.searchCustomization),
       shortcutPreferences: choose(merged.shortcutPreferences, snapshot.settings.shortcutPreferences),
+      bookmarksEnabled: choose(merged.bookmarksEnabled, snapshot.settings.bookmarksEnabled),
+      bookmarksMode: choose(merged.bookmarksMode, snapshot.settings.bookmarksMode),
+      bookmarksShowInSearch: choose(merged.bookmarksShowInSearch, snapshot.settings.bookmarksShowInSearch),
+      bookmarkRules: mergeBookmarkRuleRegisters([merged.bookmarkRules, snapshot.settings.bookmarkRules]),
       customEngines: mergeEngines([...merged.customEngines, ...snapshot.settings.customEngines]),
     };
   }
@@ -135,18 +146,78 @@ function tombstoneKey(type: SyncEntityType, id: string): string {
   return `${type}:${id}`;
 }
 
+/**
+ * 同键墓碑合并。
+ *
+ * 逻辑版本决定哪一条墓碑胜出，但**父层引用是已知信息，不是版本值**：
+ *
+ * - 较高版本缺少 `parentId`（legacy 或该设备从未观测到存活记录）时继承已确认的祖先，
+ *   不用缺省把已知层级抹掉，否则后代会被错误地推到主页；
+ * - 同一逻辑版本携带两个不同且都已知的父引用属于数据错误，整笔拒绝；
+ * - 解析阶段已把 wire 的 `null` 规范化为缺省，因此缺省与已知值不构成冲突。
+ *
+ * 先按键分组再裁决，结论与输入顺序无关：已知父引用只按逻辑版本取最新的一条。
+ */
 function mergeTombstoneLists(lists: readonly (readonly SyncTombstone[])[]): SyncTombstone[] {
-  const unique = new Map<string, SyncTombstone>();
+  const groups = new Map<string, SyncTombstone[]>();
   for (const tombstone of lists.flat()) {
     const key = tombstoneKey(tombstone.entityType, tombstone.id);
-    const current = unique.get(key);
-    if (!current || registerOrder(tombstone, current) > 0) unique.set(key, tombstone);
+    const group = groups.get(key) ?? [];
+    group.push(tombstone);
+    groups.set(key, group);
   }
-  return [...unique.values()].sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id));
+  const merged = [...groups.values()].map(mergeTombstoneGroup);
+  return merged.sort((left, right) => compareText(left.entityType, right.entityType) || compareText(left.id, right.id));
+}
+
+/** 同键墓碑组：除父层引用外字段由逻辑版本决定；父层引用取已确认且最新的一条。 */
+function mergeTombstoneGroup(group: readonly SyncTombstone[]): SyncTombstone {
+  const [first] = group;
+  if (!first) fail('删除墓碑不能为空');
+  // 同一逻辑版本的两条墓碑都带父引用却不同，说明 wire 已损坏，不静默选一个。
+  const parentByStamp = new Map<string, string>();
+  for (const tombstone of group) {
+    if (tombstone.parentId === undefined) continue;
+    const stamp = `${tombstone.clock}:${tombstone.deviceId}`;
+    const known = parentByStamp.get(stamp);
+    if (known !== undefined && known !== tombstone.parentId) fail('同一删除墓碑逻辑版本包含不同父文件夹');
+    parentByStamp.set(stamp, tombstone.parentId);
+  }
+  let winner = first;
+  let latestKnown: SyncTombstone | undefined;
+  for (const tombstone of group) {
+    if (registerOrder(tombstone, winner) > 0) winner = tombstone;
+    if (tombstone.parentId !== undefined && (!latestKnown || registerOrder(tombstone, latestKnown) > 0)) latestKnown = tombstone;
+  }
+  const parentId = latestKnown?.parentId;
+  return winner.parentId === undefined && parentId !== undefined ? { ...winner, parentId } : winner;
 }
 
 function mergeTombstones(snapshots: readonly SyncSnapshot[]): SyncTombstone[] {
   return mergeTombstoneLists(snapshots.map(({ tombstones }) => tombstones));
+}
+
+/**
+ * 给文件夹墓碑补上被删文件夹删除时的父层引用。
+ *
+ * 删除只产生被删文件夹自己的墓碑；要以「最近存活祖先」重建后代归属，就必须知道它是
+ * 从哪一层删掉的。本次合并若在任一快照里见过该文件夹的存活记录，就把它的寄存器父引用
+ * 写进墓碑；从未见过（legacy 远端墓碑）时保持缺省，由解析统一按主页处理。
+ *
+ * 只补墓碑元数据，不复活实体、不改后代寄存器、不改任何时钟。
+ */
+function withFolderTombstoneParents(input: {
+  readonly tombstones: readonly SyncTombstone[];
+  readonly folders: readonly SyncFolder[];
+}): SyncTombstone[] {
+  const parents = new Map(input.folders.map((folder) => [folder.id, folder.position.value.parentId]));
+  return input.tombstones.map((tombstone) => {
+    if (tombstone.entityType !== 'folder' || tombstone.parentId !== undefined) return tombstone;
+    const parentId = parents.get(tombstone.id);
+    // 主页（null）与 legacy 缺省在解析上等价，不写入多余字段，避免重合并产生假差异。
+    if (!parentId) return tombstone;
+    return { ...tombstone, parentId };
+  });
 }
 
 function latestSnapshotPerDevice(snapshots: readonly SyncSnapshot[]): SyncSnapshot[] {
@@ -160,6 +231,30 @@ function latestSnapshotPerDevice(snapshots: readonly SyncSnapshot[]): SyncSnapsh
   return [...devices.values()].sort((left, right) => compareText(left.deviceId, right.deviceId));
 }
 
+/**
+ * 文件夹同层排序键：先按寄存器里的顺序，再按逻辑版本、设备与标识。
+ *
+ * 只用于合并结果的确定性排序，不改写任何寄存器。
+ */
+function compareFolderPosition(left: SyncFolder, right: SyncFolder): number {
+  return left.position.value.order - right.position.value.order
+    || registerOrder(right.position, left.position)
+    || compareText(left.position.value.parentId ?? '', right.position.value.parentId ?? '')
+    || compareText(left.id, right.id);
+}
+
+/** 与键序无关的规范序列化：用于判断本次合并是否真的改变了内容。 */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => compareText(left, right));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput): SyncSnapshot {
   const snapshots = latestSnapshotPerDevice([parseSyncSnapshot(local), ...remotes.map(parseSyncSnapshot)]);
   const first = snapshots[0];
@@ -171,12 +266,12 @@ export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput):
     .filter(({ entityType }) => entityType === 'shortcut').map(({ id }) => id));
   const mergedShortcuts = mergeRecord(snapshots.flatMap(({ shortcuts }) => shortcuts), mergeShortcut)
     .filter(({ id }) => !shortcutTombstones.has(id));
-  const tombstones = allTombstones;
+  const mergedFolders = mergeRecord(snapshots.flatMap(({ folders }) => folders), mergeFolder)
+    .toSorted(compareFolderPosition);
+  // 墓碑补父层引用必须看到合并前的存活记录：被删文件夹本身已在下面的过滤中去掉。
+  const tombstones = withFolderTombstoneParents({ tombstones: allTombstones, folders: mergedFolders });
   const deleted = new Set(tombstones.map(({ entityType, id }) => tombstoneKey(entityType, id)));
-  const folders = mergeRecord(snapshots.flatMap(({ folders }) => folders), mergeFolder)
-    .filter(({ id }) => !deleted.has(tombstoneKey('folder', id)))
-    .toSorted((left, right) => left.position.value - right.position.value
-      || registerOrder(right.position, left.position) || compareText(left.id, right.id));
+  const folders = mergedFolders.filter(({ id }) => !deleted.has(tombstoneKey('folder', id)));
   const shortcuts = mergedShortcuts;
   const mergedSettings = mergeSettings(snapshots);
   const settings = { ...mergedSettings, home: resolveSyncHome({ fields: mergedSettings.home ?? {},
@@ -193,7 +288,9 @@ export function mergeSyncSnapshots({ local, remotes }: MergeSyncSnapshotsInput):
     folders, shortcuts, settings: liveSettings,
     assets: mergeAssets(snapshots, deleted, assetReferences), tombstones,
   };
-  const changed = JSON.stringify(mergedPayload) !== JSON.stringify({
+  // 用规范化 JSON 比较：设置对象的键序在合并与解析路径上不同，直接 stringify 会把
+  // 语义相同的快照误判成「有变化」，导致每次重复合并都凭空抬高代次。
+  const changed = canonicalJson(mergedPayload) !== canonicalJson({
     schemaVersion: localLatest.schemaVersion, vaultId: localLatest.vaultId, deviceId: localLatest.deviceId,
     folders: localLatest.folders, shortcuts: localLatest.shortcuts,
     settings: localLatest.settings, assets: localLatest.assets, tombstones: localLatest.tombstones,

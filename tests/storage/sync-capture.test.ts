@@ -217,4 +217,25 @@ describe('文件夹删除传播', () => {
     if (shortcutRecord?.kind !== 'shortcut') throw new Error('网站同步记录缺失');
     expect(shortcutRecord.value.placement.value.folderId).toBeNull();
   });
+
+  it('生产删除捕获被删文件夹的父层引用，供跨设备重建最近存活祖先', async () => {
+    const root = await createFolder(db, '根');
+    const middle = await createFolder(db, '中层', root.id);
+    const direct = await createFolder(db, '直接子', middle.id);
+    const leaf = await createFolder(db, '深层孙', direct.id);
+    await enableSync();
+    await deleteFolder(db, middle.id);
+
+    const tombstone = await db.sync_records.get(`folder:${middle.id}`);
+    if (tombstone?.kind !== 'tombstone') throw new Error('文件夹墓碑缺失');
+    // 元数据只来自删除时的实体记录，不是本机另存的旁路历史。
+    expect(tombstone.tombstone).toMatchObject({ entityType: 'folder', id: middle.id, parentId: root.id });
+    // 直接子文件夹确实被提升到父层（这是本地删除的可见结果，会产生新寄存器）。
+    expect(await db.folders.get(direct.id)).toMatchObject({ parentId: root.id });
+    // 更深的子树不提升，寄存器原样保留，父引用仍指向存活父节点。
+    const leafRecord = await db.sync_records.get(`folder:${leaf.id}`);
+    if (leafRecord?.kind !== 'folder') throw new Error('深文件夹同步记录缺失');
+    expect(leafRecord.value.position.value).toEqual({ parentId: direct.id, order: 0 });
+    expect(await db.folders.get(leaf.id)).toMatchObject({ parentId: direct.id, order: 0 });
+  });
 });

@@ -1,9 +1,13 @@
 import { validateAppearance } from '@/domain/appearance';
+import { validateBookmarkHiddenRule, type BookmarkHiddenRule } from '@/domain/bookmark-preferences';
 import { validateSyncHome, seedHome } from '@/domain/sync/home';
 import { EMPTY_HOME, reconcileHome } from '@/domain/home';
+import { assertFolderTree } from '@/domain/folder';
+import { folderTombstoneParents, resolveFolderParents, validateDeletedFolderParents } from '@/domain/sync/folders';
 import { LEGACY_HOME_SYNC_SCHEMA_VERSION } from '@/domain/sync/types';
 import { fail } from '@/domain/errors';
-import { DEFAULT_LAYOUT, validateLayout } from '@/domain/layout';
+import { DEFAULT_LAYOUT, validateLayout, validateLayoutHidden, validateLayoutOrder, validateLayoutPreferences,
+  upgradeSlotOrder, type LayoutConfig, type SlotId } from '@/domain/layout';
 import { LIMITS } from '@/domain/limits';
 import { BUILT_IN_ENGINES, resolveEngine, validateEngineTemplate, type SearchEngine } from '@/domain/search-engines';
 import type { ShortcutIcon } from '@/domain/shortcut';
@@ -15,10 +19,11 @@ import { normalizeShortcutUrl } from '@/domain/url';
 import { asRecord, exactKeys, identifier, integer, parseString, validateRegister, type RecordValue } from '@/domain/sync/validate-common';
 import { parseSyncAsset } from '@/domain/sync/validate-assets';
 import { LEGACY_GROUP_SYNC_SCHEMA_VERSION, LEGACY_FOLDER_SYNC_SCHEMA_VERSION, LEGACY_LAYOUT_SYNC_SCHEMA_VERSION,
-  LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_SYNC_SCHEMA_VERSION, LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION,
-  LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
-  SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset, type SyncEntityType,
-  type SyncFolder, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot, type SyncTombstone } from '@/domain/sync/types';
+  LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION, LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION, LEGACY_SYNC_SCHEMA_VERSION,
+  LEGACY_STYLE_SYNC_SCHEMA_VERSION, PREVIOUS_SYNC_SCHEMA_VERSION, LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION,
+  SYNC_SCHEMA_VERSION, type SupportedSyncSchemaVersion, type SyncAsset, type SyncBookmarkRules, type SyncEntityType,
+  type SyncFolder, type SyncFolderPosition, type SyncRegister, type SyncSettings, type SyncShortcut, type SyncSnapshot,
+  type SyncTombstone } from '@/domain/sync/types';
 
 interface SnapshotEnvelope extends RecordValue {
   readonly folders: unknown[];
@@ -34,12 +39,27 @@ function normalized(value: unknown, normalize: (input: string) => string, label:
   return result;
 }
 
-function parseFolder(value: unknown): SyncFolder {
+/**
+ * 文件夹位置：父引用与同层顺序是同一个原子寄存器。
+ *
+ * 旧格式（sync 13）是单个数字，升级时补 `parentId: null` 并**沿用原时钟与设备**，
+ * 不让新字段凭空获得更高逻辑版本。
+ */
+function parseFolderPosition(value: unknown, schemaVersion: SupportedSyncSchemaVersion): SyncFolderPosition {
+  if (schemaVersion < LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION) fail('旧分组同步协议不兼容当前文件夹版本');
+  if (schemaVersion === LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION) return { parentId: null, order: integer(value, '文件夹位置') };
+  const raw = asRecord(value, '文件夹位置');
+  exactKeys(raw, ['parentId', 'order'], '文件夹位置');
+  const parentId = raw.parentId === null ? null : identifier(raw.parentId, '父文件夹');
+  return { parentId, order: integer(raw.order, '文件夹位置') };
+}
+
+function parseFolder(value: unknown, schemaVersion: SupportedSyncSchemaVersion): SyncFolder {
   const raw = asRecord(value, '同步文件夹');
   exactKeys(raw, ['id', 'name', 'position'], '同步文件夹');
   return { id: identifier(raw.id, '文件夹标识'),
     name: validateRegister(raw.name, '文件夹名称', (item) => normalized(item, normalizeFolderName, '文件夹名称')),
-    position: validateRegister(raw.position, '文件夹位置', (item) => integer(item, '文件夹位置')) };
+    position: validateRegister(raw.position, '文件夹位置', (item) => parseFolderPosition(item, schemaVersion)) };
 }
 
 function parsePlacement(value: unknown): SyncShortcut['placement']['value'] {
@@ -83,10 +103,92 @@ function parseAppearance(value: unknown): SyncSettings['appearance']['value'] {
   return validateAppearance(value);
 }
 
-function parseLayout(value: unknown): SyncSettings['layout']['value'] {
+/** 旧快照的布局是单个整块寄存器；升级时补 `bookmarks` 并沿用原时钟与设备。 */
+function parseLegacyLayout(value: unknown, schemaVersion: SupportedSyncSchemaVersion): LayoutConfig {
   const raw = asRecord(value, '布局设置');
   exactKeys(raw, ['order', 'hidden', 'pageWidth', 'regionSpacing', 'columns', 'style', 'clockPosition'], '布局设置');
-  return validateLayout(raw);
+  const order = upgradeSlotOrder(raw.order);
+  const hidden = validateLayoutHidden(raw.hidden);
+  const parsed = validateLayout({ ...raw, order, hidden });
+  if (schemaVersion === SYNC_SCHEMA_VERSION) return parsed;
+  // 区域顺序只追加缺失的 `bookmarks`，既有相对顺序原样保留；退役的布局模板样式回到默认值。
+  return { ...parsed, style: DEFAULT_LAYOUT.style,
+    clockPosition: DEFAULT_LAYOUT.clockPosition, columns: DEFAULT_LAYOUT.columns };
+}
+
+function parseLayoutOrderValue(value: unknown): { readonly order: SlotId[] } {
+  const raw = asRecord(value, '布局顺序');
+  exactKeys(raw, ['order'], '布局顺序');
+  return { order: validateLayoutOrder(raw.order) };
+}
+
+function parseLayoutVisibilityValue(value: unknown): { readonly hidden: SlotId[] } {
+  const raw = asRecord(value, '布局显隐');
+  exactKeys(raw, ['hidden'], '布局显隐');
+  return { hidden: validateLayoutHidden(raw.hidden) };
+}
+
+function parseLayoutRegisters(value: unknown, schemaVersion: SupportedSyncSchemaVersion): Pick<SyncSettings,
+  'layoutOrder' | 'layoutVisibility' | 'layoutPreferences'> {
+  const raw = asRecord(value, '同步设置');
+  if (schemaVersion === SYNC_SCHEMA_VERSION) {
+    return {
+      layoutOrder: validateRegister(raw.layoutOrder, '布局顺序', parseLayoutOrderValue),
+      layoutVisibility: validateRegister(raw.layoutVisibility, '布局显隐', parseLayoutVisibilityValue),
+      layoutPreferences: validateRegister(raw.layoutPreferences, '布局偏好', validateLayoutPreferences),
+    };
+  }
+  const legacy = validateRegister(raw.layout, '布局设置', (item) => parseLegacyLayout(item, schemaVersion));
+  const layout = legacy.value;
+  const { order, hidden, ...preferences } = layout;
+  return {
+    layoutOrder: { value: { order }, clock: legacy.clock, deviceId: legacy.deviceId },
+    layoutVisibility: { value: { hidden }, clock: legacy.clock, deviceId: legacy.deviceId },
+    layoutPreferences: { value: validateLayoutPreferences(preferences), clock: legacy.clock, deviceId: legacy.deviceId },
+  };
+}
+
+function parseBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') fail(`${label}格式不正确`);
+  return value;
+}
+
+function parseBookmarkMode(value: unknown): SyncSettings['bookmarksMode']['value'] {
+  if (value !== 'region' && value !== 'folder') fail('浏览器书签显示模式不正确');
+  return value;
+}
+
+function parseBookmarkRules(value: unknown): SyncBookmarkRules {
+  const raw = asRecord(value, '隐藏规则寄存器');
+  const rules: Record<string, SyncRegister<BookmarkHiddenRule | null>> = {};
+  for (const [ruleId, register] of Object.entries(raw)) {
+    const id = identifier(ruleId, '隐藏规则标识');
+    const parsed = validateRegister(register, '隐藏规则', (item) => item === null ? null : validateBookmarkHiddenRule(item));
+    if (parsed.value !== null && parsed.value.ruleId !== id) fail('隐藏规则寄存器键与规则标识不一致');
+    rules[id] = parsed;
+  }
+  return rules;
+}
+
+function parseBookmarkRegisters(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string) {
+  const raw = asRecord(value, '同步设置');
+  if (schemaVersion !== SYNC_SCHEMA_VERSION) {
+    // 旧快照没有书签偏好：补默认值，不补来源字段（该字段不存在）。
+    const register = <T>(item: T): SyncRegister<T> => ({ value: item, clock: 0, deviceId });
+    return {
+      bookmarksEnabled: register(false),
+      bookmarksMode: register('region' as const),
+      bookmarksShowInSearch: register(true),
+      bookmarkRules: {} as SyncBookmarkRules,
+    };
+  }
+  return {
+    bookmarksEnabled: validateRegister(raw.bookmarksEnabled, '浏览器书签启用', (item) => parseBoolean(item, '浏览器书签启用')),
+    bookmarksMode: validateRegister(raw.bookmarksMode, '浏览器书签模式', parseBookmarkMode),
+    bookmarksShowInSearch: validateRegister(raw.bookmarksShowInSearch, '浏览器书签搜索开关',
+      (item) => parseBoolean(item, '浏览器书签搜索开关')),
+    bookmarkRules: parseBookmarkRules(raw.bookmarkRules),
+  };
 }
 
 function parseSearchCustomization(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string): SyncSettings['searchCustomization'] {
@@ -101,9 +203,14 @@ function parseSearchCustomization(value: unknown, schemaVersion: SupportedSyncSc
 
 function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion, deviceId: string): SyncSettings {
   const raw = asRecord(value, '同步设置');
-  const keys = ['appearance', 'defaultEngineId', 'layout', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'];
+  const current = schemaVersion === SYNC_SCHEMA_VERSION;
+  const keys = ['appearance', 'defaultEngineId', 'clock', 'searchPreferences', 'shortcutPreferences', 'customEngines'];
+  if (current) keys.push('layoutOrder', 'layoutVisibility', 'layoutPreferences', 'bookmarksEnabled', 'bookmarksMode',
+    'bookmarksShowInSearch', 'bookmarkRules');
+  else keys.push('layout');
   if (schemaVersion >= LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION) keys.push('searchCustomization');
-  if (schemaVersion === SYNC_SCHEMA_VERSION && Object.hasOwn(raw, 'home')) keys.push('home');
+  // schema 13 是 home 首次写入的版本；schema 12 及更早从未写出 home，多出该键仍按字段错误拒绝。
+  if (schemaVersion >= LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION && Object.hasOwn(raw, 'home')) keys.push('home');
   exactKeys(raw, keys, '同步设置');
   if (!Array.isArray(raw.customEngines)) fail('自定义搜索引擎格式不正确');
   if (raw.customEngines.length > LIMITS.customEngines) fail('自定义搜索引擎数量超限');
@@ -112,10 +219,8 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
   if (new Set(customEngines.map(({ value: engine }) => engine.id)).size !== customEngines.length) fail('自定义搜索引擎标识重复');
   if (customEngines.some(({ value: engine }) => BUILT_IN_ENGINES.some(({ id }) => id === engine.id))) fail('自定义引擎不能使用内置标识');
   const appearance = validateRegister(raw.appearance, '外观设置', parseAppearance);
-  const originalLayout = validateRegister(raw.layout, '布局设置', parseLayout);
-  const layout = schemaVersion === SYNC_SCHEMA_VERSION ? originalLayout : { ...originalLayout,
-    value: { ...originalLayout.value, style: DEFAULT_LAYOUT.style, order: [...DEFAULT_LAYOUT.order],
-      clockPosition: DEFAULT_LAYOUT.clockPosition, columns: DEFAULT_LAYOUT.columns } };
+  const layout = parseLayoutRegisters(raw, schemaVersion);
+  const bookmarks = parseBookmarkRegisters(raw, schemaVersion, deviceId);
   const defaultEngineId = validateRegister(raw.defaultEngineId, '默认引擎', (item) => parseString(item, '默认引擎'));
   const clock = validateRegister(raw.clock, '时钟设置', (item) => validateSettings({
     ...createDefaultSettings(), clock: item,
@@ -133,30 +238,49 @@ function parseSettings(value: unknown, schemaVersion: SupportedSyncSchemaVersion
     const value = asRecord(item, '网站偏好');
     exactKeys(value, ['showNames', 'openTarget'], '网站偏好');
     const parsed = validateSettings({ ...createDefaultSettings(), shortcuts: value }).shortcuts;
-    return schemaVersion === SYNC_SCHEMA_VERSION ? parsed : { ...parsed, showNames: true };
+    return current ? parsed : { ...parsed, showNames: true };
   });
   const home = raw.home === undefined ? undefined : validateSyncHome(raw.home);
-  const settings = { ...(home ? { home } : {}), appearance, defaultEngineId, layout, clock, searchPreferences, searchCustomization, shortcutPreferences, customEngines };
+  const settings: SyncSettings = { ...(home ? { home } : {}), appearance, defaultEngineId, ...layout, ...bookmarks,
+    clock, searchPreferences, searchCustomization, shortcutPreferences, customEngines };
   const rawSettings = {
     appearance: appearance.value,
     search: { defaultEngineId: defaultEngineId.value, customEngines: customEngines.map(({ value: engine }) => engine),
       ...searchPreferences.value, customization: searchCustomization.value },
-    shortcuts: shortcutPreferences.value, layout: layout.value, clock: clock.value,
+    shortcuts: shortcutPreferences.value, bookmarks: { enabled: bookmarks.bookmarksEnabled.value,
+      mode: bookmarks.bookmarksMode.value, showInSearch: bookmarks.bookmarksShowInSearch.value,
+      hiddenRules: materializeRuleValues(bookmarks.bookmarkRules) },
+    layout: { ...layout.layoutPreferences.value, order: layout.layoutOrder.value.order,
+      hidden: layout.layoutVisibility.value.hidden },
+    clock: clock.value,
   };
   validateSettings(rawSettings);
   return settings;
 }
 
+function materializeRuleValues(rules: SyncBookmarkRules): BookmarkHiddenRule[] {
+  return Object.values(rules).flatMap(({ value }) => value === null ? [] : [value]);
+}
+
 function parseTombstone(value: unknown): SyncTombstone {
   const raw = asRecord(value, '删除墓碑');
-  exactKeys(raw, ['entityType', 'id', 'clock', 'deviceId'], '删除墓碑');
   const entityTypes: readonly SyncEntityType[] = ['folder', 'shortcut', 'asset', 'custom-engine'];
   if (typeof raw.entityType !== 'string' || !entityTypes.includes(raw.entityType as SyncEntityType)) fail('墓碑实体类型不正确');
   const entityType = raw.entityType as SyncEntityType;
+  // 只有文件夹墓碑允许携带删除时的父层引用；其他类型多出该字段视为导出错误。
+  const allowed = entityType === 'folder'
+    ? ['entityType', 'id', 'clock', 'deviceId', ...(Object.hasOwn(raw, 'parentId') ? ['parentId'] : [])]
+    : ['entityType', 'id', 'clock', 'deviceId'];
+  exactKeys(raw, allowed, '删除墓碑');
   const id = identifier(raw.id, '墓碑标识');
   if (entityType === 'custom-engine' && BUILT_IN_ENGINES.some((engine) => engine.id === id)) fail('内置搜索引擎不能删除');
+  // 缺省表示早于父层引用元数据的 legacy 墓碑（或合并时还没见过其存活记录），
+  // 解析阶段保持缺省、不伪造成「原本就在主页」；物化时才明确按主页处理。
+  const parentId = entityType === 'folder' && raw.parentId !== undefined && raw.parentId !== null
+    ? identifier(raw.parentId, '墓碑父文件夹') : undefined;
   return { entityType, id,
-    clock: integer(raw.clock, '墓碑时钟'), deviceId: identifier(raw.deviceId, '墓碑设备标识') };
+    clock: integer(raw.clock, '墓碑时钟'), deviceId: identifier(raw.deviceId, '墓碑设备标识'),
+    ...(parentId === undefined ? {} : { parentId }) };
 }
 
 function uniqueIds<T extends { readonly id: string }>(items: readonly T[], label: string): void {
@@ -218,10 +342,34 @@ function validateSettingsReferences(snapshot: SyncSnapshot): void {
     snapshot.settings.searchCustomization.value.engineOverrides)) fail('默认搜索引擎引用不存在');
 }
 
+/**
+ * 文件夹父引用：父必须存活，或沿文件夹墓碑继续上溯到最近存活祖先。
+ *
+ * 环与自引用在接收阶段就拒绝，不靠物化兜底；legacy 墓碑没有父引用元数据时按主页处理。
+ */
+function validateFolderParents(snapshot: SyncSnapshot): void {
+  const live = new Set(snapshot.folders.map(({ id }) => id));
+  const deleted = folderTombstoneParents(snapshot.tombstones);
+  for (const folder of snapshot.folders) {
+    const parentId = folder.position.value.parentId;
+    if (parentId === null) continue;
+    if (parentId === folder.id) fail('文件夹不能作为自己的父文件夹');
+    if (!live.has(parentId) && !deleted.has(parentId)) fail('文件夹父引用不存在');
+  }
+  validateDeletedFolderParents(deleted, live);
+  // 解析后的父引用仍必须构成合法树：指向已删祖先的链路在物化时收敛，但收敛目标不得成环。
+  const resolved = resolveFolderParents(snapshot.folders.map((folder) => ({
+    id: folder.id, parentId: folder.position.value.parentId,
+  })), deleted);
+  assertFolderTree(snapshot.folders.map((folder) => ({ id: folder.id,
+    parentId: resolved.get(folder.id) ?? null })));
+}
+
 function validateReferences(snapshot: SyncSnapshot): void {
   const folderIds = new Set(snapshot.folders.map(({ id }) => id));
   const assets = new Map(snapshot.assets.map((asset) => [asset.id, asset]));
   validateSnapshotLimits(snapshot);
+  validateFolderParents(snapshot);
   const refs = new Set(collectShortcutAssetRefs({ snapshot, folderIds, assets }));
   const backgroundRef = collectBackgroundAssetRef(snapshot, assets);
   if (backgroundRef) refs.add(backgroundRef);
@@ -234,14 +382,16 @@ function isSupportedSchemaVersion(value: unknown): value is SupportedSyncSchemaV
     || value === LEGACY_LAYOUT_SYNC_SCHEMA_VERSION || value === LEGACY_GROUP_SYNC_SCHEMA_VERSION
     || value === LEGACY_FOLDER_SYNC_SCHEMA_VERSION || value === PREVIOUS_SYNC_SCHEMA_VERSION
     || value === LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION || value === LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION
-    || value === LEGACY_HOME_SYNC_SCHEMA_VERSION || value === SYNC_SCHEMA_VERSION;
+    || value === LEGACY_HOME_SYNC_SCHEMA_VERSION || value === LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION
+    || value === SYNC_SCHEMA_VERSION;
 }
 
 function validateSnapshotEnvelope(raw: RecordValue): SupportedSyncSchemaVersion {
   const schemaVersion = raw.schemaVersion;
   if (!isSupportedSchemaVersion(schemaVersion)) fail('同步快照版本不受支持');
   if (schemaVersion !== LEGACY_SEARCH_CUSTOMIZATION_SCHEMA_VERSION &&
-    schemaVersion !== LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION && schemaVersion !== LEGACY_HOME_SYNC_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
+    schemaVersion !== LEGACY_ENGINE_OVERRIDE_SYNC_SCHEMA_VERSION && schemaVersion !== LEGACY_HOME_SYNC_SCHEMA_VERSION &&
+    schemaVersion !== LEGACY_FLAT_FOLDER_SYNC_SCHEMA_VERSION && schemaVersion !== SYNC_SCHEMA_VERSION) {
     fail('旧分组同步协议不兼容当前文件夹版本；需要重新启用同步并显式重置远端库');
   }
   exactKeys(raw, ['schemaVersion', 'vaultId', 'deviceId', 'generation', 'folders', 'shortcuts', 'settings', 'assets', 'tombstones'], '同步快照');
@@ -255,7 +405,7 @@ function parseSnapshotFields(raw: SnapshotEnvelope, schemaVersion: SupportedSync
   return {
     schemaVersion: SYNC_SCHEMA_VERSION, vaultId: identifier(raw.vaultId, '同步库标识'), deviceId: identifier(raw.deviceId, '设备标识'),
     generation: integer(raw.generation, '快照代次'),
-    folders: raw.folders.map(parseFolder).sort((left, right) => compareText(left.id, right.id)),
+    folders: raw.folders.map((item) => parseFolder(item, schemaVersion)).sort((left, right) => compareText(left.id, right.id)),
     shortcuts: raw.shortcuts.map(parseShortcut).sort((left, right) => compareText(left.id, right.id)),
     settings: parseSettings(raw.settings, schemaVersion, identifier(raw.deviceId, '设备标识')),
     assets: raw.assets.map((item) => parseSyncAsset(item, schemaVersion)).sort((left, right) => compareText(left.id, right.id)),
@@ -281,7 +431,8 @@ export function parseSyncSnapshot(value: unknown): SyncSnapshot {
   const schemaVersion = validateSnapshotEnvelope(raw);
   const parsed = parseSnapshotFields(raw as SnapshotEnvelope, schemaVersion);
   const legacyHome = reconcileHome({ home: EMPTY_HOME,
-    folders: parsed.folders.map((folder) => ({ id: folder.id, order: folder.position.value })),
+    folders: parsed.folders.map((folder) => ({ id: folder.id, order: folder.position.value.order,
+      parentId: folder.position.value.parentId })),
     shortcuts: parsed.shortcuts.map((shortcut) => ({ id: shortcut.id, ...shortcut.placement.value })) });
   const snapshot = parsed.settings.home === undefined && schemaVersion !== SYNC_SCHEMA_VERSION
     ? { ...parsed, settings: { ...parsed.settings, home: seedHome(legacyHome, parsed.deviceId) } } : parsed;

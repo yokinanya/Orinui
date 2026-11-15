@@ -30,7 +30,9 @@ it('migrates schema 13 row-major, preserves relations and key, normalizes retire
       { id: 'folder:folder-b', column: 1, row: 0, height: 1 },
       { id: 'shortcut:home', column: 0, row: 1, height: 1 },
     ]);
-    expect(settings?.layout).toMatchObject({ ...defaults.layout, hidden: ['clock'] });
+    // 退役布局样式归一为居中；区域顺序只追加缺失的 bookmarks，既有相对顺序与隐藏项保留。
+    expect(settings?.layout).toEqual({ ...defaults.layout, style: 'centered', clockPosition: 'left', columns: 6,
+      order: ['shortcuts', 'clock', 'search', 'bookmarks'], hidden: ['clock'] });
     expect(settings?.shortcuts.showNames).toBe(true);
     expect(await db.shortcuts.toArray()).toEqual(relations);
     expect((await db.sync_keys.get('vault'))?.key.extractable).toBe(false);

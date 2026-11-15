@@ -42,10 +42,15 @@ function promoteLocal(input: {
     settings: {
       home: Object.fromEntries(Object.entries(local.settings.home ?? {}).map(([id, value]) => [id, register(value)])),
       appearance: register(local.settings.appearance), defaultEngineId: register(local.settings.defaultEngineId),
-      layout: register(local.settings.layout), clock: register(local.settings.clock),
+      layoutOrder: register(local.settings.layoutOrder), layoutVisibility: register(local.settings.layoutVisibility),
+      layoutPreferences: register(local.settings.layoutPreferences), clock: register(local.settings.clock),
       searchPreferences: register(local.settings.searchPreferences),
       searchCustomization: register(local.settings.searchCustomization),
       shortcutPreferences: register(local.settings.shortcutPreferences),
+      bookmarksEnabled: register(local.settings.bookmarksEnabled),
+      bookmarksMode: register(local.settings.bookmarksMode),
+      bookmarksShowInSearch: register(local.settings.bookmarksShowInSearch),
+      bookmarkRules: Object.fromEntries(Object.entries(local.settings.bookmarkRules).map(([id, value]) => [id, register(value)])),
       customEngines: local.settings.customEngines.map(register),
     },
     // 远端快照已存在的实体必须一并带上，否则首次连接会丢掉同一同步库里其他设备的内容。

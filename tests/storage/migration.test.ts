@@ -8,11 +8,11 @@ afterEach(async () => {
   for (const database of databases.splice(0)) { database.close(); await database.delete(); }
 });
 
-it('opens a fresh schema 14 database without legacy tables or content', async () => {
+it('opens a fresh schema 15 database without legacy tables or content', async () => {
   const database = createDatabase(crypto.randomUUID());
   databases.push(database);
   await database.open();
-  expect(database.verno).toBe(14);
+  expect(database.verno).toBe(15);
   expect(database.tables.map(({ name }) => name)).not.toContain('groups');
   expect(await database.folders.count()).toBe(0);
   expect(await database.shortcuts.count()).toBe(0);
@@ -80,7 +80,7 @@ it('migrates version 11 settings while preserving sync identity, clocks, and key
   const current = createDatabase(name);
   databases.push(current);
   await current.open();
-  expect(current.verno).toBe(14);
+  expect(current.verno).toBe(15);
   expect((await current.settings.get('app'))?.search.customization.corner).toBe('standard');
   const migratedRecord = await current.sync_records.get('settings:app');
   if (migratedRecord?.kind !== 'settings') throw new Error('迁移后同步设置记录缺失');
@@ -145,4 +145,128 @@ it('rolls back version 11 settings migration when existing settings are invalid'
   expect(unchanged.verno).toBe(11);
   expect(await unchanged.table('settings').get('app')).toEqual(originalSettings);
   expect(await unchanged.table('sync_state').get('app')).toEqual(originalState);
+});
+
+async function createVersion14Database(name: string): Promise<Dexie> {
+  const legacy = new Dexie(name);
+  legacy.version(14).stores(FOLDER_SCHEMA_STORES);
+  await legacy.open();
+  return legacy;
+}
+
+it('rolls back schema 15 folder tree migration on a parent cycle and keeps every table', async () => {
+  const name = crypto.randomUUID();
+  const legacy = await createVersion14Database(name);
+  const defaults = createDefaultSettings();
+  await legacy.table('settings').put({ id: 'app', ...defaults });
+  await legacy.table('folders').bulkPut([
+    { id: 'a', parentId: 'b', name: 'A', order: 0 },
+    { id: 'b', parentId: 'a', name: 'B', order: 1 },
+  ]);
+  const state = { id: 'app', vaultId: 'vault-cycle', deviceId: 'device-cycle', clock: 31, generation: 4,
+    suspended: false, hasAcceptedSnapshot: true };
+  await legacy.table('sync_state').put(state);
+  await legacy.table('sync_records').put({ id: 'settings:app', kind: 'settings', entityId: 'app', value: {
+    appearance: { value: defaults.appearance, clock: 2, deviceId: 'device-cycle' },
+    defaultEngineId: { value: 'google', clock: 3, deviceId: 'device-cycle' },
+    layout: { value: defaults.layout, clock: 4, deviceId: 'device-cycle' },
+    clock: { value: defaults.clock, clock: 5, deviceId: 'device-cycle' },
+    searchPreferences: { value: { width: 'standard', autoFocus: false, openTarget: 'current-tab' }, clock: 6, deviceId: 'device-cycle' },
+    shortcutPreferences: { value: defaults.shortcuts, clock: 7, deviceId: 'device-cycle' }, customEngines: [],
+  } });
+  const key = { id: 'vault-cycle', key: { retained: 'key' } };
+  await legacy.table('sync_keys').put(key);
+  const before = await Promise.all(legacy.tables.map((table) => table.toArray()));
+  legacy.close();
+
+  const current = createDatabase(name);
+  await expect(current.open()).rejects.toThrow(/成环/);
+  current.close();
+
+  const unchanged = await createVersion14Database(name);
+  databases.push(unchanged);
+  expect(unchanged.verno).toBe(14);
+  expect(await Promise.all(unchanged.tables.map((table) => table.toArray()))).toEqual(before);
+});
+
+it('rolls back schema 15 migration on a dangling folder parent and keeps every table', async () => {
+  const name = crypto.randomUUID();
+  const legacy = await createVersion14Database(name);
+  const defaults = createDefaultSettings();
+  await legacy.table('settings').put({ id: 'app', ...defaults });
+  await legacy.table('folders').put({ id: 'child', parentId: 'missing', name: '子', order: 0 });
+  const before = await Promise.all(legacy.tables.map((table) => table.toArray()));
+  legacy.close();
+
+  const current = createDatabase(name);
+  await expect(current.open()).rejects.toThrow(/父引用不存在/);
+  current.close();
+
+  const unchanged = await createVersion14Database(name);
+  databases.push(unchanged);
+  expect(await Promise.all(unchanged.tables.map((table) => table.toArray()))).toEqual(before);
+});
+
+it('adds parentId to legacy folders while keeping id, name, order and home placements', async () => {
+  const name = crypto.randomUUID();
+  const legacy = await createVersion14Database(name);
+  const defaults = createDefaultSettings();
+  const home = { placements: [{ id: 'folder:work', column: 0, row: 0, height: 1 }], widgets: [] };
+  await legacy.table('settings').put({ id: 'app', ...defaults, home });
+  await legacy.table('folders').bulkPut([{ id: 'work', name: '工作', order: 3 },
+    { id: 'life', name: '生活', order: 7 }]);
+  legacy.close();
+
+  const current = createDatabase(name);
+  databases.push(current);
+  await current.open();
+  expect((await current.folders.toArray()).map(({ id, parentId, name, order }) => ({ id, parentId, name, order }))
+    .toSorted((left, right) => left.order - right.order))
+    .toEqual([{ id: 'work', parentId: null, name: '工作', order: 3 },
+      { id: 'life', parentId: null, name: '生活', order: 7 }]);
+  expect((await current.settings.get('app'))?.home?.placements).toEqual(home.placements);
+});
+
+it('keeps already current split registers and bookmark registers during the schema 15 upgrade', async () => {
+  const name = crypto.randomUUID();
+  const legacy = await createVersion14Database(name);
+  const defaults = createDefaultSettings();
+  await legacy.table('settings').put({ id: 'app', ...defaults });
+  const state = { id: 'app', vaultId: 'vault-current', deviceId: 'device-current', clock: 41, generation: 12,
+    suspended: false, hasAcceptedSnapshot: true };
+  await legacy.table('sync_state').put(state);
+  const rule = { ruleId: 'r1', targetId: 'node-1', path: ['书签栏'], kind: 'root', hidden: true, updatedAt: 5 };
+  await legacy.table('sync_records').put({ id: 'settings:app', kind: 'settings', entityId: 'app', value: {
+    appearance: { value: defaults.appearance, clock: 2, deviceId: 'device-current' },
+    defaultEngineId: { value: 'google', clock: 3, deviceId: 'device-current' },
+    layoutOrder: { value: { order: ['bookmarks', 'clock', 'search', 'shortcuts'] }, clock: 21, deviceId: 'device-current' },
+    layoutVisibility: { value: { hidden: ['clock'] }, clock: 22, deviceId: 'device-current' },
+    layoutPreferences: { value: { style: 'split', clockPosition: 'right', pageWidth: 'wide',
+      regionSpacing: 'relaxed', columns: 8 }, clock: 23, deviceId: 'device-current' },
+    clock: { value: defaults.clock, clock: 5, deviceId: 'device-current' },
+    searchPreferences: { value: { width: 'standard', autoFocus: false, openTarget: 'current-tab' }, clock: 6, deviceId: 'device-current' },
+    searchCustomization: { value: defaults.search.customization, clock: 9, deviceId: 'device-current' },
+    shortcutPreferences: { value: defaults.shortcuts, clock: 7, deviceId: 'device-current' },
+    bookmarksEnabled: { value: true, clock: 31, deviceId: 'device-current' },
+    bookmarksMode: { value: 'folder', clock: 32, deviceId: 'device-current' },
+    bookmarksShowInSearch: { value: false, clock: 33, deviceId: 'device-current' },
+    bookmarkRules: { r1: { value: rule, clock: 34, deviceId: 'device-current' } },
+    customEngines: [],
+  } });
+  legacy.close();
+
+  const current = createDatabase(name);
+  databases.push(current);
+  await current.open();
+  const migrated = await current.sync_records.get('settings:app');
+  if (migrated?.kind !== 'settings') throw new Error('迁移后同步设置记录缺失');
+  expect(migrated.value.layoutOrder).toEqual({ value: { order: ['bookmarks', 'clock', 'search', 'shortcuts'] },
+    clock: 21, deviceId: 'device-current' });
+  expect(migrated.value.layoutVisibility).toEqual({ value: { hidden: ['clock'] }, clock: 22, deviceId: 'device-current' });
+  expect(migrated.value.layoutPreferences).toMatchObject({ clock: 23, deviceId: 'device-current' });
+  expect(migrated.value.bookmarksEnabled).toEqual({ value: true, clock: 31, deviceId: 'device-current' });
+  expect(migrated.value.bookmarksMode).toEqual({ value: 'folder', clock: 32, deviceId: 'device-current' });
+  expect(migrated.value.bookmarksShowInSearch).toEqual({ value: false, clock: 33, deviceId: 'device-current' });
+  expect(migrated.value.bookmarkRules).toEqual({ r1: { value: rule, clock: 34, deviceId: 'device-current' } });
+  expect(await current.sync_state.get('app')).toEqual(state);
 });
